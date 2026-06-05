@@ -1,0 +1,8 @@
+{
+  "name": "buildverse-electron-main",
+  "private": true,
+  "description": "Dependencies for the Electron main process only. Kept separate so electron-builder bundles only this small set rather than the full Next.js/Prisma/React tree.",
+  "dependencies": {
+    "electron-updater": "6.8.3"
+  }
+}

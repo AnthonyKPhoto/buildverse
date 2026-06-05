@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+electron/node_modules/
 
 # Next.js
 .next/
@@ -8,6 +9,8 @@ out/
 # Prisma
 prisma/dev.db
 prisma/dev.db-journal
+prisma/buildverse.db
+prisma/buildverse.db-journal
 
 # Electron build output
 dist-electron/
