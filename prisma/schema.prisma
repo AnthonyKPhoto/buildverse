@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Vehicle {
+  id           String   @id @default(cuid())
+  name         String?
+  year         Int
+  make         String
+  model        String
+  trim         String?
+  engine       String?
+  transmission String?
+  drivetrain   String?
+  vin          String?
+  mileage      Int?
+  platform     String?
+  color        String?
+  photoUrl     String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  modifications   Modification[]
+  maintenanceLogs MaintenanceLog[]
+  budgets         Budget[]
+}
+
+model Modification {
+  id             String    @id @default(cuid())
+  vehicleId      String
+  name           String
+  category       String
+  vendor         String?
+  brand          String?
+  price          Float?
+  actualPrice    Float?
+  notes          String?
+  priority       String    @default("MEDIUM")
+  status         String    @default("PLANNED")
+  link           String?
+  imageUrl       String?
+  difficulty     String?
+  installDate    DateTime?
+  installMileage Int?
+  laborCost      Float?
+  diyInstall     Boolean   @default(false)
+  orderNumber    String?
+  partNumber     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  vehicle      Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  dependencies ModDependency[] @relation("ModDependencies")
+  dependents   ModDependency[] @relation("ModDependents")
+}
+
+model ModDependency {
+  id          String @id @default(cuid())
+  modId       String
+  dependsOnId String
+
+  mod       Modification @relation("ModDependencies", fields: [modId], references: [id], onDelete: Cascade)
+  dependsOn Modification @relation("ModDependents", fields: [dependsOnId], references: [id], onDelete: Cascade)
+
+  @@unique([modId, dependsOnId])
+}
+
+model TrackedProduct {
+  id           String    @id @default(cuid())
+  url          String    @unique
+  title        String
+  brand        String?
+  imageUrl     String?
+  description  String?
+  currentPrice Float?
+  lowestPrice  Float?
+  highestPrice Float?
+  lastChecked  DateTime?
+  vendor       String?
+  availability String?
+  sku          String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  priceHistory PriceHistory[]
+}
+
+model PriceHistory {
+  id        String   @id @default(cuid())
+  productId String
+  price     Float
+  createdAt DateTime @default(now())
+
+  product TrackedProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model Budget {
+  id        String   @id @default(cuid())
+  vehicleId String
+  category  String
+  planned   Float    @default(0)
+  actual    Float    @default(0)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, category])
+}
+
+model MaintenanceLog {
+  id        String    @id @default(cuid())
+  vehicleId String
+  service   String
+  mileage   Int?
+  date      DateTime
+  cost      Float?
+  notes     String?
+  shop      String?
+  diy       Boolean   @default(false)
+  nextDue   DateTime?
+  nextMiles Int?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+}
+
+model Receipt {
+  id          String   @id @default(cuid())
+  vendor      String?
+  orderNumber String?
+  totalAmount Float?
+  date        DateTime?
+  rawText     String?
+  imageUrl    String?
+  items       String?
+  createdAt   DateTime @default(now())
+}

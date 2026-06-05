@@ -1,0 +1,211 @@
+# BuildVerse — Intelligent Vehicle Modification Manager
+
+Plan, track, budget, research, and organize your vehicle modifications.
+Runs **100% locally** — no cloud, no accounts, no internet required for core features.
+
+Available as:
+- **Windows Desktop App** (Electron) — install from GitHub Releases, system tray, fully self-contained
+- **Browser App** — run via Node.js / `npm run dev`
+
+---
+
+## ⬇️ Download (Windows)
+
+**Go to [Releases](../../releases) and download the latest `BuildVerse Setup x.x.x.exe`.**
+
+1. Download the installer
+2. Double-click it — Windows may show a SmartScreen warning; click **"More info" → "Run anyway"**
+   *(The app is not code-signed yet. It is safe.)*
+3. Follow the wizard → Finish
+4. Launch from the Desktop or Start Menu shortcut
+
+**No Node.js, no npm, no prerequisites.** Everything is bundled inside the installer.
+
+> **Portable option:** Download `BuildVerse x.x.x Portable.exe` — runs from any folder without installing.
+
+---
+
+## Features
+
+- **Garage** — Add multiple vehicles with full specs (year/make/model/trim/engine/platform)
+- **Modification Tracker** — Wishlist → Research → Order → Purchase → Install pipeline
+- **Build Planner** — Cross-vehicle mod planning with category grouping and filters
+- **Budget Planner** — Planned vs actual spend per category with bar and pie charts
+- **Product Tracker** — Paste any vendor URL to monitor prices over time
+- **Maintenance Logs** — Full service history with next-due alerts
+- **Vendor Directory** — Curated list of trusted automotive vendors
+- **Data Export** — JSON backup from the Settings page
+
+---
+
+## Development Setup
+
+### Prerequisites
+- [Node.js 18+](https://nodejs.org/en/download)
+- [Git](https://git-scm.com)
+
+```powershell
+# Clone the repo
+git clone https://github.com/AnthonyKPhoto/buildverse.git
+cd buildverse
+
+# Install dependencies
+npm install
+
+# Set up database and load demo data (run once)
+npm run setup
+
+# Start development server
+npm run dev
+```
+
+Open **http://localhost:3000** in your browser.
+
+### Run in Electron (dev mode)
+
+```powershell
+# Starts Next.js dev server + opens the Electron desktop window
+npm run electron:dev
+```
+
+---
+
+## Publishing a New Release
+
+GitHub Actions automatically builds and publishes the Windows installer whenever you push a version tag.
+
+```powershell
+# 1. Bump the version in package.json (edit manually or use npm version)
+npm version patch     # 1.0.0 → 1.0.1
+# or
+npm version minor     # 1.0.0 → 1.1.0
+# or
+npm version major     # 1.0.0 → 2.0.0
+
+# 2. Push the commit AND the generated tag
+git push origin main --follow-tags
+```
+
+GitHub Actions (`.github/workflows/release.yml`) will:
+1. Run on `windows-latest`
+2. Install all dependencies
+3. Build the Next.js app and package the Electron installer
+4. Create a GitHub Release with the `.exe` files attached
+
+> **First time?** Make sure your repository has **Actions** enabled (Settings → Actions → Allow all actions).
+> The workflow uses `GITHUB_TOKEN` which is provided automatically — no extra secrets needed.
+
+### Building locally
+
+```powershell
+npm run package:win
+# Output: dist-electron/BuildVerse Setup x.x.x.exe
+#         dist-electron/BuildVerse x.x.x Portable.exe
+```
+
+---
+
+## All Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Next.js dev server (browser) |
+| `npm run build` | Build Next.js for production |
+| `npm start` | Start built Next.js server |
+| `npm run setup` | Generate Prisma client + push schema + seed demo data |
+| `npm run db:studio` | Open Prisma Studio (visual DB editor) |
+| `npm run db:reset` | Wipe database and re-seed demo data |
+| `npm run electron` | Launch Electron (requires `npm run dev` to be running) |
+| `npm run electron:dev` | Start Next.js dev server + open Electron (one command) |
+| `npm run package:win` | Build Windows installer locally |
+
+---
+
+## Data Storage
+
+| Mode | Database location |
+|------|------------------|
+| Browser / dev | `prisma/dev.db` (project directory) |
+| Electron (installed) | `%APPDATA%\BuildVerse\buildverse.db` |
+| Electron (portable) | `%APPDATA%\BuildVerse\buildverse.db` |
+
+On first launch the installer's demo database (Example S2000 with a sample build) is copied to the AppData location automatically. Your data persists across app updates.
+
+**Backup:** Settings → Export Data → downloads a full JSON backup.
+
+---
+
+## Code Signing (optional)
+
+Without a certificate, Windows shows a SmartScreen warning. To remove it:
+
+1. Obtain a code-signing certificate (e.g. from DigiCert, Sectigo, or similar, ~$200–400/yr)
+2. Export as `cert.pfx`
+3. Uncomment and configure the `certificateFile` lines in `electron-builder.yml`
+4. For CI, store the certificate as a base64 GitHub Secret and set `CSC_LINK` / `CSC_KEY_PASSWORD`
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Desktop wrapper | Electron 33 |
+| Frontend | Next.js 14, React 18, TypeScript |
+| Styling | TailwindCSS 3, Radix UI |
+| Charts | Recharts |
+| Backend | Next.js API Routes |
+| Database | SQLite via Prisma ORM |
+| Scraping | Cheerio (product price tracking) |
+| CI/CD | GitHub Actions |
+
+---
+
+## Supported Vendors (Product Tracker)
+
+ECS Tuning · FCP Euro · 034Motorsport · Integrated Engineering · APR · Unitronic ·
+CTS Turbo · UROTuning · BMP Tuning · AutoZone · RockAuto · Amazon · Tire Rack ·
+and most sites that use Open Graph or JSON-LD structured data.
+
+---
+
+## Folder Structure
+
+```
+buildverse/
+├── .github/
+│   └── workflows/
+│       ├── release.yml   # Builds + publishes installer on git tag push
+│       └── ci.yml        # TypeScript check on PRs
+├── electron/
+│   ├── main.js           # Electron main process (window, tray, server lifecycle)
+│   └── preload.js        # Secure context bridge for renderer
+├── build/
+│   └── ICON_README.txt   # How to add a custom app icon
+├── prisma/
+│   ├── schema.prisma     # Database models
+│   ├── seed.ts           # Demo data (Example S2000 with sample build)
+│   └── dev.db            # SQLite (auto-created by npm run setup)
+├── src/
+│   ├── app/
+│   │   ├── api/          # API routes
+│   │   ├── garage/       # Garage + vehicle detail
+│   │   ├── builds/       # Cross-vehicle build planner
+│   │   ├── budget/       # Budget dashboard with charts
+│   │   ├── products/     # Product price tracker
+│   │   ├── maintenance/  # Service history
+│   │   ├── vendors/      # Vendor directory
+│   │   └── settings/     # App settings + data export
+│   ├── components/
+│   │   ├── ui/           # Radix UI base components
+│   │   ├── vehicles/     # AddVehicleDialog
+│   │   ├── modifications/ # AddModDialog
+│   │   └── maintenance/  # AddMaintenanceDialog
+│   └── lib/
+│       ├── prisma.ts     # Prisma client singleton
+│       ├── scraper.ts    # Product URL scraper (Cheerio)
+│       └── utils.ts      # Helpers, constants, formatters
+├── electron-builder.yml  # Windows packaging config
+├── next.config.mjs       # Next.js config (standalone output)
+└── package.json
+```

@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dynamic accent — overridden by ThemeProvider from localStorage */
+    --theme: 24 90% 58%;
+
+    --background: 220 14% 8%;
+    --foreground: 210 9% 95%;
+    --card: 220 14% 11%;
+    --card-foreground: 210 9% 95%;
+    --popover: 220 14% 11%;
+    --popover-foreground: 210 9% 95%;
+    --primary: 220 14% 11%;
+    --primary-foreground: 210 9% 95%;
+    --secondary: 220 12% 16%;
+    --secondary-foreground: 210 8% 88%;
+    --muted: 220 12% 14%;
+    --muted-foreground: 220 8% 48%;
+    --accent: 220 12% 16%;
+    --accent-foreground: 210 9% 95%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 12% 15%;
+    --input: 220 12% 15%;
+    --ring: 24 90% 58%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(220, 12%, 22%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(220, 12%, 30%);
+}

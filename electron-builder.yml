@@ -1,0 +1,101 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# BuildVerse — electron-builder packaging configuration
+#
+# Build locally:    npm run package:win
+# Build via CI:     push a version tag (e.g. v1.0.0) → GitHub Actions builds it
+# ─────────────────────────────────────────────────────────────────────────────
+
+appId: "com.buildverse.app"
+productName: "BuildVerse"
+copyright: "Copyright © 2026 BuildVerse"
+
+directories:
+  output: "dist-electron"
+  buildResources: "build"
+
+# ── Files bundled into the Electron .asar archive ────────────────────────────
+# Only the main process and preload are needed inside the asar.
+# The heavy stuff (Next.js server, Prisma, node_modules) goes in extraResources.
+files:
+  - "electron/**/*"
+  - "package.json"
+  - "!src"
+  - "!prisma"
+  - "!.env*"
+  - "!.next"
+  - "!node_modules"
+  - "!dist-electron"
+  - "!build"
+  - "!*.md"
+  - "!.github"
+
+# ── Extra resources extracted alongside the .asar ────────────────────────────
+# These are placed at {install_dir}\resources\ and read via process.resourcesPath
+extraResources:
+  # Next.js standalone server (contains server.js + minimal node_modules)
+  - from: ".next/standalone"
+    to: "standalone"
+    filter:
+      - "**/*"
+      - "!**/.git/**"
+      - "!**/cache/**"
+  # Static assets (JS chunks, CSS) referenced by the server
+  - from: ".next/static"
+    to: "standalone/.next/static"
+  # Public folder (favicon, images)
+  - from: "public"
+    to: "standalone/public"
+  # Prisma schema (needed by the query engine at runtime)
+  - from: "prisma/schema.prisma"
+    to: "prisma/schema.prisma"
+  # Template database — copied to %APPDATA%\BuildVerse on first launch
+  - from: "prisma/dev.db"
+    to: "prisma/dev.db"
+
+# ── Native module handling ────────────────────────────────────────────────────
+# Unpack .node binaries (Prisma query engine) from the asar so Node.js can load them.
+# The standalone directory is already outside the asar, so this mainly guards
+# any .node files that electron-builder might otherwise inline.
+asarUnpack:
+  - "**/*.node"
+  - "**/@prisma/**"
+
+# ── Windows ───────────────────────────────────────────────────────────────────
+win:
+  target:
+    - target: "nsis"
+      arch: ["x64"]
+    - target: "portable"
+      arch: ["x64"]
+  # Per-user install — does NOT require UAC / admin rights.
+  # Installs to %LOCALAPPDATA%\Programs\BuildVerse  (same as Chrome, VS Code)
+  requestedExecutionLevel: "asInvoker"
+  #
+  # ── Code signing (removes the SmartScreen warning) ───────────────────────
+  # Uncomment and configure once you have a code-signing certificate:
+  # certificateFile: "cert.pfx"
+  # certificatePassword: ""
+  # Or via environment variables (CI-friendly):
+  # CSC_LINK / CSC_KEY_PASSWORD
+
+# ── NSIS installer options ────────────────────────────────────────────────────
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "BuildVerse"
+  artifactName: "BuildVerse Setup ${version}.exe"
+  # Optional: brand the installer sidebar (164×314 px BMP)
+  # installerSidebar: "build/sidebar.bmp"
+
+# ── Portable (no install, run anywhere) ──────────────────────────────────────
+portable:
+  artifactName: "BuildVerse ${version} Portable.exe"
+
+# ── Auto-update feed (electron-updater reads app-update.yml embedded in the package) ──
+publish:
+  provider: github
+  owner: AnthonyKPhoto
+  repo: buildverse

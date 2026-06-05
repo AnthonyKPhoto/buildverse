@@ -1,0 +1,127 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# BuildVerse — Windows Release Workflow
+#
+# Triggers when you push a version tag, e.g.:
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# Produces:
+#   • BuildVerse Setup X.X.X.exe  — NSIS installer (recommended)
+#   • BuildVerse X.X.X Portable.exe — portable, no install needed
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Build & Release (Windows)
+
+on:
+  push:
+    tags:
+      - "v[0-9]*.[0-9]*.[0-9]*"
+
+permissions:
+  contents: write   # required to create releases and upload assets
+
+jobs:
+  release:
+    name: Package Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Source ─────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js ────────────────────────────────────────────────────────
+      - name: Set up Node.js 20 (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # ── 3. Cache Electron & electron-builder downloads ───────────────────
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-win-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-win-
+
+      # ── 4. Dependencies ───────────────────────────────────────────────────
+      # ELECTRON_SKIP_BINARY_DOWNLOAD=1 skips the Electron postinstall download;
+      # electron-builder fetches its own copy during packaging anyway.
+      - name: Install npm dependencies
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      # ── 5. Database (template bundled inside the installer) ────────────────
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Create database schema
+        run: npx prisma db push
+
+      - name: Seed demo data
+        run: npx prisma db seed
+
+      # ── 6. Next.js build (standalone output) ─────────────────────────────
+      - name: Build Next.js application
+        run: npx next build
+
+      # ── 7. Electron packaging ─────────────────────────────────────────────
+      - name: Package Windows installer
+        run: npx electron-builder --win --publish never
+
+      # ── 8. Create GitHub Release and upload artifacts ─────────────────────
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "BuildVerse v${{ steps.version.outputs.ver }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          files: |
+            dist-electron/*.exe
+            dist-electron/latest.yml
+          body: |
+            ## BuildVerse v${{ steps.version.outputs.ver }}
+
+            ### Download
+
+            | File | Description |
+            |------|-------------|
+            | `BuildVerse Setup ${{ steps.version.outputs.ver }}.exe` | **Installer (recommended)** — installs to your user profile, creates Desktop + Start Menu shortcuts |
+            | `BuildVerse ${{ steps.version.outputs.ver }} Portable.exe` | **Portable** — run from any folder, no install needed |
+
+            ---
+
+            ### How to install
+
+            1. Click the installer `.exe` above to download it
+            2. Double-click the file — Windows may show a blue SmartScreen warning
+               > Click **"More info"** → **"Run anyway"**
+               > *(This appears because the app is not yet code-signed. It is safe.)*
+            3. Follow the wizard: **Next → Next → Install → Finish**
+            4. Launch **BuildVerse** from the Desktop shortcut or Start Menu
+
+            ---
+
+            ### What's included
+
+            - **No prerequisites** — Node.js, Chromium, and all dependencies are bundled inside the installer
+            - Demo garage included: 2002 Honda S2000 AP1
+            - Your data is stored at `%APPDATA%\BuildVerse\buildverse.db` and is **never touched by updates**
+            - Auto-updates: the installed app will detect and download this release automatically
+            - Runs in the background — close the window to minimise to the system tray
+
+            ### System requirements
+            - Windows 10 / 11 (64-bit)
+            - No other software required
