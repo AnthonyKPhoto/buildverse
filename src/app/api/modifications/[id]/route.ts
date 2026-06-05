@@ -1,0 +1,64 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { z } from "zod";
+
+const safeUrl = z
+  .string()
+  .url()
+  .max(2000)
+  .refine((u) => /^https?:\/\//i.test(u), "Only http and https URLs are allowed");
+
+const modUpdateSchema = z.object({
+  name:           z.string().max(255).optional(),
+  category:       z.string().max(100).optional(),
+  vendor:         z.string().max(255).optional(),
+  brand:          z.string().max(255).optional(),
+  price:          z.number().min(0).optional().nullable(),
+  actualPrice:    z.number().min(0).optional().nullable(),
+  notes:          z.string().max(2000).optional(),
+  priority:       z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).optional(),
+  status:         z.enum(["PLANNED", "RESEARCHING", "ORDERED", "PURCHASED", "INSTALLED", "REMOVED"]).optional(),
+  link:           safeUrl.optional().nullable(),
+  imageUrl:       safeUrl.optional().nullable(),
+  difficulty:     z.string().max(50).optional(),
+  installDate:    z.string().optional().nullable(),
+  installMileage: z.number().int().min(0).optional().nullable(),
+  laborCost:      z.number().min(0).optional().nullable(),
+  diyInstall:     z.boolean().optional(),
+  partNumber:     z.string().max(100).optional(),
+  orderNumber:    z.string().max(100).optional(),
+});
+
+export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const body = await req.json();
+    const data = modUpdateSchema.parse(body);
+    const mod = await prisma.modification.update({
+      where: { id: params.id },
+      data: {
+        ...data,
+        installDate:
+          data.installDate
+            ? new Date(data.installDate)
+            : data.installDate === null
+              ? null
+              : undefined,
+      },
+    });
+    return NextResponse.json(mod);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.errors }, { status: 400 });
+    }
+    return NextResponse.json({ error: "Failed to update modification" }, { status: 500 });
+  }
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    await prisma.modification.delete({ where: { id: params.id } });
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: "Failed to delete modification" }, { status: 500 });
+  }
+}
