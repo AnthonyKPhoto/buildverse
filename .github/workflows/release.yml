@@ -56,9 +56,6 @@ jobs:
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
 
-      - name: Install Electron main-process dependencies
-        run: npm ci --prefix electron
-
       # ── 5. Database (template bundled inside the installer) ────────────────
       - name: Generate Prisma client
         run: npx prisma generate
@@ -74,6 +71,9 @@ jobs:
         run: npx next build
 
       # ── 7. Electron packaging ─────────────────────────────────────────────
+      - name: Bundle Electron main process
+        run: npx esbuild electron/main.js --bundle --platform=node --external:electron --outfile=electron/main.bundled.js
+
       - name: Package Windows installer
         run: npx electron-builder --win --publish never
 

@@ -2,6 +2,9 @@
 node_modules/
 electron/node_modules/
 
+# Generated Electron bundle (produced by npm run electron:bundle)
+electron/main.bundled.js
+
 # Next.js
 .next/
 out/
