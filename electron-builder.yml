@@ -13,6 +13,13 @@ directories:
   output: "dist-electron"
   buildResources: "build"
 
+# ── Override package.json main for the packaged app ──────────────────────────
+# In dev, Electron uses electron/main.js directly.
+# For the packaged asar we point at the esbuild bundle which has electron-updater
+# and all other npm deps inlined — no node_modules needed inside the asar.
+extraMetadata:
+  main: electron/main.bundled.js
+
 # ── Files bundled into the Electron .asar archive ────────────────────────────
 # Only the main process and preload are needed inside the asar.
 # The heavy stuff (Next.js server, Prisma, node_modules) goes in extraResources.
