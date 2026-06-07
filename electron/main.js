@@ -1,7 +1,15 @@
 "use strict";
 
+process.on('uncaughtException', (err) => {
+  if (err.code === 'EPIPE') return;
+  try { require('electron').dialog.showErrorBox('BuildVerse - Fatal Error', `Failed to start:\n\n${err.message}`); } catch {}
+  process.exit(1);
+});
+"use strict";
+
 const { app, BrowserWindow, Tray, Menu, nativeImage, shell, ipcMain, dialog } = require("electron");
-const { autoUpdater } = require("electron-updater");
+let autoUpdater = null;
+try { autoUpdater = require("electron-updater").autoUpdater; } catch (_) { /* not bundled — updates disabled */ }
 const { spawn } = require("child_process");
 const path = require("path");
 const http = require("http");
@@ -18,15 +26,13 @@ let mainWindow = null;
 let tray = null;
 let serverProcess = null;
 
-// Allow closing from tray menu without the close-to-tray behaviour
 app.isQuitting = false;
 
 // ──────────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────────
 
-/** Polls url until a non-5xx response is returned (or timeout). */
-function waitForServer(url, maxMs = 60000) {
+function waitForServer(url, maxMs = 120000) {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     function attempt() {
@@ -36,27 +42,33 @@ function waitForServer(url, maxMs = 60000) {
         schedule();
       });
       req.on("error", schedule);
-      req.setTimeout(1500, () => { req.destroy(); schedule(); });
+      req.setTimeout(2000, () => { req.destroy(); schedule(); });
     }
     function schedule() {
       if (Date.now() - start > maxMs) return reject(new Error("Server startup timed out"));
-      setTimeout(attempt, 600);
+      setTimeout(attempt, 800);
     }
     attempt();
   });
 }
 
-/** Returns the path to the icon file (dev or packaged). */
-function iconPath() {
-  return IS_DEV
-    ? path.join(__dirname, "..", "public", "icon.png")
-    : path.join(process.resourcesPath, "icon.png");
+function iconPath(preferIco = false) {
+  if (IS_DEV) {
+    const base = path.join(__dirname, "..", "build");
+    const ico  = path.join(base, "icon.ico");
+    const png  = path.join(base, "icon.png");
+    return (preferIco && fs.existsSync(ico)) ? ico : (fs.existsSync(png) ? png : ico);
+  }
+  const base = process.resourcesPath;
+  const ico  = path.join(base, "icon.ico");
+  const png  = path.join(base, "icon.png");
+  return (preferIco && fs.existsSync(ico)) ? ico : (fs.existsSync(png) ? png : ico);
 }
 
-/** Returns a NativeImage for the tray/window icon (or empty if missing). */
 function loadIcon(size) {
-  const p = iconPath();
-  if (!fs.existsSync(p)) return nativeImage.createEmpty();
+  // On Windows prefer ICO for title bar / taskbar (best multi-resolution support)
+  const p = iconPath(process.platform === "win32");
+  if (!p || !fs.existsSync(p)) return nativeImage.createEmpty();
   const img = nativeImage.createFromPath(p);
   return size ? img.resize({ width: size, height: size }) : img;
 }
@@ -65,11 +77,6 @@ function loadIcon(size) {
 // Database bootstrap
 // ──────────────────────────────────────────────────────────
 
-/**
- * On first launch, copies the bundled seed database to the userData folder
- * so the user starts with demo data and has a writable location.
- * Returns the absolute path to the working database file.
- */
 function ensureDatabase() {
   const userDataDir = app.getPath("userData");
   const dbDest = path.join(userDataDir, "buildverse.db");
@@ -112,7 +119,6 @@ function getBackupListRaw() {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-/** Creates one auto-backup per day on startup, keeps last 10. */
 function autoBackupOnStartup(dbPath) {
   if (!fs.existsSync(dbPath)) return;
   const dir = getBackupsDir();
@@ -133,7 +139,6 @@ function autoBackupOnStartup(dbPath) {
     }
   }
 
-  // Prune: keep last 10
   const all = getBackupListRaw();
   if (all.length > 10) {
     all.slice(10).forEach((b) => {
@@ -156,9 +161,6 @@ ipcMain.handle("backup:create", () => {
 ipcMain.handle("backup:list", () => getBackupListRaw());
 
 ipcMain.handle("backup:restore", async (_, rawPath) => {
-  // Canonicalize BOTH paths before comparison.
-  // Without path.resolve(), a path like "backups\..\buildverse.db" passes
-  // the startsWith check but actually targets the parent directory.
   const safeFile = path.resolve(rawPath);
   const safeBase = path.resolve(getBackupsDir());
   if (!safeFile.startsWith(safeBase + path.sep)) throw new Error("Invalid path");
@@ -166,7 +168,6 @@ ipcMain.handle("backup:restore", async (_, rawPath) => {
 
   const dbPath = path.join(app.getPath("userData"), "buildverse.db");
 
-  // Kill the server so SQLite releases the file lock
   if (serverProcess && !serverProcess.killed) {
     serverProcess.kill("SIGTERM");
     serverProcess = null;
@@ -181,7 +182,6 @@ ipcMain.handle("backup:restore", async (_, rawPath) => {
 });
 
 ipcMain.handle("backup:delete", (_, rawPath) => {
-  // Same canonicalization fix as backup:restore
   const safeFile = path.resolve(rawPath);
   const safeBase = path.resolve(getBackupsDir());
   if (!safeFile.startsWith(safeBase + path.sep)) throw new Error("Invalid path");
@@ -200,7 +200,7 @@ function sendUpdateStatus(status, extra) {
 }
 
 function initAutoUpdater() {
-  if (IS_DEV) return;
+  if (IS_DEV || !autoUpdater) return;
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -213,19 +213,49 @@ function initAutoUpdater() {
   autoUpdater.on("download-progress", (p) => sendUpdateStatus("downloading", { percent: Math.round(p.percent) }));
   autoUpdater.on("update-downloaded", (info) => sendUpdateStatus("downloaded", { version: info.version }));
 
-  // Check 5 seconds after launch so startup is not blocked
   setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
 }
 
 ipcMain.handle("update:check", () => {
-  if (IS_DEV) return;
+  if (IS_DEV || !autoUpdater) return;
   return autoUpdater.checkForUpdates().catch(() => {});
 });
 
 ipcMain.handle("update:install", () => {
-  if (IS_DEV) return;
+  if (IS_DEV || !autoUpdater) return;
   autoUpdater.quitAndInstall(false, true);
 });
+
+// ──────────────────────────────────────────────────────────
+// Find Node.js executable (NOT process.execPath — that's Electron)
+// ──────────────────────────────────────────────────────────
+
+function findNodeExecutable() {
+  // 1. Node binary bundled alongside the app (most reliable)
+  const bundled = path.join(process.resourcesPath, "node.exe");
+  if (fs.existsSync(bundled)) return bundled;
+
+  // 2. Walk PATH entries
+  const sep = process.platform === "win32" ? ";" : ":";
+  const nodeName = process.platform === "win32" ? "node.exe" : "node";
+  for (const dir of (process.env.PATH || "").split(sep)) {
+    const candidate = path.join(dir.trim(), nodeName);
+    try { if (fs.existsSync(candidate)) return candidate; } catch {}
+  }
+
+  // 3. Common Windows install locations
+  const winCandidates = [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "C:\\Program Files (x86)\\nodejs\\node.exe",
+    path.join(process.env.LOCALAPPDATA || "", "Programs", "nodejs", "node.exe"),
+    path.join(process.env.APPDATA || "", "..", "Local", "Programs", "nodejs", "node.exe"),
+  ];
+  for (const c of winCandidates) {
+    try { if (fs.existsSync(c)) return c; } catch {}
+  }
+
+  return null;
+}
 
 // ──────────────────────────────────────────────────────────
 // Next.js server (production only)
@@ -241,10 +271,22 @@ async function startServer(dbPath) {
     const msg =
       "The Next.js server bundle was not found.\n\n" +
       "If you are a developer, run:\n  npm run build\n\nThen relaunch the app.";
-    dialog.showErrorBox("BuildVerse — Startup Error", msg);
+    dialog.showErrorBox("BuildVerse – Startup Error", msg);
     app.quit();
     return;
   }
+
+  const nodeExe = findNodeExecutable();
+  if (!nodeExe) {
+    dialog.showErrorBox(
+      "BuildVerse – Node.js Not Found",
+      "BuildVerse requires Node.js to run its local server.\n\n" +
+      "Please install Node.js from https://nodejs.org and restart the app."
+    );
+    app.quit();
+    return;
+  }
+  console.log(`[buildverse] Using Node.js at: ${nodeExe}`);
 
   const env = {
     ...process.env,
@@ -254,14 +296,30 @@ async function startServer(dbPath) {
     DATABASE_URL: `file:${dbPath}`,
   };
 
-  serverProcess = spawn(process.execPath, [serverScript], {
+  serverProcess = spawn(nodeExe, [serverScript], {
     cwd: standaloneDir,
     env,
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  serverProcess.stdout.on("data", (d) => console.log(`[next] ${d.toString().trimEnd()}`));
-  serverProcess.stderr.on("data", (d) => console.error(`[next] ${d.toString().trimEnd()}`));
+  // Attach error handlers to prevent broken pipe crashes
+  serverProcess.stdout.on("error", (err) => {
+    if (err.code !== "EPIPE") console.error("[next:stdout]", err.message);
+  });
+  serverProcess.stderr.on("error", (err) => {
+    if (err.code !== "EPIPE") console.error("[next:stderr]", err.message);
+  });
+
+  serverProcess.stdout.on("data", (d) => {
+    try { console.log(`[next] ${d.toString().trimEnd()}`); } catch {}
+  });
+  serverProcess.stderr.on("data", (d) => {
+    try { console.error(`[next] ${d.toString().trimEnd()}`); } catch {}
+  });
+
+  serverProcess.on("error", (err) => {
+    console.error("[buildverse] Failed to start server process:", err.message);
+  });
 
   serverProcess.on("exit", (code) => {
     if (!app.isQuitting) {
@@ -329,14 +387,18 @@ function createWindow() {
 
   mainWindow.on("close", (e) => {
     if (!app.isQuitting) {
-      e.preventDefault();
-      mainWindow.hide();
-      if (tray) {
-        tray.displayBalloon?.({
+      const mode = getCloseMode();
+      if (mode === "background") {
+        e.preventDefault();
+        mainWindow.hide();
+        tray?.displayBalloon?.({
           iconType: "info",
           title: APP_NAME,
-          content: "BuildVerse is still running in the system tray.",
+          content: "BuildVerse is running in the system tray.",
         });
+      } else {
+        app.isQuitting = true;
+        // server and tray cleaned up in before-quit
       }
     }
   });
@@ -381,7 +443,7 @@ function createTray() {
 }
 
 // ──────────────────────────────────────────────────────────
-// IPC — expose useful info to the renderer
+// IPC – expose useful info to the renderer
 // ──────────────────────────────────────────────────────────
 
 ipcMain.handle("get-app-info", () => ({
@@ -395,6 +457,43 @@ ipcMain.handle("get-app-info", () => ({
 // App lifecycle
 // ──────────────────────────────────────────────────────────
 
+// ── Close-behaviour preference ────────────────────────────────────────────────
+// Stored in userData/prefs.json  { "closeMode": "background" | "quit" }
+
+function getPrefsPath() {
+  return path.join(app.getPath("userData"), "prefs.json");
+}
+
+function loadPrefs() {
+  try { return JSON.parse(fs.readFileSync(getPrefsPath(), "utf8")); } catch { return {}; }
+}
+
+function savePrefs(obj) {
+  const existing = loadPrefs();
+  fs.writeFileSync(getPrefsPath(), JSON.stringify({ ...existing, ...obj }, null, 2));
+}
+
+function getCloseMode() {
+  return loadPrefs().closeMode ?? "background";
+}
+
+ipcMain.handle("prefs:get", () => loadPrefs());
+ipcMain.handle("prefs:set", (_, obj) => { savePrefs(obj); return { success: true }; });
+
+// ── Single-instance lock — prevents a second copy from launching ──────────────
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+  process.exit(0);
+}
+app.on("second-instance", () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
 app.whenReady().then(async () => {
   try {
     const dbPath = ensureDatabase();
@@ -406,7 +505,7 @@ app.whenReady().then(async () => {
   } catch (err) {
     console.error("[buildverse] Fatal startup error:", err);
     dialog.showErrorBox(
-      "BuildVerse — Fatal Error",
+      "BuildVerse – Fatal Error",
       `Failed to start:\n\n${err.message}`
     );
     app.quit();
@@ -432,3 +531,4 @@ app.on("before-quit", () => {
     tray = null;
   }
 });
+
