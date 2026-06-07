@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,7 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
     actualPrice: editMod?.actualPrice?.toString() ?? "",
     status: editMod?.status ?? "PLANNED",
     priority: editMod?.priority ?? "MEDIUM",
-    difficulty: editMod?.difficulty ?? "",
+    difficulty: editMod?.difficulty ?? "UNKNOWN",
     link: editMod?.link ?? "",
     imageUrl: editMod?.imageUrl ?? "",
     notes: editMod?.notes ?? "",
@@ -51,6 +51,30 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
     laborCost: editMod?.laborCost?.toString() ?? "",
     diyInstall: editMod?.diyInstall ?? false,
   });
+
+  // Re-populate form whenever editMod changes (dialog reuse fix)
+  useEffect(() => {
+    setForm({
+      name: editMod?.name ?? "",
+      category: editMod?.category ?? "",
+      brand: editMod?.brand ?? "",
+      vendor: editMod?.vendor ?? "",
+      price: editMod?.price?.toString() ?? "",
+      actualPrice: editMod?.actualPrice?.toString() ?? "",
+      status: editMod?.status ?? "PLANNED",
+      priority: editMod?.priority ?? "MEDIUM",
+      difficulty: editMod?.difficulty ?? "UNKNOWN",
+      link: editMod?.link ?? "",
+      imageUrl: editMod?.imageUrl ?? "",
+      notes: editMod?.notes ?? "",
+      partNumber: editMod?.partNumber ?? "",
+      orderNumber: editMod?.orderNumber ?? "",
+      installDate: editMod?.installDate ? editMod.installDate.slice(0, 10) : "",
+      installMileage: editMod?.installMileage?.toString() ?? "",
+      laborCost: editMod?.laborCost?.toString() ?? "",
+      diyInstall: editMod?.diyInstall ?? false,
+    });
+  }, [editMod]);
 
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -71,7 +95,7 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
         actualPrice: form.actualPrice ? parseFloat(form.actualPrice) : undefined,
         status: form.status,
         priority: form.priority,
-        difficulty: form.difficulty || undefined,
+        difficulty: (form.difficulty && form.difficulty !== "UNKNOWN") ? form.difficulty : undefined,
         link: form.link || undefined,
         imageUrl: form.imageUrl || undefined,
         notes: form.notes || undefined,
@@ -159,7 +183,7 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
               <Select value={form.difficulty} onValueChange={(v) => set("difficulty", v)}>
                 <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unknown</SelectItem>
+                  <SelectItem value="UNKNOWN">Unknown</SelectItem>
                   {INSTALL_DIFFICULTIES.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
                 </SelectContent>
               </Select>

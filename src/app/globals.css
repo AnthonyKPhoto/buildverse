@@ -1,69 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Dynamic accent — overridden by ThemeProvider from localStorage */
-    --theme: 24 90% 58%;
+    /* Accent — overridden by ThemeProvider */
+    --theme: 217 91% 60%;
 
-    --background: 220 14% 8%;
-    --foreground: 210 9% 95%;
-    --card: 220 14% 11%;
-    --card-foreground: 210 9% 95%;
-    --popover: 220 14% 11%;
-    --popover-foreground: 210 9% 95%;
-    --primary: 220 14% 11%;
-    --primary-foreground: 210 9% 95%;
-    --secondary: 220 12% 16%;
-    --secondary-foreground: 210 8% 88%;
-    --muted: 220 12% 14%;
-    --muted-foreground: 220 8% 48%;
-    --accent: 220 12% 16%;
-    --accent-foreground: 210 9% 95%;
-    --destructive: 0 72% 51%;
+    /* Surface scale — deep navy */
+    --background:          222 28%  6%;
+    --foreground:          213 20% 94%;
+
+    --card:                222 26% 9%;
+    --card-foreground:     213 20% 94%;
+
+    --popover:             222 26% 10%;
+    --popover-foreground:  213 20% 94%;
+
+    --primary:             217 91% 60%;
+    --primary-foreground:  0 0% 100%;
+
+    --secondary:           222 22% 13%;
+    --secondary-foreground:213 15% 80%;
+
+    --muted:               222 22% 12%;
+    --muted-foreground:    215 14% 44%;
+
+    --accent:              222 22% 14%;
+    --accent-foreground:   213 20% 94%;
+
+    --destructive:         0 68% 56%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 12% 15%;
-    --input: 220 12% 15%;
-    --ring: 24 90% 58%;
-    --radius: 0.5rem;
+
+    --border:              222 22% 14%;
+    --input:               222 22% 14%;
+    --ring:                217 91% 60%;
+
+    /* Design tokens */
+    --radius:              0.75rem;
+    --sidebar-width:       240px;
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: "rlig" 1, "calt" 1, "cv02" 1, "cv03" 1, "cv04" 1;
+    -webkit-font-smoothing: antialiased;
   }
-  html {
-    scroll-behavior: smooth;
-  }
+  html { scroll-behavior: smooth; }
+
+  /* Headings */
+  h1 { @apply text-2xl font-semibold tracking-tight; }
+  h2 { @apply text-xl font-semibold tracking-tight; }
+  h3 { @apply text-base font-semibold; }
 }
 
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 4px; height: 4px; }
+::-webkit-scrollbar-track    { background: transparent; }
+::-webkit-scrollbar-thumb    { background: hsl(222, 22%, 20%); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(222, 22%, 28%); }
+
+/* ── Utilities ───────────────────────────────────────────────────────────── */
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+  /* Subtle card glow on hover */
+  .card-hover {
+    @apply transition-all duration-200;
+  }
+  .card-hover:hover {
+    @apply border-border/80;
+    box-shadow: 0 0 0 1px hsl(var(--border) / 0.5);
+  }
+
+  /* Inset surface */
+  .surface-inset {
+    @apply bg-black/20 border border-white/5 rounded-xl;
   }
 }
 
-::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: hsl(220, 12%, 22%);
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(220, 12%, 30%);
-}
+/* ── Animations ──────────────────────────────────────────────────────────── */
+@keyframes fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+.animate-fade-in  { animation: fade-in  0.2s ease-out; }
+.animate-slide-up { animation: slide-up 0.25s ease-out; }

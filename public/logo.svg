@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- Rounded square background -->
+  <rect width="100" height="100" rx="22" fill="#0a0f1e"/>
+
+  <!-- Wrench jaws (top) -->
+  <!-- Left jaw -->
+  <path d="M 38 18 A 14 14 0 0 0 24 32 A 14 14 0 0 0 38 46 L 42 42 A 8 8 0 0 1 30 32 A 8 8 0 0 1 42 22 Z" fill="url(#silver)"/>
+  <!-- Right jaw -->
+  <path d="M 62 18 A 14 14 0 0 1 76 32 A 14 14 0 0 1 62 46 L 58 42 A 8 8 0 0 0 70 32 A 8 8 0 0 0 58 22 Z" fill="url(#silver)"/>
+  <!-- Wrench top bridge -->
+  <path d="M 38 18 Q 50 10 62 18 L 58 22 Q 50 15 42 22 Z" fill="url(#silver)"/>
+  <!-- Wrench neck — narrows into bolt -->
+  <path d="M 42 42 L 44 48 L 56 48 L 58 42 L 62 46 L 56 52 L 44 52 L 38 46 Z" fill="url(#silver)"/>
+
+  <!-- Lightning bolt (handle) -->
+  <path d="M 56 52 L 52 67 L 60 67 L 44 90 L 48 73 L 40 73 L 56 52 Z" fill="url(#bolt)"/>
+
+  <!-- Subtle inner glow on bolt -->
+  <path d="M 54 55 L 51 67 L 57 67 L 46 84 L 49 72 L 43 72 L 54 55 Z" fill="url(#bolt-inner)" opacity="0.35"/>
+
+  <defs>
+    <linearGradient id="silver" x1="30" y1="10" x2="70" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e8eaf0"/>
+      <stop offset="45%" stop-color="#c0c4d0"/>
+      <stop offset="100%" stop-color="#8a8fa0"/>
+    </linearGradient>
+    <linearGradient id="bolt" x1="44" y1="52" x2="60" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c8ccd8"/>
+      <stop offset="100%" stop-color="#6b7280"/>
+    </linearGradient>
+    <linearGradient id="bolt-inner" x1="44" y1="52" x2="60" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#d1d5db"/>
+    </linearGradient>
+  </defs>
+</svg>

@@ -13,6 +13,8 @@ directories:
   output: "dist-electron"
   buildResources: "build"
 
+icon: "build/icon.ico"
+
 # ── Override package.json main for the packaged app ──────────────────────────
 # In dev, Electron uses electron/main.js directly.
 # For the packaged asar we point at the esbuild bundle which has electron-updater
@@ -52,6 +54,11 @@ extraResources:
   # Public folder (favicon, images)
   - from: "public"
     to: "standalone/public"
+  # App icons (used by tray + window at runtime)
+  - from: "build/icon.ico"
+    to: "icon.ico"
+  - from: "build/icon.png"
+    to: "icon.png"
   # Prisma schema (needed by the query engine at runtime)
   - from: "prisma/schema.prisma"
     to: "prisma/schema.prisma"

@@ -8,6 +8,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   getAppInfo: () => ipcRenderer.invoke("get-app-info"),
 
+  prefs: {
+    get: ()        => ipcRenderer.invoke("prefs:get"),
+    set: (obj)     => ipcRenderer.invoke("prefs:set", obj),
+  },
+
   backup: {
     create:  ()          => ipcRenderer.invoke("backup:create"),
     list:    ()          => ipcRenderer.invoke("backup:list"),
@@ -18,7 +23,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   update: {
     check:   () => ipcRenderer.invoke("update:check"),
     install: () => ipcRenderer.invoke("update:install"),
-    /** Subscribe to status events; returns an unsubscribe function. */
     onStatus: (cb) => {
       const handler = (_, data) => cb(data);
       ipcRenderer.on("update:status", handler);

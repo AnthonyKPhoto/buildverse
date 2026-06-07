@@ -56,9 +56,15 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    // Remove dependency rows referencing this mod on either side before deleting
+    // (SQLite doesn't cascade FK deletes automatically)
+    await prisma.modDependency.deleteMany({
+      where: { OR: [{ modId: params.id }, { dependsOnId: params.id }] },
+    });
     await prisma.modification.delete({ where: { id: params.id } });
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error("[DELETE /api/modifications]", err);
     return NextResponse.json({ error: "Failed to delete modification" }, { status: 500 });
   }
 }

@@ -4,40 +4,46 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  Car, Wrench, DollarSign, ShoppingCart, Settings,
-  Gauge, Package, ClipboardList, Zap,
+  LayoutDashboard, Car, Wrench, DollarSign,
+  ShoppingBag, Settings, ClipboardList, Store,
 } from "lucide-react";
+import Image from "next/image";
 
 const navItems = [
-  { href: "/",            label: "Dashboard",      icon: Gauge },
-  { href: "/garage",      label: "Garage",         icon: Car },
-  { href: "/builds",      label: "Build Plans",    icon: Wrench },
-  { href: "/budget",      label: "Budget",         icon: DollarSign },
-  { href: "/products",    label: "Product Tracker",icon: ShoppingCart },
-  { href: "/maintenance", label: "Maintenance",    icon: ClipboardList },
-  { href: "/vendors",     label: "Vendors",        icon: Package },
+  { href: "/",            label: "Dashboard",       icon: LayoutDashboard },
+  { href: "/garage",      label: "Garage",          icon: Car },
+  { href: "/builds",      label: "Build Plans",     icon: Wrench },
+  { href: "/budget",      label: "Budget",          icon: DollarSign },
+  { href: "/products",    label: "Product Tracker", icon: ShoppingBag },
+  { href: "/maintenance", label: "Maintenance",     icon: ClipboardList },
+  { href: "/vendors",     label: "Vendors",         icon: Store },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-60 flex-shrink-0 flex flex-col bg-card border-r border-border">
+    <aside
+      className="flex-shrink-0 flex flex-col border-r border-border bg-card"
+      style={{ width: "var(--sidebar-width, 240px)" }}
+    >
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 py-5">
-        <div className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center">
-          <Zap className="w-4 h-4 text-theme" />
+      <div className="flex items-center gap-3 px-5 h-16 border-b border-border shrink-0">
+        <Image src="/logo.svg" alt="BuildVerse" width={34} height={34} className="rounded-xl shrink-0" />
+        <div className="leading-none">
+          <p className="font-semibold text-sm tracking-tight">
+            Build<span className="text-theme">Verse</span>
+          </p>
+          <p className="text-2xs text-muted-foreground mt-0.5">Mod Manager</p>
         </div>
-        <span className="text-base font-semibold tracking-tight">
-          Build<span className="text-theme">Verse</span>
-        </span>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 pb-2 space-y-0.5 overflow-y-auto">
-        <p className="px-3 pt-1 pb-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-          Navigation
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-hide">
+        <p className="px-3 mb-2 text-2xs font-semibold text-muted-foreground uppercase tracking-widest">
+          Menu
         </p>
+
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
@@ -45,34 +51,54 @@ export function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-100",
+                "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
                 active
-                  ? "bg-secondary text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                  ? "bg-theme/12 text-theme"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}
             >
-              <Icon className="w-4 h-4 flex-shrink-0" />
+              <Icon
+                className={cn(
+                  "w-[18px] h-[18px] shrink-0 transition-colors",
+                  active ? "text-theme" : "text-muted-foreground group-hover:text-foreground"
+                )}
+                strokeWidth={active ? 2.2 : 1.8}
+              />
               {label}
+              {active && (
+                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-theme" />
+              )}
             </Link>
           );
         })}
       </nav>
 
       {/* Footer */}
-      <div className="px-3 pb-4 pt-2 border-t border-border">
+      <div className="px-3 py-3 border-t border-border shrink-0 space-y-0.5">
         <Link
           href="/settings"
           className={cn(
-            "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-100",
+            "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
             pathname === "/settings"
-              ? "bg-secondary text-foreground font-medium"
-              : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+              ? "bg-theme/12 text-theme"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary"
           )}
         >
-          <Settings className="w-4 h-4" />
+          <Settings
+            className={cn(
+              "w-[18px] h-[18px] shrink-0",
+              pathname === "/settings" ? "text-theme" : "text-muted-foreground group-hover:text-foreground"
+            )}
+            strokeWidth={pathname === "/settings" ? 2.2 : 1.8}
+          />
           Settings
+          {pathname === "/settings" && (
+            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-theme" />
+          )}
         </Link>
-        <p className="text-[11px] text-muted-foreground/60 px-3 mt-3">BuildVerse v1.0.0</p>
+        <p className="text-2xs text-muted-foreground/50 px-3 pt-1.5 pb-1">
+          BuildVerse v1.0.0
+        </p>
       </div>
     </aside>
   );
