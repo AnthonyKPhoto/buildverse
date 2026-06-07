@@ -97,7 +97,7 @@ export function Sidebar() {
           )}
         </Link>
         <p className="text-2xs text-muted-foreground/50 px-3 pt-1.5 pb-1">
-          BuildVerse v1.0.4
+          BuildVerse v1.0.5
         </p>
       </div>
     </aside>

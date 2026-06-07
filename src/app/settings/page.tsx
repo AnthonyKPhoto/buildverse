@@ -282,7 +282,7 @@ export default function SettingsPage() {
       <Section title="About BuildVerse" icon={Zap}>
         <Row label="Version">
           <span className="text-xs font-mono bg-secondary border border-border px-2 py-1 rounded-md">
-            v{appInfo?.version ?? "1.0.4"}
+            v{appInfo?.version ?? "1.0.5"}
           </span>
         </Row>
         <Row label="Stack">
