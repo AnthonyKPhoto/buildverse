@@ -293,6 +293,9 @@ async function startServer(dbPath) {
     PORT: String(PORT),
     HOSTNAME: "127.0.0.1",
     NODE_ENV: "production",
+    // BV_DATABASE_URL takes priority over the relative DATABASE_URL baked into
+    // the standalone .env — always an absolute path so it resolves correctly.
+    BV_DATABASE_URL: `file:${dbPath}`,
     DATABASE_URL: `file:${dbPath}`,
   };
 
