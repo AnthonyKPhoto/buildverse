@@ -1,7 +1,7 @@
 {
   "name": "buildverse",
-  "version": "1.0.0",
-  "description": "BuildVerse — Intelligent Vehicle Modification Manager",
+  "version": "1.0.4",
+  "description": "BuildVerse â€” Intelligent Vehicle Modification Manager",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
@@ -77,3 +77,4 @@
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
   }
 }
+
