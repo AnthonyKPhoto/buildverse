@@ -3,13 +3,18 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   try {
+    // Run counts individually so a missing table doesn't kill the whole response
+    const safeCount = async (fn: () => Promise<number>) => {
+      try { return await fn(); } catch { return 0; }
+    };
+
     const [vehicleCount, modCount, productCount, mods] = await Promise.all([
-      prisma.vehicle.count(),
-      prisma.modification.count(),
-      prisma.trackedProduct.count(),
+      safeCount(() => prisma.vehicle.count()),
+      safeCount(() => prisma.modification.count()),
+      safeCount(() => prisma.trackedProduct.count()),
       prisma.modification.findMany({
         select: { status: true, price: true, actualPrice: true },
-      }),
+      }).catch(() => [] as { status: string; price: number | null; actualPrice: number | null }[]),
     ]);
 
     const totalPlanned = mods.reduce((sum, m) => sum + (m.price ?? 0), 0);
@@ -27,6 +32,13 @@ export async function GET() {
       installedCount,
     });
   } catch {
-    return NextResponse.json({ error: "Failed to fetch stats" }, { status: 500 });
+    return NextResponse.json({
+      vehicleCount: 0,
+      modCount: 0,
+      productCount: 0,
+      totalPlanned: 0,
+      totalInstalled: 0,
+      installedCount: 0,
+    });
   }
 }

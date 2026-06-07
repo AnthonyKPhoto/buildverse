@@ -31,6 +31,7 @@ export async function GET() {
     const vehicles = await prisma.vehicle.findMany({
       include: {
         modifications: { select: { id: true, status: true, price: true, actualPrice: true } },
+        budgets: { select: { id: true, category: true, planned: true, actual: true, notes: true } },
         _count: { select: { modifications: true, maintenanceLogs: true } },
       },
       orderBy: { createdAt: "desc" },
