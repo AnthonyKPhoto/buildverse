@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,26 @@ export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }:
     photoUrl: editVehicle?.photoUrl ?? "",
     notes: editVehicle?.notes ?? "",
   });
+
+  // Re-populate form whenever the dialog opens with a different vehicle
+  useEffect(() => {
+    setForm({
+      name: editVehicle?.name ?? "",
+      year: editVehicle?.year?.toString() ?? new Date().getFullYear().toString(),
+      make: editVehicle?.make ?? "",
+      model: editVehicle?.model ?? "",
+      trim: editVehicle?.trim ?? "",
+      engine: editVehicle?.engine ?? "",
+      transmission: editVehicle?.transmission ?? "",
+      drivetrain: editVehicle?.drivetrain ?? "",
+      vin: editVehicle?.vin ?? "",
+      mileage: editVehicle?.mileage?.toString() ?? "",
+      platform: editVehicle?.platform ?? "",
+      color: editVehicle?.color ?? "",
+      photoUrl: editVehicle?.photoUrl ?? "",
+      notes: editVehicle?.notes ?? "",
+    });
+  }, [editVehicle]);
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
