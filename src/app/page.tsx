@@ -12,15 +12,6 @@ import {
 } from "lucide-react";
 import { formatCurrency, calcBuildCompletion } from "@/lib/utils";
 
-interface Stats {
-  vehicleCount: number;
-  modCount: number;
-  productCount: number;
-  totalPlanned: number;
-  totalInstalled: number;
-  installedCount: number;
-}
-
 interface Vehicle {
   id: string;
   name?: string;
@@ -35,20 +26,38 @@ interface Vehicle {
 }
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/stats").then((r) => r.json()),
-      fetch("/api/vehicles").then((r) => r.json()),
-    ]).then(([s, v]) => {
-      setStats(s);
-      setVehicles(Array.isArray(v) ? v : []);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    fetch("/api/vehicles")
+      .then((r) => r.json())
+      .then((v) => {
+        setVehicles(Array.isArray(v) ? v : []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
+
+  // Compute stats directly from vehicles data — avoids a separate DB call
+  const stats = {
+    vehicleCount: vehicles.length,
+    modCount: vehicles.reduce((s, v) => s + v._count.modifications, 0),
+    installedCount: vehicles.reduce(
+      (s, v) => s + v.modifications.filter((m) => m.status === "INSTALLED").length, 0
+    ),
+    totalPlanned: vehicles.reduce(
+      (s, v) => s + v.modifications.reduce((ms, m) => ms + (m.price ?? 0), 0), 0
+    ),
+    totalInstalled: vehicles.reduce(
+      (s, v) =>
+        s +
+        v.modifications
+          .filter((m) => m.status === "INSTALLED")
+          .reduce((ms, m) => ms + (m.price ?? 0), 0),
+      0
+    ),
+  };
 
   if (loading) {
     return (
@@ -70,9 +79,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {stats
-              ? `${stats.vehicleCount} vehicle${stats.vehicleCount !== 1 ? "s" : ""} · ${stats.modCount} modifications`
-              : "Your vehicle modification manager"}
+            {`${stats.vehicleCount} vehicle${stats.vehicleCount !== 1 ? "s" : ""} · ${stats.modCount} modification${stats.modCount !== 1 ? "s" : ""}`}
           </p>
         </div>
         <Link href="/garage">
