@@ -28,53 +28,47 @@ interface AddModDialogProps {
 const STATUSES = ["PLANNED", "RESEARCHING", "ORDERED", "PURCHASED", "INSTALLED", "REMOVED"];
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
+const BLANK_FORM = {
+  name: "", category: "", brand: "", vendor: "", price: "", actualPrice: "",
+  status: "PLANNED", priority: "MEDIUM", difficulty: "UNKNOWN",
+  link: "", imageUrl: "", notes: "", partNumber: "", orderNumber: "",
+  installDate: "", installMileage: "", laborCost: "", diyInstall: false,
+};
+
+function formFromMod(m?: Modification | null) {
+  if (!m) return BLANK_FORM;
+  return {
+    name: m.name ?? "",
+    category: m.category ?? "",
+    brand: m.brand ?? "",
+    vendor: m.vendor ?? "",
+    price: m.price?.toString() ?? "",
+    actualPrice: m.actualPrice?.toString() ?? "",
+    status: m.status ?? "PLANNED",
+    priority: m.priority ?? "MEDIUM",
+    difficulty: m.difficulty ?? "UNKNOWN",
+    link: m.link ?? "",
+    imageUrl: m.imageUrl ?? "",
+    notes: m.notes ?? "",
+    partNumber: m.partNumber ?? "",
+    orderNumber: m.orderNumber ?? "",
+    installDate: m.installDate ? m.installDate.slice(0, 10) : "",
+    installMileage: m.installMileage?.toString() ?? "",
+    laborCost: m.laborCost?.toString() ?? "",
+    diyInstall: m.diyInstall ?? false,
+  };
+}
+
 export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }: AddModDialogProps) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    name: editMod?.name ?? "",
-    category: editMod?.category ?? "",
-    brand: editMod?.brand ?? "",
-    vendor: editMod?.vendor ?? "",
-    price: editMod?.price?.toString() ?? "",
-    actualPrice: editMod?.actualPrice?.toString() ?? "",
-    status: editMod?.status ?? "PLANNED",
-    priority: editMod?.priority ?? "MEDIUM",
-    difficulty: editMod?.difficulty ?? "UNKNOWN",
-    link: editMod?.link ?? "",
-    imageUrl: editMod?.imageUrl ?? "",
-    notes: editMod?.notes ?? "",
-    partNumber: editMod?.partNumber ?? "",
-    orderNumber: editMod?.orderNumber ?? "",
-    installDate: editMod?.installDate ? editMod.installDate.slice(0, 10) : "",
-    installMileage: editMod?.installMileage?.toString() ?? "",
-    laborCost: editMod?.laborCost?.toString() ?? "",
-    diyInstall: editMod?.diyInstall ?? false,
-  });
+  const [form, setForm] = useState(formFromMod(editMod));
 
-  // Re-populate form whenever editMod changes (dialog reuse fix)
+  // Reset form every time the dialog opens — catches both editMod changes
+  // AND cases where the dialog reopens with the same editMod value (e.g. null→null)
   useEffect(() => {
-    setForm({
-      name: editMod?.name ?? "",
-      category: editMod?.category ?? "",
-      brand: editMod?.brand ?? "",
-      vendor: editMod?.vendor ?? "",
-      price: editMod?.price?.toString() ?? "",
-      actualPrice: editMod?.actualPrice?.toString() ?? "",
-      status: editMod?.status ?? "PLANNED",
-      priority: editMod?.priority ?? "MEDIUM",
-      difficulty: editMod?.difficulty ?? "UNKNOWN",
-      link: editMod?.link ?? "",
-      imageUrl: editMod?.imageUrl ?? "",
-      notes: editMod?.notes ?? "",
-      partNumber: editMod?.partNumber ?? "",
-      orderNumber: editMod?.orderNumber ?? "",
-      installDate: editMod?.installDate ? editMod.installDate.slice(0, 10) : "",
-      installMileage: editMod?.installMileage?.toString() ?? "",
-      laborCost: editMod?.laborCost?.toString() ?? "",
-      diyInstall: editMod?.diyInstall ?? false,
-    });
-  }, [editMod]);
+    if (open) setForm(formFromMod(editMod));
+  }, [open, editMod]);
 
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
