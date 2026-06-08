@@ -16,6 +16,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Stats { vehicleCount: number; modCount: number; productCount: number; }
+interface VehicleItem { _count: { modifications: number } }
 interface AppInfo { version: string; userDataPath: string; dbPath: string; isDev: boolean; }
 interface BackupEntry { name: string; filePath: string; size: number; createdAt: string; }
 type UpdateStatus =
@@ -143,7 +144,19 @@ export default function SettingsPage() {
   }, [isElectron]);
 
   useEffect(() => {
-    fetch("/api/stats").then(r => r.json()).then(setStats).catch(() => {});
+    // Compute stats from /api/vehicles to avoid DB-path mismatch with /api/stats
+    Promise.all([
+      fetch("/api/vehicles").then(r => r.json()).catch(() => []),
+      fetch("/api/products").then(r => r.json()).catch(() => []),
+    ]).then(([vehicles, products]) => {
+      const v = Array.isArray(vehicles) ? vehicles as VehicleItem[] : [];
+      const p = Array.isArray(products) ? products : [];
+      setStats({
+        vehicleCount: v.length,
+        modCount: v.reduce((s, vh) => s + (vh._count?.modifications ?? 0), 0),
+        productCount: p.length,
+      });
+    });
     if (isElectron) {
       window.electronAPI!.getAppInfo().then(setAppInfo).catch(() => {});
       loadBackups();
@@ -282,7 +295,7 @@ export default function SettingsPage() {
       <Section title="About BuildVerse" icon={Zap}>
         <Row label="Version">
           <span className="text-xs font-mono bg-secondary border border-border px-2 py-1 rounded-md">
-            v{appInfo?.version ?? "1.0.6"}
+            v{appInfo?.version ?? "1.0.7"}
           </span>
         </Row>
         <Row label="Stack">
