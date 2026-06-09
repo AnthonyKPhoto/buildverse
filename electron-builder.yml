@@ -100,13 +100,13 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: "BuildVerse"
-  artifactName: "BuildVerse Setup ${version}.exe"
+  artifactName: "BuildVerse-Setup-${version}.exe"
   # Optional: brand the installer sidebar (164×314 px BMP)
   # installerSidebar: "build/sidebar.bmp"
 
 # ── Portable (no install, run anywhere) ──────────────────────────────────────
 portable:
-  artifactName: "BuildVerse ${version} Portable.exe"
+  artifactName: "BuildVerse-${version}-Portable.exe"
 
 # ── Auto-update feed (electron-updater reads app-update.yml embedded in the package) ──
 publish:
