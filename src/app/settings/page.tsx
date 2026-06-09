@@ -196,6 +196,25 @@ export default function SettingsPage() {
     } catch { toast({ title: "Refresh failed", variant: "destructive" }); }
   };
 
+  const wipeAllData = async () => {
+    if (!confirm("⚠️ This will permanently delete ALL vehicles, modifications, maintenance logs, and budget data. This cannot be undone. Continue?")) return;
+    if (!confirm("Are you absolutely sure? All your data will be lost.")) return;
+    try {
+      const vehicles = await fetch("/api/vehicles").then(r => r.json());
+      if (!Array.isArray(vehicles)) throw new Error("Failed to load vehicles");
+      await Promise.all(vehicles.map((v: { id: string }) => fetch(`/api/vehicles/${v.id}`, { method: "DELETE" })));
+      const products = await fetch("/api/products").then(r => r.json());
+      if (Array.isArray(products)) {
+        await Promise.all(products.map((p: { id: string }) => fetch(`/api/products/${p.id}`, { method: "DELETE" })));
+      }
+      // Refresh stats
+      const v = await fetch("/api/vehicles").then(r => r.json()).catch(() => []);
+      const p = await fetch("/api/products").then(r => r.json()).catch(() => []);
+      setStats({ vehicleCount: 0, modCount: 0, productCount: Array.isArray(p) ? p.length : 0 });
+      toast({ title: "All data wiped. Starting fresh!" });
+    } catch { toast({ title: "Wipe failed", variant: "destructive" }); }
+  };
+
   const createBackup = async () => {
     setLoadingBkp(true);
     try { await window.electronAPI!.backup.create(); await loadBackups(); toast({ title: "Backup created" }); }
@@ -295,7 +314,7 @@ export default function SettingsPage() {
       <Section title="About BuildVerse" icon={Zap}>
         <Row label="Version">
           <span className="text-xs font-mono bg-secondary border border-border px-2 py-1 rounded-md">
-            v{appInfo?.version ?? "1.0.7"}
+            v{appInfo?.version ?? "1.0.8"}
           </span>
         </Row>
         <Row label="Stack">
@@ -380,8 +399,11 @@ export default function SettingsPage() {
         <Row label="Export Data" desc="Download all vehicles & products as JSON">
           <Btn onClick={handleExport}><Download className="w-3.5 h-3.5" /> Export</Btn>
         </Row>
-        <Row label="Refresh Product Prices" desc="Re-scrape all tracked product URLs" last>
+        <Row label="Refresh Product Prices" desc="Re-scrape all tracked product URLs">
           <Btn onClick={refreshAll}><RefreshCw className="w-3.5 h-3.5" /> Refresh All</Btn>
+        </Row>
+        <Row label="Wipe All Data" desc="Delete every vehicle, mod, maintenance log and product. Cannot be undone." last>
+          <Btn variant="danger" onClick={wipeAllData}><Trash2 className="w-3.5 h-3.5" /> Wipe Everything</Btn>
         </Row>
       </Section>
 
