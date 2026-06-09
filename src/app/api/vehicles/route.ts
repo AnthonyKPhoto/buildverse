@@ -54,6 +54,8 @@ export async function POST(req: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 });
     }
-    return NextResponse.json({ error: "Failed to create vehicle" }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[POST /api/vehicles]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

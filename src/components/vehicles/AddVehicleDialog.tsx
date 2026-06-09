@@ -94,13 +94,27 @@ export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }:
       const url = editVehicle ? `/api/vehicles/${editVehicle.id}` : "/api/vehicles";
       const method = editVehicle ? "PUT" : "POST";
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const errBody = await res.json();
+          errMsg = JSON.stringify(errBody.error ?? errBody);
+        } catch {
+          try { errMsg = await res.text(); } catch {}
+        }
+        throw new Error(errMsg);
+      }
       const vehicle = await res.json();
       onCreated(vehicle);
       onOpenChange(false);
       toast({ title: editVehicle ? "Vehicle updated" : "Vehicle added to your garage!" });
-    } catch {
-      toast({ title: "Failed to save vehicle", variant: "destructive" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast({
+        title: "Failed to save vehicle",
+        description: msg.length > 200 ? msg.slice(0, 200) + "…" : msg,
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
