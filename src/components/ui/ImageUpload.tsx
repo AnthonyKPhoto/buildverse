@@ -147,17 +147,31 @@ function CropModal({ src, aspect, onConfirm, onCancel }: CropModalProps) {
     setZoom((z) => Math.max(1, Math.min(10, z * (e.deltaY < 0 ? 1.1 : 0.9))));
   };
 
-  // ── Confirm: export the canvas as JPEG ─────────────────────────────────────
+  // ── Confirm: export the cropped image WITHOUT the overlay grid ─────────────
   const confirm = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    // Export at 2× for retina quality, then cap to 1200px
+    const img = imgRef.current;
+    if (!img) return;
+
+    // Re-calculate the same source rect the preview is showing
+    const effectiveZoom = fitZoomRef.current * zoom;
+    const visW = PREVIEW_W / effectiveZoom;
+    const visH = PREVIEW_H / effectiveZoom;
+    let sx = offset.x - visW / 2;
+    let sy = offset.y - visH / 2;
+    sx = Math.max(0, Math.min(sx, img.naturalWidth  - visW));
+    sy = Math.max(0, Math.min(sy, img.naturalHeight - visH));
+    if (visW >= img.naturalWidth)  { sx = 0; }
+    if (visH >= img.naturalHeight) { sy = 0; }
+    const sw = Math.min(visW, img.naturalWidth);
+    const sh = Math.min(visH, img.naturalHeight);
+
+    // Export at 2× resolution, max 1200px wide — no grid drawn
     const OUT_W = Math.min(PREVIEW_W * 2, 1200);
     const OUT_H = Math.round(OUT_W * (PREVIEW_H / PREVIEW_W));
     const out = document.createElement("canvas");
     out.width = OUT_W;
     out.height = OUT_H;
-    out.getContext("2d")!.drawImage(canvas, 0, 0, OUT_W, OUT_H);
+    out.getContext("2d")!.drawImage(img, sx, sy, sw, sh, 0, 0, OUT_W, OUT_H);
     onConfirm(out.toDataURL("image/jpeg", 0.88));
   };
 
