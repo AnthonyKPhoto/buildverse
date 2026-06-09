@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Image from "next/image";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState, useCallback } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
-  ShoppingCart, Plus, RefreshCw, Trash2, ExternalLink, TrendingDown,
-  TrendingUp, Minus, Package, Clock, Search,
+  ShoppingCart, Plus, RefreshCw, Trash2, ExternalLink,
+  Package, Clock, Search, Download, CheckCircle2,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -28,6 +27,14 @@ interface TrackedProduct {
   priceHistory: PriceHistory[];
 }
 
+const STALE_HOURS = 6; // auto-refresh if not checked within this many hours
+
+function isStale(lastChecked?: string): boolean {
+  if (!lastChecked) return true;
+  const diff = Date.now() - new Date(lastChecked).getTime();
+  return diff > STALE_HOURS * 60 * 60 * 1000;
+}
+
 export default function ProductsPage() {
   const { toast } = useToast();
   const [products, setProducts] = useState<TrackedProduct[]>([]);
@@ -36,17 +43,101 @@ export default function ProductsPage() {
   const [urlInput, setUrlInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [refreshingAll, setRefreshingAll] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const load = () =>
+  // ── Load ─────────────────────────────────────────────────────────────────────
+  const load = useCallback(() =>
     fetch("/api/products")
       .then((r) => r.json())
       .then((d) => { setProducts(Array.isArray(d) ? d : []); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch(() => setLoading(false)),
+  []);
 
-  useEffect(() => { load(); }, []);
+  // ── Auto-refresh stale products silently on page load ─────────────────────
+  useEffect(() => {
+    load().then(async () => {
+      setProducts((prev) => {
+        const stale = prev.filter((p) => isStale(p.lastChecked));
+        if (stale.length === 0) return prev;
 
+        // Fire-and-forget refresh for each stale product
+        Promise.allSettled(
+          stale.map((p) =>
+            fetch(`/api/products/${p.id}/refresh`, { method: "POST" })
+              .then((r) => r.json())
+              .then((updated) => {
+                setProducts((curr) => curr.map((x) => (x.id === p.id ? updated : x)));
+              })
+              .catch(() => {})
+          )
+        );
+
+        return prev; // return unchanged — updates will come in via setProducts above
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Sync from mods ───────────────────────────────────────────────────────────
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/products/sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      await load();
+      if (data.added === 0) {
+        toast({ title: "Already up to date", description: "All mod links are already being tracked." });
+      } else {
+        toast({
+          title: `Synced ${data.added} product${data.added !== 1 ? "s" : ""} from mods`,
+          description: data.failed > 0 ? `${data.failed} couldn't be scraped.` : undefined,
+        });
+      }
+    } catch {
+      toast({ title: "Sync failed", variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // ── Refresh all ──────────────────────────────────────────────────────────────
+  const handleRefreshAll = async () => {
+    if (products.length === 0) return;
+    setRefreshingAll(true);
+    try {
+      const res = await fetch("/api/products/refresh-all", { method: "POST" });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setProducts(Array.isArray(updated) ? updated : products);
+      toast({ title: "All products refreshed!" });
+    } catch {
+      toast({ title: "Refresh failed", variant: "destructive" });
+    } finally {
+      setRefreshingAll(false);
+    }
+  };
+
+  // ── Single refresh ───────────────────────────────────────────────────────────
+  const handleRefresh = async (id: string) => {
+    setRefreshingId(id);
+    try {
+      const res = await fetch(`/api/products/${id}/refresh`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setProducts((p) => p.map((x) => (x.id === id ? updated : x)));
+      toast({ title: "Price refreshed!" });
+    } catch {
+      toast({ title: "Failed to refresh", variant: "destructive" });
+    } finally {
+      setRefreshingId(null);
+    }
+  };
+
+  // ── Add ──────────────────────────────────────────────────────────────────────
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!urlInput.trim()) return;
@@ -77,21 +168,7 @@ export default function ProductsPage() {
     }
   };
 
-  const handleRefresh = async (id: string) => {
-    setRefreshingId(id);
-    try {
-      const res = await fetch(`/api/products/${id}/refresh`, { method: "POST" });
-      if (!res.ok) throw new Error();
-      const updated = await res.json();
-      setProducts((p) => p.map((x) => (x.id === id ? { ...updated } : x)));
-      toast({ title: "Price refreshed!" });
-    } catch {
-      toast({ title: "Failed to refresh", variant: "destructive" });
-    } finally {
-      setRefreshingId(null);
-    }
-  };
-
+  // ── Delete ───────────────────────────────────────────────────────────────────
   const handleDelete = async (id: string) => {
     if (!confirm("Stop tracking this product?")) return;
     const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
@@ -121,17 +198,48 @@ export default function ProductsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Product Tracker</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Track prices from ECS Tuning, FCP Euro, 034Motorsport, and more
+            Tracks prices automatically — updates every {STALE_HOURS} hours when you visit this page
           </p>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="bg-theme hover:brightness-90 gap-2">
-          <Plus className="w-4 h-4" />
-          Track Product
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Sync from mods */}
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={handleSync}
+            disabled={syncing}
+          >
+            {syncing ? (
+              <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            {syncing ? "Syncing…" : "Sync from Mods"}
+          </Button>
+
+          {/* Refresh all */}
+          {products.length > 0 && (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={handleRefreshAll}
+              disabled={refreshingAll}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshingAll ? "animate-spin" : ""}`} />
+              {refreshingAll ? "Refreshing…" : "Refresh All"}
+            </Button>
+          )}
+
+          {/* Add manual */}
+          <Button onClick={() => setAddOpen(true)} className="bg-theme hover:brightness-90 gap-2">
+            <Plus className="w-4 h-4" />
+            Track Product
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
@@ -154,25 +262,28 @@ export default function ProductsPage() {
             <ShoppingCart className="w-12 h-12 text-muted-foreground/30 mb-4" />
             <h3 className="text-lg font-semibold mb-2">No tracked products</h3>
             <p className="text-muted-foreground text-sm max-w-xs mb-6">
-              Paste any product URL from ECS Tuning, FCP Euro, 034Motorsport, or other supported vendors to track prices.
+              Click <strong>Sync from Mods</strong> to automatically import all product links from your mods, or paste a URL manually.
             </p>
-            <Button onClick={() => setAddOpen(true)} className="bg-theme hover:brightness-90">
-              <Plus className="w-4 h-4 mr-2" />
-              Track First Product
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleSync} disabled={syncing} className="gap-2">
+                <Download className="w-4 h-4" />
+                {syncing ? "Syncing…" : "Sync from Mods"}
+              </Button>
+              <Button onClick={() => setAddOpen(true)} className="bg-theme hover:brightness-90">
+                <Plus className="w-4 h-4 mr-2" />
+                Add Manually
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4">
           {filtered.map((product) => {
             const isExpanded = expandedId === product.id;
-            const priceChange = product.currentPrice != null && product.lowestPrice != null
-              ? product.currentPrice - product.lowestPrice
-              : null;
             const isAtLowest = product.currentPrice != null && product.lowestPrice != null &&
               product.currentPrice <= product.lowestPrice;
+            const stale = isStale(product.lastChecked);
 
-            // Chart data
             const chartData = [...product.priceHistory]
               .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
               .map((h) => ({ date: new Date(h.createdAt).toLocaleDateString(), price: h.price }));
@@ -184,7 +295,8 @@ export default function ProductsPage() {
                     {/* Image */}
                     <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-secondary">
                       {product.imageUrl ? (
-                        <Image src={product.imageUrl} alt={product.title} width={80} height={80} className="object-cover w-full h-full" />
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={product.imageUrl} alt={product.title} className="object-cover w-full h-full" onError={(e) => (e.currentTarget.style.display = "none")} />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           <Package className="w-8 h-8 text-muted-foreground/30" />
@@ -205,15 +317,13 @@ export default function ProductsPage() {
                               <Badge variant="outline" className="text-xs">{product.brand}</Badge>
                             )}
                             {product.availability && (
-                              <Badge
-                                className={`text-xs ${product.availability.toLowerCase().includes("stock") ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-red-500/20 text-red-400 border-red-500/30"}`}
-                              >
+                              <Badge className={`text-xs ${product.availability.toLowerCase().includes("stock") ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-red-500/20 text-red-400 border-red-500/30"}`}>
                                 {product.availability}
                               </Badge>
                             )}
                             {isAtLowest && (
-                              <Badge className="text-xs bg-green-500/20 text-green-400 border-green-500/30">
-                                Lowest Price!
+                              <Badge className="text-xs bg-green-500/20 text-green-400 border-green-500/30 gap-1">
+                                <CheckCircle2 className="w-3 h-3" />Lowest Price!
                               </Badge>
                             )}
                           </div>
@@ -224,10 +334,10 @@ export default function ProductsPage() {
                           <p className="text-2xl font-bold">
                             {product.currentPrice != null ? formatCurrency(product.currentPrice) : "—"}
                           </p>
-                          {product.lowestPrice != null && product.highestPrice != null && (
+                          {product.lowestPrice != null && product.highestPrice != null && product.lowestPrice !== product.highestPrice && (
                             <div className="text-xs text-muted-foreground mt-0.5 space-y-0.5">
-                              <p>Low: {formatCurrency(product.lowestPrice)}</p>
-                              <p>High: {formatCurrency(product.highestPrice)}</p>
+                              <p className="text-green-400">Low: {formatCurrency(product.lowestPrice)}</p>
+                              <p className="text-red-400">High: {formatCurrency(product.highestPrice)}</p>
                             </div>
                           )}
                         </div>
@@ -236,7 +346,10 @@ export default function ProductsPage() {
                       {/* Meta */}
                       <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                         <Clock className="w-3 h-3" />
-                        <span>Last checked: {product.lastChecked ? formatDate(product.lastChecked) : "Never"}</span>
+                        <span className={stale ? "text-yellow-500" : ""}>
+                          {product.lastChecked ? `Checked ${formatDate(product.lastChecked)}` : "Never checked"}
+                          {stale && refreshingId !== product.id && " · updating…"}
+                        </span>
                         {product.sku && <span>SKU: {product.sku}</span>}
                       </div>
                     </div>
@@ -244,33 +357,34 @@ export default function ProductsPage() {
                     {/* Actions */}
                     <div className="flex flex-col gap-1 flex-shrink-0">
                       <a href={product.url} target="_blank" rel="noopener noreferrer">
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><ExternalLink className="w-3.5 h-3.5" /></Button>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Open product page">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </Button>
                       </a>
                       <Button
                         size="sm" variant="ghost" className="h-7 w-7 p-0"
                         onClick={() => handleRefresh(product.id)}
                         disabled={refreshingId === product.id}
+                        title="Refresh price now"
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === product.id ? "animate-spin" : ""}`} />
                       </Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:text-destructive" onClick={() => handleDelete(product.id)}>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:text-destructive" onClick={() => handleDelete(product.id)} title="Stop tracking">
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>
 
-                  {/* Expand chart */}
+                  {/* Price history chart */}
                   {chartData.length > 1 && (
                     <div className="mt-3 pt-3 border-t border-border">
                       <Button
-                        variant="ghost"
-                        size="sm"
+                        variant="ghost" size="sm"
                         className="text-xs text-muted-foreground h-6 px-0"
                         onClick={() => setExpandedId(isExpanded ? null : product.id)}
                       >
                         {isExpanded ? "Hide price history" : `Show price history (${chartData.length} data points)`}
                       </Button>
-
                       {isExpanded && (
                         <div className="mt-3">
                           <ResponsiveContainer width="100%" height={160}>
@@ -313,7 +427,7 @@ export default function ProductsPage() {
                 type="url"
               />
               <p className="text-xs text-muted-foreground mt-1.5">
-                Supports ECS Tuning, FCP Euro, 034Motorsport, APR, Unitronic, UROTuning, and most product pages with structured data.
+                Paste any direct product page URL. Tip: use <strong>Sync from Mods</strong> to import all your mod links automatically.
               </p>
             </div>
 
