@@ -139,6 +139,21 @@ export default function SettingsPage() {
   const { accent, setAccent } = useCurrentAccent();
   const { radius, setRadius } = useCurrentRadius();
 
+  const loadStats = useCallback(() => {
+    Promise.all([
+      fetch("/api/vehicles").then(r => r.json()).catch(() => []),
+      fetch("/api/products").then(r => r.json()).catch(() => []),
+    ]).then(([vehicles, products]) => {
+      const v = Array.isArray(vehicles) ? vehicles as VehicleItem[] : [];
+      const p = Array.isArray(products) ? products : [];
+      setStats({
+        vehicleCount: v.length,
+        modCount: v.reduce((s, vh) => s + (vh._count?.modifications ?? 0), 0),
+        productCount: p.length,
+      });
+    });
+  }, []);
+
   const loadBackups = useCallback(async () => {
     if (!isElectron) return;
     setLoadingBkp(true);
@@ -152,23 +167,12 @@ export default function SettingsPage() {
     setAutoTrackProducts(stored === null ? true : stored === "true");
 
     // Compute stats from /api/vehicles
-    Promise.all([
-      fetch("/api/vehicles").then(r => r.json()).catch(() => []),
-      fetch("/api/products").then(r => r.json()).catch(() => []),
-    ]).then(([vehicles, products]) => {
-      const v = Array.isArray(vehicles) ? vehicles as VehicleItem[] : [];
-      const p = Array.isArray(products) ? products : [];
-      setStats({
-        vehicleCount: v.length,
-        modCount: v.reduce((s, vh) => s + (vh._count?.modifications ?? 0), 0),
-        productCount: p.length,
-      });
-    });
+    loadStats();
     if (isElectron) {
       window.electronAPI!.getAppInfo().then(setAppInfo).catch(() => {});
       loadBackups();
       window.electronAPI!.prefs.get().then(p => {
-        setCloseModeState((p.closeMode as "background" | "quit") ?? "background");
+        setCloseModeState((p.closeMode as "background" | "quit") ?? "quit");
       }).catch(() => {});
       const unsub = window.electronAPI!.update.onStatus(setUpdateStatus);
       return unsub;
@@ -211,21 +215,28 @@ export default function SettingsPage() {
     } catch { toast({ title: "Refresh failed", variant: "destructive" }); }
   };
 
+  const removeSampleData = async () => {
+    if (!confirm("Remove all Example S2000 sample data? Your own vehicles won't be affected.")) return;
+    try {
+      const res = await fetch("/api/remove-sample-data", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      if (data.removed === 0) {
+        toast({ title: "No sample data found", description: "Nothing was removed." });
+      } else {
+        toast({ title: "Sample data removed" });
+        loadStats();
+      }
+    } catch { toast({ title: "Failed to remove sample data", variant: "destructive" }); }
+  };
+
   const wipeAllData = async () => {
     if (!confirm("⚠️ This will permanently delete ALL vehicles, modifications, maintenance logs, and budget data. This cannot be undone. Continue?")) return;
     if (!confirm("Are you absolutely sure? All your data will be lost.")) return;
     try {
-      const vehicles = await fetch("/api/vehicles").then(r => r.json());
-      if (!Array.isArray(vehicles)) throw new Error("Failed to load vehicles");
-      await Promise.all(vehicles.map((v: { id: string }) => fetch(`/api/vehicles/${v.id}`, { method: "DELETE" })));
-      const products = await fetch("/api/products").then(r => r.json());
-      if (Array.isArray(products)) {
-        await Promise.all(products.map((p: { id: string }) => fetch(`/api/products/${p.id}`, { method: "DELETE" })));
-      }
-      // Refresh stats
-      const v = await fetch("/api/vehicles").then(r => r.json()).catch(() => []);
-      const p = await fetch("/api/products").then(r => r.json()).catch(() => []);
-      setStats({ vehicleCount: 0, modCount: 0, productCount: Array.isArray(p) ? p.length : 0 });
+      const res = await fetch("/api/wipe", { method: "POST" });
+      if (!res.ok) throw new Error("Wipe failed");
+      setStats({ vehicleCount: 0, modCount: 0, productCount: 0 });
       toast({ title: "All data wiped. Starting fresh!" });
     } catch { toast({ title: "Wipe failed", variant: "destructive" }); }
   };
@@ -542,6 +553,9 @@ export default function SettingsPage() {
         </Row>
         <Row label="Refresh Product Prices" desc="Re-scrape all tracked product URLs">
           <Btn onClick={refreshAll}><RefreshCw className="w-3.5 h-3.5" /> Refresh All</Btn>
+        </Row>
+        <Row label="Remove Example Data" desc="Delete the Example S2000 sample vehicle and all its mods/maintenance. Your own data is untouched.">
+          <Btn onClick={removeSampleData}><Trash2 className="w-3.5 h-3.5" /> Remove</Btn>
         </Row>
         <Row label="Wipe All Data" desc="Delete every vehicle, mod, maintenance log and product. Cannot be undone." last>
           <Btn variant="danger" onClick={wipeAllData}><Trash2 className="w-3.5 h-3.5" /> Wipe Everything</Btn>

@@ -477,7 +477,7 @@ function savePrefs(obj) {
 }
 
 function getCloseMode() {
-  return loadPrefs().closeMode ?? "background";
+  return loadPrefs().closeMode ?? "quit";
 }
 
 ipcMain.handle("prefs:get", () => loadPrefs());
