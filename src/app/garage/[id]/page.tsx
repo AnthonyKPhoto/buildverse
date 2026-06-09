@@ -205,7 +205,12 @@ export default function VehicleDetailPage() {
           {/* Photo */}
           <div className="relative w-full md:w-64 h-48 md:h-auto flex-shrink-0 bg-secondary">
             {vehicle.photoUrl ? (
-              <Image src={vehicle.photoUrl} alt={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`} fill className="object-cover" />
+              vehicle.photoUrl.startsWith("data:") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={vehicle.photoUrl} alt={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`} className="w-full h-full object-cover" />
+              ) : (
+                <Image src={vehicle.photoUrl} alt={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`} fill className="object-cover" />
+              )
             ) : (
               <div className="absolute inset-0 flex items-center justify-center">
                 <Car className="w-20 h-20 text-muted-foreground/20" />
@@ -364,7 +369,8 @@ export default function VehicleDetailPage() {
                           {/* Image */}
                           {mod.imageUrl ? (
                             <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-secondary">
-                              <Image src={mod.imageUrl} alt={mod.name} width={56} height={56} className="object-cover w-full h-full" />
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={mod.imageUrl} alt={mod.name} className="object-cover w-full h-full" />
                             </div>
                           ) : (
                             <div className="w-14 h-14 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">

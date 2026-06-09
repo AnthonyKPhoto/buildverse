@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { VEHICLE_MAKES } from "@/lib/utils";
+import { ImageUpload } from "@/components/ui/ImageUpload";
 
 interface AddVehicleDialogProps {
   open: boolean;
@@ -195,11 +196,12 @@ export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }:
             </div>
           </div>
 
-          {/* Photo URL */}
-          <div>
-            <Label>Photo URL</Label>
-            <Input placeholder="https://…" value={form.photoUrl} onChange={(e) => set("photoUrl", e.target.value)} />
-          </div>
+          {/* Photo */}
+          <ImageUpload
+            label="Vehicle Photo"
+            value={form.photoUrl}
+            onChange={(v) => set("photoUrl", v)}
+          />
 
           {/* Notes */}
           <div>

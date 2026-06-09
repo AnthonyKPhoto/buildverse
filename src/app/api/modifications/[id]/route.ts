@@ -4,9 +4,11 @@ import { z } from "zod";
 
 const safeUrl = z
   .string()
-  .url()
-  .max(2000)
-  .refine((u) => /^https?:\/\//i.test(u), "Only http and https URLs are allowed");
+  .max(10_000_000)
+  .refine(
+    (u) => /^https?:\/\//i.test(u) || /^data:image\//i.test(u),
+    "Only http/https URLs or data:image/ strings are allowed"
+  );
 
 const modUpdateSchema = z.object({
   name:           z.string().max(255).optional(),
