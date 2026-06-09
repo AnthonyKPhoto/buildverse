@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { MOD_CATEGORIES, INSTALL_DIFFICULTIES } from "@/lib/utils";
+import { ImageUpload } from "@/components/ui/ImageUpload";
 
 interface Modification {
   id: string; vehicleId: string; name: string; category: string; vendor?: string; brand?: string;
@@ -210,17 +211,18 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
             </div>
           </div>
 
-          {/* Link / Image URL */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Product Link</Label>
-              <Input placeholder="https://ecstuning.com/…" value={form.link} onChange={(e) => set("link", e.target.value)} />
-            </div>
-            <div>
-              <Label>Image URL</Label>
-              <Input placeholder="https://…/image.jpg" value={form.imageUrl} onChange={(e) => set("imageUrl", e.target.value)} />
-            </div>
+          {/* Link */}
+          <div>
+            <Label>Product Link</Label>
+            <Input placeholder="https://ecstuning.com/…" value={form.link} onChange={(e) => set("link", e.target.value)} />
           </div>
+
+          {/* Image upload */}
+          <ImageUpload
+            label="Mod Photo"
+            value={form.imageUrl}
+            onChange={(v) => set("imageUrl", v)}
+          />
 
           {/* Part# / Order# */}
           <div className="grid grid-cols-2 gap-3">

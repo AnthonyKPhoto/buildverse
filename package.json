@@ -1,6 +1,6 @@
 {
   "name": "buildverse",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "BuildVerse - Intelligent Vehicle Modification Manager",
   "private": true,
   "main": "electron/main.js",

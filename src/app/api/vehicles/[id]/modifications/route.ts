@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
-// Stored URLs must be http/https — prevents javascript: and data: XSS vectors
+// Accepts https:// URLs or base64 data: images uploaded from the client
 const safeUrl = z
   .string()
-  .url()
-  .max(2000)
-  .refine((u) => /^https?:\/\//i.test(u), "Only http and https URLs are allowed");
+  .max(10_000_000)
+  .refine(
+    (u) => /^https?:\/\//i.test(u) || /^data:image\//i.test(u),
+    "Only http/https URLs or data:image/ strings are allowed"
+  );
 
 const modSchema = z.object({
   name:           z.string().min(1).max(255),

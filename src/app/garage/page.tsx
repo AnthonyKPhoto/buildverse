@@ -115,7 +115,11 @@ export default function GaragePage() {
                 {/* Vehicle Photo */}
                 <div className="relative h-44 bg-secondary overflow-hidden">
                   {v.photoUrl ? (
-                    <Image src={v.photoUrl} alt={v.name || `${v.year} ${v.make} ${v.model}`} fill className="object-cover" />
+                    v.photoUrl.startsWith("data:") ? (
+                      <img src={v.photoUrl} alt={v.name || `${v.year} ${v.make} ${v.model}`} className="w-full h-full object-cover" />
+                    ) : (
+                      <Image src={v.photoUrl} alt={v.name || `${v.year} ${v.make} ${v.model}`} fill className="object-cover" />
+                    )
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center">
                       <Car className="w-14 h-14 text-muted-foreground/20" />

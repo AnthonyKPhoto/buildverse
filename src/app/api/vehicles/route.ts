@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
-// Reusable refinement: stored URLs must be http/https (blocks javascript:, data:, etc.)
+// Accepts https:// URLs or base64 data: images uploaded from the client
 const safeUrl = z
   .string()
-  .url()
-  .max(2000)
-  .refine((u) => /^https?:\/\//i.test(u), "Only http and https URLs are allowed");
+  .max(10_000_000) // up to ~7.5 MB base64
+  .refine(
+    (u) => /^https?:\/\//i.test(u) || /^data:image\//i.test(u),
+    "Only http/https URLs or data:image/ strings are allowed"
+  );
 
 const vehicleSchema = z.object({
   name:         z.string().max(100).optional(),
