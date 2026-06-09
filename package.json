@@ -1,12 +1,12 @@
 {
   "name": "buildverse",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "BuildVerse - Intelligent Vehicle Modification Manager",
   "private": true,
   "main": "electron/main.js",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && prisma db push && next build",
+    "build": "prisma generate && prisma db push && node scripts/prepare-template-db.js && next build",
     "start": "next start",
     "setup": "prisma generate && prisma db push && prisma db seed",
     "db:studio": "prisma studio",

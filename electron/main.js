@@ -77,21 +77,62 @@ function loadIcon(size) {
 // Database bootstrap
 // ──────────────────────────────────────────────────────────
 
+/**
+ * Returns true when the SQLite file at dbPath has at least one user-created
+ * table (i.e. more than 1 page in the file — page 1 is the schema page, every
+ * additional page means real content).  An uninitialised copy of the template
+ * would have pageCount === 1 or an invalid header.
+ */
+function isDatabaseInitialized(dbPath) {
+  if (!fs.existsSync(dbPath)) return false;
+  try {
+    const buf = Buffer.alloc(32);
+    const fd = fs.openSync(dbPath, "r");
+    const bytesRead = fs.readSync(fd, buf, 0, 32, 0);
+    fs.closeSync(fd);
+    if (bytesRead < 32) return false;
+    // SQLite magic header: first 16 bytes are "SQLite format 3\0"
+    if (buf.toString("ascii", 0, 6) !== "SQLite") return false;
+    // Page count is a 4-byte big-endian integer at offset 28
+    const pageCount = buf.readUInt32BE(28);
+    return pageCount > 1;
+  } catch {
+    return false;
+  }
+}
+
 function ensureDatabase() {
   const userDataDir = app.getPath("userData");
   const dbDest = path.join(userDataDir, "buildverse.db");
 
-  if (!fs.existsSync(dbDest)) {
-    const template = IS_DEV
-      ? path.join(__dirname, "..", "prisma", "dev.db")
-      : path.join(process.resourcesPath, "prisma", "dev.db");
+  const template = IS_DEV
+    ? path.join(__dirname, "..", "prisma", "dev.db")
+    : path.join(process.resourcesPath, "prisma", "dev.db");
 
+  // Copy template if DB doesn't exist yet
+  if (!fs.existsSync(dbDest)) {
     if (fs.existsSync(template)) {
       fs.mkdirSync(userDataDir, { recursive: true });
       fs.copyFileSync(template, dbDest);
       console.log(`[buildverse] Initialised database at ${dbDest}`);
     } else {
       console.warn("[buildverse] No database template found; starting with empty DB");
+    }
+  }
+
+  // Safety check: if the DB file exists but has no tables (schema was never
+  // applied — typically from a broken template or empty SQLite file), wipe it
+  // and re-copy from the template so Prisma doesn't crash on startup.
+  if (!isDatabaseInitialized(dbDest)) {
+    console.warn("[buildverse] Database exists but has no schema — re-initialising from template");
+    try { fs.unlinkSync(dbDest); } catch {}
+    if (fs.existsSync(template) && isDatabaseInitialized(template)) {
+      fs.mkdirSync(userDataDir, { recursive: true });
+      fs.copyFileSync(template, dbDest);
+      console.log(`[buildverse] Re-initialised database from template`);
+    } else {
+      // Template itself is broken — log clearly so we know what happened
+      console.error("[buildverse] Template DB also lacks schema. The app may not work correctly until reinstalled.");
     }
   }
 
