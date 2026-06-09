@@ -9,6 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { MOD_CATEGORIES, INSTALL_DIFFICULTIES } from "@/lib/utils";
 import { ImageUpload } from "@/components/ui/ImageUpload";
+import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
+
+interface Suggestions { brands: string[]; vendors: string[]; names: string[]; }
 
 interface Modification {
   id: string; vehicleId: string; name: string; category: string; vendor?: string; brand?: string;
@@ -64,6 +67,15 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(formFromMod(editMod));
+  const [suggestions, setSuggestions] = useState<Suggestions>({ brands: [], vendors: [], names: [] });
+
+  // Load suggestions once on mount
+  useEffect(() => {
+    fetch("/api/suggestions")
+      .then((r) => r.json())
+      .then((d) => { if (d.brands) setSuggestions(d); })
+      .catch(() => {});
+  }, []);
 
   // Reset form every time the dialog opens — catches both editMod changes
   // AND cases where the dialog reopens with the same editMod value (e.g. null→null)
@@ -142,7 +154,12 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Name *</Label>
-              <Input placeholder="BC Racing BR Coilovers…" value={form.name} onChange={(e) => set("name", e.target.value)} required />
+              <AutocompleteInput
+                placeholder="BC Racing BR Coilovers…"
+                value={form.name}
+                onChange={(v) => set("name", v)}
+                suggestions={suggestions.names}
+              />
             </div>
             <div>
               <Label>Category *</Label>
@@ -159,11 +176,21 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Brand</Label>
-              <Input placeholder="BC Racing, APR, 034…" value={form.brand} onChange={(e) => set("brand", e.target.value)} />
+              <AutocompleteInput
+                placeholder="BC Racing, APR, 034…"
+                value={form.brand}
+                onChange={(v) => set("brand", v)}
+                suggestions={suggestions.brands}
+              />
             </div>
             <div>
               <Label>Vendor</Label>
-              <Input placeholder="ECS Tuning, FCP Euro…" value={form.vendor} onChange={(e) => set("vendor", e.target.value)} />
+              <AutocompleteInput
+                placeholder="ECS Tuning, FCP Euro…"
+                value={form.vendor}
+                onChange={(v) => set("vendor", v)}
+                suggestions={suggestions.vendors}
+              />
             </div>
           </div>
 
