@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Database, HardDrive, RefreshCw, Download,
+  Database, HardDrive, RefreshCw, Download, Upload,
   Info, Zap, Monitor, Palette,
   Archive, RotateCcw, Trash2, ArrowUpCircle,
-  CheckCircle2, AlertCircle, Loader2, X, Power,
+  CheckCircle2, AlertCircle, Loader2, X, Power, Save, ShoppingBag,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -131,6 +131,9 @@ export default function SettingsPage() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: "idle" });
   const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
   const [closeMode, setCloseModeState] = useState<"background" | "quit">("background");
+  const [autoTrackProducts, setAutoTrackProducts] = useState(true);
+  const [importing, setImporting] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const isElectron = typeof window !== "undefined" && !!window.electronAPI?.isElectron;
   const { accent, setAccent } = useCurrentAccent();
@@ -144,7 +147,11 @@ export default function SettingsPage() {
   }, [isElectron]);
 
   useEffect(() => {
-    // Compute stats from /api/vehicles to avoid DB-path mismatch with /api/stats
+    // Load auto-track setting from localStorage
+    const stored = localStorage.getItem("bv_autoTrackProducts");
+    setAutoTrackProducts(stored === null ? true : stored === "true");
+
+    // Compute stats from /api/vehicles
     Promise.all([
       fetch("/api/vehicles").then(r => r.json()).catch(() => []),
       fetch("/api/products").then(r => r.json()).catch(() => []),
@@ -167,6 +174,14 @@ export default function SettingsPage() {
       return unsub;
     }
   }, [isElectron, loadBackups]);
+
+  const saveSettings = async () => {
+    // Persist close mode
+    if (isElectron) await window.electronAPI!.prefs.set({ closeMode }).catch(() => {});
+    // Persist auto-track
+    localStorage.setItem("bv_autoTrackProducts", String(autoTrackProducts));
+    toast({ title: "Settings saved" });
+  };
 
   const setCloseMode = async (mode: "background" | "quit") => {
     setCloseModeState(mode);
@@ -213,6 +228,114 @@ export default function SettingsPage() {
       setStats({ vehicleCount: 0, modCount: 0, productCount: Array.isArray(p) ? p.length : 0 });
       toast({ title: "All data wiped. Starting fresh!" });
     } catch { toast({ title: "Wipe failed", variant: "destructive" }); }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.vehicles && !data.products) throw new Error("Invalid export file");
+
+      let vehiclesImported = 0, modsImported = 0, logsImported = 0, productsImported = 0;
+
+      // Import vehicles + their nested data
+      for (const v of (data.vehicles ?? [])) {
+        const { modifications, maintenanceLogs, budgets, _count, ...vehicleData } = v;
+        const res = await fetch("/api/vehicles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: vehicleData.name,
+            year: vehicleData.year,
+            make: vehicleData.make,
+            model: vehicleData.model,
+            trim: vehicleData.trim,
+            engine: vehicleData.engine,
+            transmission: vehicleData.transmission,
+            drivetrain: vehicleData.drivetrain,
+            vin: vehicleData.vin,
+            mileage: vehicleData.mileage,
+            platform: vehicleData.platform,
+            color: vehicleData.color,
+            photoUrl: vehicleData.photoUrl,
+            notes: vehicleData.notes,
+          }),
+        });
+        if (!res.ok) continue;
+        const newVehicle = await res.json();
+        vehiclesImported++;
+
+        // Modifications
+        for (const m of (modifications ?? [])) {
+          const modRes = await fetch(`/api/vehicles/${newVehicle.id}/modifications`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: m.name, category: m.category, brand: m.brand, vendor: m.vendor,
+              price: m.price, actualPrice: m.actualPrice, status: m.status,
+              priority: m.priority, difficulty: m.difficulty, link: m.link,
+              imageUrl: m.imageUrl, notes: m.notes, partNumber: m.partNumber,
+              orderNumber: m.orderNumber, installDate: m.installDate,
+              installMileage: m.installMileage, laborCost: m.laborCost,
+              diyInstall: m.diyInstall,
+            }),
+          });
+          if (modRes.ok) modsImported++;
+        }
+
+        // Maintenance logs
+        for (const log of (maintenanceLogs ?? [])) {
+          const logRes = await fetch(`/api/vehicles/${newVehicle.id}/maintenance`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              service: log.service, mileage: log.mileage, date: log.date,
+              cost: log.cost, notes: log.notes, shop: log.shop,
+              diy: log.diy, nextDue: log.nextDue, nextMiles: log.nextMiles,
+            }),
+          });
+          if (logRes.ok) logsImported++;
+        }
+
+        // Budgets
+        for (const b of (budgets ?? [])) {
+          await fetch(`/api/vehicles/${newVehicle.id}/budget`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category: b.category, planned: b.planned, actual: b.actual }),
+          });
+        }
+      }
+
+      // Import products
+      for (const p of (data.products ?? [])) {
+        const prodRes = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: p.url }),
+        });
+        if (prodRes.ok) productsImported++;
+      }
+
+      // Refresh stats
+      const [newVehicles, newProducts] = await Promise.all([
+        fetch("/api/vehicles").then(r => r.json()).catch(() => []),
+        fetch("/api/products").then(r => r.json()).catch(() => []),
+      ]);
+      const vList = Array.isArray(newVehicles) ? newVehicles as VehicleItem[] : [];
+      const pList = Array.isArray(newProducts) ? newProducts : [];
+      setStats({ vehicleCount: vList.length, modCount: vList.reduce((s, vh) => s + (vh._count?.modifications ?? 0), 0), productCount: pList.length });
+
+      toast({ title: `Import complete — ${vehiclesImported} vehicles, ${modsImported} mods, ${logsImported} logs, ${productsImported} products` });
+    } catch (err) {
+      toast({ title: `Import failed: ${err instanceof Error ? err.message : "Unknown error"}`, variant: "destructive" });
+    } finally {
+      setImporting(false);
+      if (importRef.current) importRef.current.value = "";
+    }
   };
 
   const createBackup = async () => {
@@ -314,7 +437,7 @@ export default function SettingsPage() {
       <Section title="About BuildVerse" icon={Zap}>
         <Row label="Version">
           <span className="text-xs font-mono bg-secondary border border-border px-2 py-1 rounded-md">
-            v{appInfo?.version ?? "1.0.8"}
+            v{appInfo?.version ?? "1.0.9"}
           </span>
         </Row>
         <Row label="Stack">
@@ -394,10 +517,28 @@ export default function SettingsPage() {
         </Section>
       )}
 
+      {/* ── Product Tracking ─────────────────────────────────────────────────── */}
+      <Section title="Product Tracking" icon={ShoppingBag}>
+        <Row
+          label="Auto-track mod product links"
+          desc="When you add or edit a mod with a product URL, automatically add it to Product Tracker."
+          last
+        >
+          <Toggle on={autoTrackProducts} onChange={setAutoTrackProducts} />
+        </Row>
+      </Section>
+
       {/* ── Data Management ──────────────────────────────────────────────────── */}
       <Section title="Data Management" icon={HardDrive}>
-        <Row label="Export Data" desc="Download all vehicles & products as JSON">
+        <Row label="Export Data" desc="Download all vehicles, mods & products as JSON">
           <Btn onClick={handleExport}><Download className="w-3.5 h-3.5" /> Export</Btn>
+        </Row>
+        <Row label="Import Data" desc="Restore from a BuildVerse JSON export file">
+          <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
+          <Btn onClick={() => importRef.current?.click()} disabled={importing}>
+            {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            {importing ? "Importing…" : "Import"}
+          </Btn>
         </Row>
         <Row label="Refresh Product Prices" desc="Re-scrape all tracked product URLs">
           <Btn onClick={refreshAll}><RefreshCw className="w-3.5 h-3.5" /> Refresh All</Btn>
@@ -465,9 +606,20 @@ export default function SettingsPage() {
         </Section>
       )}
 
-      <p className="text-xs text-center text-muted-foreground/50 pb-4">
+      <p className="text-xs text-center text-muted-foreground/50">
         All data is stored locally — no cloud, no accounts
       </p>
+
+      {/* ── Sticky Save Button ───────────────────────────────────────────────── */}
+      <div className="sticky bottom-0 pb-4 pt-2 bg-background/80 backdrop-blur border-t border-border/40 flex justify-end">
+        <button
+          onClick={saveSettings}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-theme text-white font-medium text-sm hover:brightness-110 transition-all shadow-lg"
+        >
+          <Save className="w-4 h-4" />
+          Save Settings
+        </button>
+      </div>
     </div>
   );
 }

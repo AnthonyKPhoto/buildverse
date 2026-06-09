@@ -106,6 +106,20 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
       const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error(await res.text());
       const mod = await res.json();
+
+      // Auto-track product link if enabled
+      if (form.link) {
+        const autoTrack = localStorage.getItem("bv_autoTrackProducts");
+        const shouldTrack = autoTrack === null ? true : autoTrack === "true";
+        if (shouldTrack) {
+          fetch("/api/products", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: form.link }),
+          }).catch(() => {}); // silent — don't block mod save
+        }
+      }
+
       onSaved(mod);
       onOpenChange(false);
       toast({ title: editMod ? "Modification updated" : "Modification added!" });
