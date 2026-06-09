@@ -25,10 +25,13 @@ interface CropModalProps {
 function CropModal({ src, aspect, onConfirm, onCancel }: CropModalProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
+  // fitZoom: the zoom level at which the whole image just fits inside the canvas.
+  // zoom state is a multiplier ON TOP of fitZoom — so zoom=1 always = full image visible.
+  const fitZoomRef = useRef(1);
 
-  // zoom: 1 = fit-to-container, higher = zoomed in
+  // zoom: 1 = whole image fits, >1 = zoomed in
   const [zoom, setZoom] = useState(1);
-  // offset in *image* pixels (what part of the image is centered)
+  // offset in *image* pixels (what part of the image is centred)
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
@@ -38,14 +41,21 @@ function CropModal({ src, aspect, onConfirm, onCancel }: CropModalProps) {
   const PREVIEW_W = 480;
   const PREVIEW_H = aspect ? Math.round(PREVIEW_W / aspect) : 320;
 
-  // Once src loads, centre the image
+  // Once src loads, calculate fitZoom and centre the image
   useEffect(() => {
     const img = new window.Image();
     img.onload = () => {
       imgRef.current = img;
-      setOffset({ x: img.naturalWidth / 2, y: img.naturalHeight / 2 });
+      // fitZoom: scale so the whole image fills/fits the canvas
+      fitZoomRef.current = Math.min(
+        PREVIEW_W / img.naturalWidth,
+        PREVIEW_H / img.naturalHeight
+      );
+      const cx = img.naturalWidth / 2;
+      const cy = img.naturalHeight / 2;
+      setOffset({ x: cx, y: cy });
       setZoom(1);
-      draw(img, 1, { x: img.naturalWidth / 2, y: img.naturalHeight / 2 });
+      draw(img, 1, { x: cx, y: cy });
     };
     img.src = src;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -60,18 +70,19 @@ function CropModal({ src, aspect, onConfirm, onCancel }: CropModalProps) {
       canvas.width = PREVIEW_W;
       canvas.height = PREVIEW_H;
 
-      // How many image pixels fit in the preview at this zoom
-      const visW = PREVIEW_W / z;
-      const visH = PREVIEW_H / z;
+      // Effective zoom in image-pixel terms:
+      // At z=1 the whole image fits; higher z zooms in.
+      const effectiveZoom = fitZoomRef.current * z;
+      // How many image pixels are visible across the canvas
+      const visW = PREVIEW_W / effectiveZoom;
+      const visH = PREVIEW_H / effectiveZoom;
 
-      // Source rect clamped to image bounds
+      // Source rect, clamped to image bounds
       let sx = off.x - visW / 2;
       let sy = off.y - visH / 2;
-      // Clamp
-      sx = Math.max(0, Math.min(sx, img.naturalWidth - visW));
+      sx = Math.max(0, Math.min(sx, img.naturalWidth  - visW));
       sy = Math.max(0, Math.min(sy, img.naturalHeight - visH));
-      // If visible area > image dimension, center it
-      if (visW >= img.naturalWidth) { sx = 0; }
+      if (visW >= img.naturalWidth)  { sx = 0; }
       if (visH >= img.naturalHeight) { sy = 0; }
       const sw = Math.min(visW, img.naturalWidth);
       const sh = Math.min(visH, img.naturalHeight);
@@ -79,7 +90,7 @@ function CropModal({ src, aspect, onConfirm, onCancel }: CropModalProps) {
       ctx.clearRect(0, 0, PREVIEW_W, PREVIEW_H);
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, PREVIEW_W, PREVIEW_H);
 
-      // Overlay guidelines
+      // Rule-of-thirds overlay
       ctx.strokeStyle = "rgba(255,255,255,0.4)";
       ctx.lineWidth = 1;
       for (let i = 1; i < 3; i++) {
@@ -110,8 +121,9 @@ function CropModal({ src, aspect, onConfirm, onCancel }: CropModalProps) {
     (e: MouseEvent) => {
       if (!dragging || !imgRef.current) return;
       const img = imgRef.current;
-      const visW = PREVIEW_W / zoom;
-      const visH = PREVIEW_H / zoom;
+      const effectiveZoom = fitZoomRef.current * zoom;
+      const visW = PREVIEW_W / effectiveZoom;
+      const visH = PREVIEW_H / effectiveZoom;
       // Movement in image pixels
       const dx = ((e.clientX - dragStart.current.mx) / PREVIEW_W) * visW;
       const dy = ((e.clientY - dragStart.current.my) / PREVIEW_H) * visH;
