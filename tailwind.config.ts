@@ -56,7 +56,7 @@ const config: Config = {
         sm:    "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        sans: ["var(--font-body)", "system-ui", "-apple-system", "sans-serif"],
       },
       fontSize: {
         "2xs": ["0.65rem", { lineHeight: "1rem" }],
