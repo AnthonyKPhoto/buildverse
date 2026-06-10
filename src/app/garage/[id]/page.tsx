@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -80,11 +80,55 @@ export default function VehicleDetailPage() {
   const [modFilter, setModFilter] = useState({ status: "ALL", category: "ALL", search: "" });
   const [budgetForm, setBudgetForm] = useState({ category: "", planned: "", actual: "" });
   const [savingBudget, setSavingBudget] = useState(false);
+  const imageFetchQueue = useRef<Set<string>>(new Set());
+
+  // Silently fetches images for mods that have a link but no imageUrl,
+  // saving results to the DB and updating local state as each completes.
+  const autoFetchModImages = async (mods: Modification[]) => {
+    const needsFetch = mods.filter(
+      (m) => m.link && !m.imageUrl && !imageFetchQueue.current.has(m.id)
+    );
+    if (!needsFetch.length) return;
+    needsFetch.forEach((m) => imageFetchQueue.current.add(m.id));
+
+    for (let i = 0; i < needsFetch.length; i += 3) {
+      await Promise.allSettled(
+        needsFetch.slice(i, i + 3).map(async (mod) => {
+          try {
+            const res = await fetch(`/api/scrape-image?url=${encodeURIComponent(mod.link!)}`);
+            const { imageUrl } = await res.json();
+            if (!imageUrl) return;
+            await fetch(`/api/modifications/${mod.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ imageUrl }),
+            });
+            setVehicle((v) =>
+              v
+                ? {
+                    ...v,
+                    modifications: v.modifications.map((m) =>
+                      m.id === mod.id ? { ...m, imageUrl } : m
+                    ),
+                  }
+                : v
+            );
+          } catch {
+            // silently skip — image stays missing, user can add manually
+          }
+        })
+      );
+    }
+  };
 
   const load = () =>
     fetch(`/api/vehicles/${id}`)
       .then((r) => r.json())
-      .then((d) => { setVehicle(d); setLoading(false); })
+      .then((d) => {
+        setVehicle(d);
+        setLoading(false);
+        autoFetchModImages(d.modifications ?? []);
+      })
       .catch(() => setLoading(false));
 
   useEffect(() => { load(); }, [id]);

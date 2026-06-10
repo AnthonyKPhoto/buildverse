@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Car, Wrench, DollarSign,
+  LayoutDashboard, Car, DollarSign,
   ShoppingBag, Settings, ClipboardList, Store,
 } from "lucide-react";
 import Image from "next/image";
@@ -12,7 +12,6 @@ import Image from "next/image";
 const navItems = [
   { href: "/",            label: "Dashboard",       icon: LayoutDashboard },
   { href: "/garage",      label: "Garage",          icon: Car },
-  { href: "/builds",      label: "Build Plans",     icon: Wrench },
   { href: "/budget",      label: "Budget",          icon: DollarSign },
   { href: "/products",    label: "Product Tracker", icon: ShoppingBag },
   { href: "/maintenance", label: "Maintenance",     icon: ClipboardList },

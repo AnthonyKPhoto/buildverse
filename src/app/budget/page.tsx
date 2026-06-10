@@ -21,7 +21,7 @@ interface Budget {
 interface Vehicle {
   id: string; name?: string; year: number; make: string; model: string;
   budgets: Budget[];
-  modifications: { price?: number | null; status: string }[];
+  modifications: { price?: number | null; actualPrice?: number | null; status: string }[];
 }
 
 const CHART_COLORS = [
@@ -75,18 +75,17 @@ export default function BudgetPage() {
     .sort((a, b) => b.planned - a.planned);
 
   const totalPlanned = budgetData.reduce((s, b) => s + b.planned, 0);
-  const totalActual = budgetData.reduce((s, b) => s + b.actual, 0);
-  const totalRemaining = totalPlanned - totalActual;
 
-  // Modification-based spend (from installed mods)
-  const modSpend: Record<string, number> = {};
-  for (const v of filteredVehicles) {
-    for (const m of v.modifications) {
-      if (m.status === "INSTALLED" && m.price) {
-        // We don't have category here from the list endpoint, skip
-      }
-    }
-  }
+  // Total spent = sum of actual/estimated price for installed mods (automatic, no manual entry needed)
+  const totalSpent = filteredVehicles.reduce(
+    (total, v) =>
+      total +
+      v.modifications
+        .filter((m) => m.status === "INSTALLED")
+        .reduce((s, m) => s + ((m.actualPrice ?? m.price) ?? 0), 0),
+    0
+  );
+  const totalRemaining = totalPlanned - totalSpent;
 
   // Pie chart data (planned)
   const pieData = budgetData.slice(0, 8).map((b, i) => ({
@@ -98,9 +97,10 @@ export default function BudgetPage() {
   // Per-vehicle summary
   const vehicleSummaries = vehicles.map((v) => {
     const planned = v.budgets.reduce((s, b) => s + b.planned, 0);
-    const actual = v.budgets.reduce((s, b) => s + b.actual, 0);
-    const modValue = v.modifications.reduce((s, m) => s + (m.price ?? 0), 0);
-    return { ...v, planned, actual, modValue };
+    const actual = v.modifications
+      .filter((m) => m.status === "INSTALLED")
+      .reduce((s, m) => s + ((m.actualPrice ?? m.price) ?? 0), 0);
+    return { ...v, planned, actual };
   });
 
   return (
@@ -141,7 +141,7 @@ export default function BudgetPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
               { label: "Total Budget", value: formatCurrency(totalPlanned), sub: "planned spend", icon: TrendingUp, color: "text-blue-400 bg-blue-500/10" },
-              { label: "Total Spent", value: formatCurrency(totalActual), sub: "actual spend", icon: DollarSign, color: "text-green-400 bg-green-500/10" },
+              { label: "Total Spent", value: formatCurrency(totalSpent), sub: "installed mods value", icon: DollarSign, color: "text-green-400 bg-green-500/10" },
               {
                 label: totalRemaining >= 0 ? "Remaining" : "Over Budget",
                 value: formatCurrency(Math.abs(totalRemaining)),

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
-  Car, Wrench, DollarSign, TrendingUp, Plus, ArrowRight,
+  Car, DollarSign, TrendingUp, Plus, ArrowRight,
   Zap, ShoppingCart, ClipboardList, Package, BarChart3,
 } from "lucide-react";
 import { formatCurrency, calcBuildCompletion } from "@/lib/utils";
@@ -197,12 +197,11 @@ export default function DashboardPage() {
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Quick Access</p>
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
           {[
-            { href: "/builds",      icon: Wrench,      label: "Builds" },
-            { href: "/budget",      icon: BarChart3,   label: "Budget" },
-            { href: "/products",    icon: ShoppingCart,label: "Products" },
+            { href: "/budget",      icon: BarChart3,    label: "Budget" },
+            { href: "/products",    icon: ShoppingCart, label: "Products" },
             { href: "/maintenance", icon: ClipboardList,label: "Maintenance" },
-            { href: "/vendors",     icon: Package,     label: "Vendors" },
-            { href: "/garage",      icon: Car,         label: "Garage" },
+            { href: "/vendors",     icon: Package,      label: "Vendors" },
+            { href: "/garage",      icon: Car,          label: "Garage" },
           ].map(({ href, icon: Icon, label }) => (
             <Link key={href} href={href}>
               <Card className="hover:border-theme/25 transition-colors duration-150 cursor-pointer">

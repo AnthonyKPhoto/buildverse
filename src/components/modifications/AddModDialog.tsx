@@ -66,10 +66,10 @@ function formFromMod(m?: Modification | null) {
 export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }: AddModDialogProps) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [fetchingImage, setFetchingImage] = useState(false);
   const [form, setForm] = useState(formFromMod(editMod));
   const [suggestions, setSuggestions] = useState<Suggestions>({ brands: [], vendors: [], names: [] });
 
-  // Load suggestions once on mount
   useEffect(() => {
     fetch("/api/suggestions")
       .then((r) => r.json())
@@ -77,13 +77,25 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
       .catch(() => {});
   }, []);
 
-  // Reset form every time the dialog opens — catches both editMod changes
-  // AND cases where the dialog reopens with the same editMod value (e.g. null→null)
   useEffect(() => {
     if (open) setForm(formFromMod(editMod));
   }, [open, editMod]);
 
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleLinkBlur = async () => {
+    if (!form.link || form.imageUrl || fetchingImage) return;
+    setFetchingImage(true);
+    try {
+      const res = await fetch(`/api/scrape-image?url=${encodeURIComponent(form.link)}`);
+      const data = await res.json();
+      if (data.imageUrl) set("imageUrl", data.imageUrl);
+    } catch {
+      // silently ignore — user can paste image URL manually
+    } finally {
+      setFetchingImage(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,10 +250,26 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
             </div>
           </div>
 
-          {/* Link */}
+          {/* Link — blurring auto-fetches the product image if none is set yet */}
           <div>
-            <Label>Product Link</Label>
-            <Input placeholder="https://ecstuning.com/…" value={form.link} onChange={(e) => set("link", e.target.value)} />
+            <Label className="flex items-center gap-2">
+              Product Link
+              {fetchingImage && (
+                <span className="text-xs text-muted-foreground font-normal flex items-center gap-1">
+                  <span className="w-3 h-3 border border-muted-foreground border-t-transparent rounded-full animate-spin inline-block" />
+                  fetching image…
+                </span>
+              )}
+            </Label>
+            <Input
+              placeholder="https://ecstuning.com/…"
+              value={form.link}
+              onChange={(e) => set("link", e.target.value)}
+              onBlur={handleLinkBlur}
+            />
+            {!form.imageUrl && !fetchingImage && form.link && (
+              <p className="text-xs text-muted-foreground mt-1">Image will auto-fill when you leave this field</p>
+            )}
           </div>
 
           {/* Image upload */}
@@ -304,7 +332,7 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || fetchingImage}>
               {saving ? "Saving…" : editMod ? "Save Changes" : "Add Modification"}
             </Button>
           </DialogFooter>
