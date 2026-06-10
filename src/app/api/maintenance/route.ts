@@ -10,7 +10,9 @@ export async function GET() {
       orderBy: { date: "desc" },
     });
     return NextResponse.json(logs);
-  } catch {
-    return NextResponse.json({ error: "Failed to fetch maintenance logs" }, { status: 500 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[GET /api/maintenance]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

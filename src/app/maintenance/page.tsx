@@ -53,7 +53,8 @@ export default function MaintenancePage() {
       setLogs((l) => l.filter((x) => x.id !== id));
       toast({ title: "Log deleted" });
     } else {
-      toast({ title: "Failed to delete", variant: "destructive" });
+      const data = await res.json().catch(() => ({}));
+      toast({ title: "Failed to delete", description: data.error, variant: "destructive" });
     }
   };
 

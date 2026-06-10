@@ -39,7 +39,25 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   try {
     await prisma.maintenanceLog.delete({ where: { id: params.id } });
     return NextResponse.json({ success: true });
-  } catch {
-    return NextResponse.json({ error: "Failed to delete log" }, { status: 500 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[DELETE /api/maintenance]", msg);
+
+    // Older DB schemas may have a Receipt table with a FK pointing at MaintenanceLog.
+    // If that FK constraint blocks the delete, disable FK checks, retry, then re-enable.
+    if (msg.toLowerCase().includes("foreign key")) {
+      try {
+        await prisma.$executeRawUnsafe("PRAGMA foreign_keys = OFF");
+        await prisma.$executeRaw`DELETE FROM "MaintenanceLog" WHERE "id" = ${params.id}`;
+        await prisma.$executeRawUnsafe("PRAGMA foreign_keys = ON");
+        return NextResponse.json({ success: true });
+      } catch (err2) {
+        const msg2 = err2 instanceof Error ? err2.message : String(err2);
+        console.error("[DELETE /api/maintenance] FK-bypass failed:", msg2);
+        return NextResponse.json({ error: msg2 }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

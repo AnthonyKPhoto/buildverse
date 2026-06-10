@@ -144,7 +144,10 @@ export default function VehicleDetailPage() {
     if (!confirm("Delete this log entry?")) return;
     const res = await fetch(`/api/maintenance/${logId}`, { method: "DELETE" });
     if (res.ok) { load(); toast({ title: "Log deleted" }); }
-    else toast({ title: "Failed to delete", variant: "destructive" });
+    else {
+      const data = await res.json().catch(() => ({}));
+      toast({ title: "Failed to delete", description: data.error, variant: "destructive" });
+    }
   };
 
   const saveBudget = async (e: React.FormEvent) => {
