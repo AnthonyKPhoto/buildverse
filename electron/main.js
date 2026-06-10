@@ -250,16 +250,20 @@ function initAutoUpdater() {
   autoUpdater.on("checking-for-update", () => sendUpdateStatus("checking"));
   autoUpdater.on("update-available", (info) => sendUpdateStatus("available", { version: info.version }));
   autoUpdater.on("update-not-available", () => sendUpdateStatus("current"));
-  autoUpdater.on("error", () => sendUpdateStatus("error"));
+  autoUpdater.on("error", (err) => { console.error("[updater]", err?.message || err); sendUpdateStatus("error"); });
   autoUpdater.on("download-progress", (p) => sendUpdateStatus("downloading", { percent: Math.round(p.percent) }));
   autoUpdater.on("update-downloaded", (info) => sendUpdateStatus("downloaded", { version: info.version }));
 
-  setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 5000);
+  setTimeout(() => autoUpdater.checkForUpdates().catch((err) => { console.error("[updater] auto-check:", err?.message || err); }), 5000);
 }
 
 ipcMain.handle("update:check", () => {
-  if (IS_DEV || !autoUpdater) return;
-  return autoUpdater.checkForUpdates().catch(() => {});
+  if (IS_DEV) return;
+  if (!autoUpdater) { sendUpdateStatus("error"); console.warn("[updater] not available"); return; }
+  return autoUpdater.checkForUpdates().catch((err) => {
+    console.error("[updater] check failed:", err?.message || err);
+    sendUpdateStatus("error");
+  });
 });
 
 ipcMain.handle("update:install", () => {

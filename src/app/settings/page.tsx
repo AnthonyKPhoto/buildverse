@@ -3,15 +3,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Database, HardDrive, RefreshCw, Download, Upload,
-  Info, Zap, Monitor, Palette,
+  Info, Zap, Monitor, Palette, Moon, Sun,
   Archive, RotateCcw, Trash2, ArrowUpCircle,
   CheckCircle2, AlertCircle, Loader2, X, Power, Save, ShoppingBag,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
-  ACCENT_PRESETS, RADIUS_PRESETS,
-  useCurrentAccent, useCurrentRadius,
+  ACCENT_PRESETS, RADIUS_PRESETS, FONT_PRESETS,
+  useCurrentAccent, useCurrentRadius, useCurrentFont, useCurrentScheme,
 } from "@/components/ThemeProvider";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -138,6 +138,8 @@ export default function SettingsPage() {
   const isElectron = typeof window !== "undefined" && !!window.electronAPI?.isElectron;
   const { accent, setAccent } = useCurrentAccent();
   const { radius, setRadius } = useCurrentRadius();
+  const { font, setFont } = useCurrentFont();
+  const { scheme, setScheme } = useCurrentScheme();
 
   const loadStats = useCallback(() => {
     Promise.all([
@@ -379,6 +381,35 @@ export default function SettingsPage() {
 
       {/* ── Appearance ──────────────────────────────────────────────────────── */}
       <Section title="Appearance" icon={Palette}>
+        {/* Dark / Light mode */}
+        <div className="mb-5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Color Mode</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setScheme("dark")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium border rounded-xl transition-all duration-150",
+                scheme === "dark"
+                  ? "border-theme bg-theme/10 text-theme"
+                  : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:border-border/80"
+              )}
+            >
+              <Moon className="w-4 h-4" /> Dark
+            </button>
+            <button
+              onClick={() => setScheme("light")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium border rounded-xl transition-all duration-150",
+                scheme === "light"
+                  ? "border-theme bg-theme/10 text-theme"
+                  : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:border-border/80"
+              )}
+            >
+              <Sun className="w-4 h-4" /> Light
+            </button>
+          </div>
+        </div>
+
         {/* Accent color */}
         <div className="mb-5">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Accent color</p>
@@ -403,6 +434,28 @@ export default function SettingsPage() {
             ))}
           </div>
           <p className="text-xs text-muted-foreground mt-2 capitalize">{ACCENT_PRESETS.find(p => p.id === accent)?.label ?? accent}</p>
+        </div>
+
+        {/* Font */}
+        <div className="mb-5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Font</p>
+          <div className="grid grid-cols-2 gap-2">
+            {FONT_PRESETS.map(p => (
+              <button
+                key={p.id}
+                onClick={() => setFont(p.id)}
+                className={cn(
+                  "py-2 text-sm font-medium border rounded-xl transition-all duration-150",
+                  font === p.id
+                    ? "border-theme bg-theme/10 text-theme"
+                    : "border-border bg-secondary text-muted-foreground hover:border-border/80 hover:text-foreground"
+                )}
+                style={{ fontFamily: p.value }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Border radius */}

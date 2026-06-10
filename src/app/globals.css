@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -9,31 +9,26 @@
     /* Accent — overridden by ThemeProvider */
     --theme: 217 91% 60%;
 
-    /* Surface scale — deep navy */
+    /* Font body — overridden by ThemeProvider */
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+
+    /* Dark mode surface scale — deep navy */
     --background:          222 28%  6%;
     --foreground:          213 20% 94%;
-
     --card:                222 26% 9%;
     --card-foreground:     213 20% 94%;
-
     --popover:             222 26% 10%;
     --popover-foreground:  213 20% 94%;
-
     --primary:             217 91% 60%;
     --primary-foreground:  0 0% 100%;
-
     --secondary:           222 22% 13%;
     --secondary-foreground:213 15% 80%;
-
     --muted:               222 22% 12%;
     --muted-foreground:    215 14% 44%;
-
     --accent:              222 22% 14%;
     --accent-foreground:   213 20% 94%;
-
     --destructive:         0 68% 56%;
     --destructive-foreground: 0 0% 100%;
-
     --border:              222 22% 14%;
     --input:               222 22% 14%;
     --ring:                217 91% 60%;
@@ -42,19 +37,41 @@
     --radius:              0.75rem;
     --sidebar-width:       240px;
   }
+
+  /* Light mode overrides */
+  html.light {
+    --background:          210 20% 96%;
+    --foreground:          222 47% 11%;
+    --card:                0 0% 100%;
+    --card-foreground:     222 47% 11%;
+    --popover:             0 0% 100%;
+    --popover-foreground:  222 47% 11%;
+    --primary:             217 91% 60%;
+    --primary-foreground:  0 0% 100%;
+    --secondary:           213 20% 91%;
+    --secondary-foreground:222 30% 25%;
+    --muted:               213 20% 91%;
+    --muted-foreground:    215 16% 47%;
+    --accent:              213 20% 88%;
+    --accent-foreground:   222 47% 11%;
+    --destructive:         0 68% 56%;
+    --destructive-foreground: 0 0% 100%;
+    --border:              213 20% 85%;
+    --input:               213 20% 88%;
+    --ring:                217 91% 60%;
+  }
 }
 
 @layer base {
   * { @apply border-border; }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-body);
     font-feature-settings: "rlig" 1, "calt" 1, "cv02" 1, "cv03" 1, "cv04" 1;
     -webkit-font-smoothing: antialiased;
   }
   html { scroll-behavior: smooth; }
 
-  /* Headings */
   h1 { @apply text-2xl font-semibold tracking-tight; }
   h2 { @apply text-xl font-semibold tracking-tight; }
   h3 { @apply text-base font-semibold; }
@@ -66,6 +83,9 @@
 ::-webkit-scrollbar-thumb    { background: hsl(222, 22%, 20%); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: hsl(222, 22%, 28%); }
 
+html.light ::-webkit-scrollbar-thumb    { background: hsl(213, 20%, 72%); }
+html.light ::-webkit-scrollbar-thumb:hover { background: hsl(213, 20%, 58%); }
+
 /* ── Utilities ───────────────────────────────────────────────────────────── */
 @layer utilities {
   .scrollbar-hide {
@@ -74,7 +94,6 @@
   }
   .scrollbar-hide::-webkit-scrollbar { display: none; }
 
-  /* Subtle card glow on hover */
   .card-hover {
     @apply transition-all duration-200;
   }
@@ -83,9 +102,10 @@
     box-shadow: 0 0 0 1px hsl(var(--border) / 0.5);
   }
 
-  /* Inset surface */
   .surface-inset {
-    @apply bg-black/20 border border-white/5 rounded-xl;
+    @apply rounded-xl border;
+    background: hsl(var(--foreground) / 0.04);
+    border-color: hsl(var(--foreground) / 0.06);
   }
 }
 
