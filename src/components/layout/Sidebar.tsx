@@ -29,8 +29,8 @@ export function Sidebar() {
       fetch("/api/maintenance").then((r) => r.json()),
     ]).then(([vehicles, maintenance]) => {
       setCounts({
-        vehicles: Array.isArray(vehicles.value) ? vehicles.value.length : 0,
-        maintenance: Array.isArray(maintenance.value) ? maintenance.value.length : 0,
+        vehicles: vehicles.status === "fulfilled" && Array.isArray(vehicles.value) ? vehicles.value.length : 0,
+        maintenance: maintenance.status === "fulfilled" && Array.isArray(maintenance.value) ? maintenance.value.length : 0,
       });
     });
   }, []);
