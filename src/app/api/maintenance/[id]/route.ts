@@ -43,9 +43,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[DELETE /api/maintenance]", msg);
 
-    // Older DB schemas may have a Receipt table with a FK pointing at MaintenanceLog.
-    // If that FK constraint blocks the delete, disable FK checks, retry, then re-enable.
-    if (msg.toLowerCase().includes("foreign key")) {
+    // P2025 = record not found; raw delete is a no-op, return success either way.
+    // FK constraint = older schema has a Receipt FK pointing at MaintenanceLog.
+    // Both cases: bypass FK checks and raw-delete (safe even if row is already gone).
+    const needsRawDelete =
+      msg.toLowerCase().includes("foreign key") ||
+      msg.toLowerCase().includes("does not exist") ||
+      msg.includes("P2025");
+
+    if (needsRawDelete) {
       try {
         await prisma.$executeRawUnsafe("PRAGMA foreign_keys = OFF");
         await prisma.$executeRaw`DELETE FROM "MaintenanceLog" WHERE "id" = ${params.id}`;
@@ -53,7 +59,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
         return NextResponse.json({ success: true });
       } catch (err2) {
         const msg2 = err2 instanceof Error ? err2.message : String(err2);
-        console.error("[DELETE /api/maintenance] FK-bypass failed:", msg2);
+        console.error("[DELETE /api/maintenance] raw-delete failed:", msg2);
         return NextResponse.json({ error: msg2 }, { status: 500 });
       }
     }
