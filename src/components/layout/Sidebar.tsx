@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Car, DollarSign,
@@ -10,16 +11,29 @@ import {
 import Image from "next/image";
 
 const navItems = [
-  { href: "/",            label: "Dashboard",       icon: LayoutDashboard },
-  { href: "/garage",      label: "Garage",          icon: Car },
-  { href: "/budget",      label: "Budget",          icon: DollarSign },
-  { href: "/products",    label: "Product Tracker", icon: ShoppingBag },
-  { href: "/maintenance", label: "Maintenance",     icon: ClipboardList },
-  { href: "/vendors",     label: "Vendors",         icon: Store },
+  { href: "/",            label: "Dashboard",       icon: LayoutDashboard, countKey: null },
+  { href: "/garage",      label: "Garage",          icon: Car,             countKey: "vehicles" },
+  { href: "/budget",      label: "Budget",          icon: DollarSign,      countKey: null },
+  { href: "/products",    label: "Product Tracker", icon: ShoppingBag,     countKey: null },
+  { href: "/maintenance", label: "Maintenance",     icon: ClipboardList,   countKey: "maintenance" },
+  { href: "/vendors",     label: "Vendors",         icon: Store,           countKey: null },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    Promise.allSettled([
+      fetch("/api/vehicles").then((r) => r.json()),
+      fetch("/api/maintenance").then((r) => r.json()),
+    ]).then(([vehicles, maintenance]) => {
+      setCounts({
+        vehicles: Array.isArray(vehicles.value) ? vehicles.value.length : 0,
+        maintenance: Array.isArray(maintenance.value) ? maintenance.value.length : 0,
+      });
+    });
+  }, []);
 
   return (
     <aside
@@ -43,8 +57,9 @@ export function Sidebar() {
           Menu
         </p>
 
-        {navItems.map(({ href, label, icon: Icon }) => {
+        {navItems.map(({ href, label, icon: Icon, countKey }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const count = countKey ? counts[countKey] : undefined;
           return (
             <Link
               key={href}
@@ -64,9 +79,19 @@ export function Sidebar() {
                 strokeWidth={active ? 2.2 : 1.8}
               />
               {label}
-              {active && (
-                <span className="ml-auto w-1.5 h-1.5 rounded-full bg-theme" />
-              )}
+              <span className="ml-auto flex items-center gap-1.5">
+                {count != null && count > 0 && (
+                  <span className={cn(
+                    "text-2xs font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                    active
+                      ? "bg-theme/20 text-theme"
+                      : "bg-secondary text-muted-foreground group-hover:bg-secondary/80"
+                  )}>
+                    {count}
+                  </span>
+                )}
+                {active && <span className="w-1.5 h-1.5 rounded-full bg-theme" />}
+              </span>
             </Link>
           );
         })}

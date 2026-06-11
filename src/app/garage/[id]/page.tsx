@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   ArrowLeft, Car, Wrench, DollarSign, ClipboardList, Edit2, Trash2,
   Plus, ExternalLink, AlertCircle, Clock, Package,
-  TrendingUp, Gauge,
+  TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen,
 } from "lucide-react";
 import { AddModDialog } from "@/components/modifications/AddModDialog";
 import { AddMaintenanceDialog } from "@/components/maintenance/AddMaintenanceDialog";
@@ -78,6 +78,10 @@ export default function VehicleDetailPage() {
   const [addMainOpen, setAddMainOpen] = useState(false);
   const [editLog, setEditLog] = useState<MaintenanceLog | null>(null);
   const [modFilter, setModFilter] = useState({ status: "ALL", category: "ALL", search: "" });
+  const [modSort, setModSort] = useState<"date" | "name" | "price" | "status">("date");
+  const [modView, setModView] = useState<"normal" | "compact">("normal");
+  const [journalNotes, setJournalNotes] = useState("");
+  const [savingJournal, setSavingJournal] = useState(false);
   const [budgetForm, setBudgetForm] = useState({ category: "", planned: "", actual: "" });
   const [savingBudget, setSavingBudget] = useState(false);
   const imageFetchQueue = useRef<Set<string>>(new Set());
@@ -126,12 +130,17 @@ export default function VehicleDetailPage() {
       .then((r) => r.json())
       .then((d) => {
         setVehicle(d);
+        setJournalNotes(d.notes ?? "");
         setLoading(false);
         autoFetchModImages(d.modifications ?? []);
       })
       .catch(() => setLoading(false));
 
   useEffect(() => { load(); }, [id]);
+  useEffect(() => {
+    const saved = localStorage.getItem("bv-mod-view");
+    if (saved === "compact" || saved === "normal") setModView(saved);
+  }, []);
 
   const deleteMod = async (modId: string) => {
     if (!confirm("Delete this modification?")) return;
@@ -148,6 +157,30 @@ export default function VehicleDetailPage() {
       const data = await res.json().catch(() => ({}));
       toast({ title: "Failed to delete", description: data.error, variant: "destructive" });
     }
+  };
+
+  const STATUS_ORDER = ["PLANNED", "RESEARCHING", "ORDERED", "PURCHASED", "INSTALLED", "REMOVED"] as const;
+  const cycleStatus = async (mod: Modification) => {
+    const next = STATUS_ORDER[(STATUS_ORDER.indexOf(mod.status as typeof STATUS_ORDER[number]) + 1) % STATUS_ORDER.length];
+    setVehicle((v) => v ? { ...v, modifications: v.modifications.map((m) => m.id === mod.id ? { ...m, status: next } : m) } : v);
+    await fetch(`/api/modifications/${mod.id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: next }),
+    }).catch(() => {});
+  };
+
+  const saveJournal = async () => {
+    if (!vehicle) return;
+    setSavingJournal(true);
+    try {
+      await fetch(`/api/vehicles/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: journalNotes }),
+      });
+      setVehicle((v) => v ? { ...v, notes: journalNotes } : v);
+      toast({ title: "Journal saved" });
+    } catch { toast({ title: "Failed to save", variant: "destructive" }); }
+    finally { setSavingJournal(false); }
   };
 
   const saveBudget = async (e: React.FormEvent) => {
@@ -213,8 +246,15 @@ export default function VehicleDetailPage() {
     return true;
   });
 
-  // Group mods by category
-  const modsByCategory = filteredMods.reduce<Record<string, Modification[]>>((acc, m) => {
+  // Sort then group mods by category
+  const SORT_STATUS = ["INSTALLED", "PURCHASED", "ORDERED", "RESEARCHING", "PLANNED", "REMOVED"];
+  const sortedMods = [...filteredMods].sort((a, b) => {
+    if (modSort === "name")   return a.name.localeCompare(b.name);
+    if (modSort === "price")  return ((b.actualPrice ?? b.price) ?? 0) - ((a.actualPrice ?? a.price) ?? 0);
+    if (modSort === "status") return SORT_STATUS.indexOf(a.status) - SORT_STATUS.indexOf(b.status);
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+  const modsByCategory = sortedMods.reduce<Record<string, Modification[]>>((acc, m) => {
     if (!acc[m.category]) acc[m.category] = [];
     acc[m.category].push(m);
     return acc;
@@ -339,7 +379,7 @@ export default function VehicleDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="mods">
-        <TabsList className="grid grid-cols-3 w-full max-w-md">
+        <TabsList className="grid grid-cols-4 w-full max-w-xl">
           <TabsTrigger value="mods" className="gap-1.5">
             <Wrench className="w-3.5 h-3.5" />
             Mods ({vehicle.modifications.length})
@@ -350,7 +390,11 @@ export default function VehicleDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="maintenance" className="gap-1.5">
             <ClipboardList className="w-3.5 h-3.5" />
-            Maintenance ({vehicle.maintenanceLogs.length})
+            Service ({vehicle.maintenanceLogs.length})
+          </TabsTrigger>
+          <TabsTrigger value="journal" className="gap-1.5">
+            <BookOpen className="w-3.5 h-3.5" />
+            Journal
           </TabsTrigger>
         </TabsList>
 
@@ -380,6 +424,26 @@ export default function VehicleDetailPage() {
                 {MOD_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select value={modSort} onValueChange={(v) => setModSort(v as typeof modSort)}>
+              <SelectTrigger className="w-36 gap-1.5">
+                <ArrowUpDown className="w-3.5 h-3.5 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">Date Added</SelectItem>
+                <SelectItem value="name">Name A–Z</SelectItem>
+                <SelectItem value="price">Price High–Low</SelectItem>
+                <SelectItem value="status">By Status</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline" size="sm"
+              className="px-2.5"
+              onClick={() => { const next = modView === "normal" ? "compact" : "normal"; setModView(next); localStorage.setItem("bv-mod-view", next); }}
+              title={modView === "normal" ? "Switch to compact view" : "Switch to normal view"}
+            >
+              {modView === "normal" ? <LayoutList className="w-4 h-4" /> : <Grid2X2 className="w-4 h-4" />}
+            </Button>
             <div className="ml-auto">
               <Button onClick={() => setAddModOpen(true)} className="bg-theme hover:brightness-90 gap-2">
                 <Plus className="w-4 h-4" />
@@ -401,15 +465,45 @@ export default function VehicleDetailPage() {
               </CardContent>
             </Card>
           ) : (
-            Object.entries(modsByCategory).map(([category, mods]) => (
+            Object.entries(modsByCategory).map(([category, mods]) => {
+              const categoryTotal = mods.reduce((s, m) => s + ((m.actualPrice ?? m.price) ?? 0), 0);
+              return (
               <div key={category}>
                 <div className="flex items-center gap-2 mb-2">
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{category}</h3>
                   <div className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{mods.length}</div>
+                  {categoryTotal > 0 && (
+                    <span className="text-xs font-semibold text-theme">{formatCurrency(categoryTotal)}</span>
+                  )}
                   <div className="flex-1 h-px bg-border ml-2" />
                 </div>
-                <div className="space-y-2">
-                  {mods.map((mod) => (
+                <div className={modView === "compact" ? "space-y-1" : "space-y-2"}>
+                  {mods.map((mod) =>
+                    modView === "compact" ? (
+                      <div key={mod.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors group">
+                        <button
+                          onClick={() => cycleStatus(mod)}
+                          className={`text-xs px-1.5 py-0.5 rounded-full border font-medium hover:opacity-75 transition-opacity flex-shrink-0 ${STATUS_COLORS[mod.status] || STATUS_COLORS.PLANNED}`}
+                          title="Click to cycle status"
+                        >
+                          {mod.status.charAt(0) + mod.status.slice(1).toLowerCase()}
+                        </button>
+                        <span className="text-sm font-medium flex-1 truncate">{mod.name}</span>
+                        {mod.brand && <span className="text-xs text-muted-foreground hidden sm:inline truncate max-w-[120px]">{mod.brand}</span>}
+                        {(mod.actualPrice ?? mod.price) != null && (
+                          <span className="text-sm font-semibold flex-shrink-0">{formatCurrency((mod.actualPrice ?? mod.price) ?? 0)}</span>
+                        )}
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                          {mod.link && (
+                            <a href={mod.link} target="_blank" rel="noopener noreferrer">
+                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0"><ExternalLink className="w-3 h-3" /></Button>
+                            </a>
+                          )}
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditMod(mod)}><Edit2 className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 hover:text-destructive" onClick={() => deleteMod(mod.id)}><Trash2 className="w-3 h-3" /></Button>
+                        </div>
+                      </div>
+                    ) : (
                     <Card key={mod.id} className="hover:border-border/60 transition-colors">
                       <CardContent className="p-4">
                         <div className="flex items-start gap-3">
@@ -435,9 +529,13 @@ export default function VehicleDetailPage() {
                                 </p>
                               </div>
                               <div className="flex items-center gap-1.5 flex-shrink-0">
-                                <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[mod.status] || STATUS_COLORS.PLANNED}`}>
+                                <button
+                                  onClick={() => cycleStatus(mod)}
+                                  className={`text-xs px-2 py-0.5 rounded-full border font-medium hover:opacity-75 transition-opacity ${STATUS_COLORS[mod.status] || STATUS_COLORS.PLANNED}`}
+                                  title="Click to cycle status"
+                                >
                                   {mod.status.charAt(0) + mod.status.slice(1).toLowerCase()}
-                                </span>
+                                </button>
                               </div>
                             </div>
 
@@ -482,10 +580,12 @@ export default function VehicleDetailPage() {
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                    )
+                  )}
                 </div>
               </div>
-            ))
+            );
+            })
           )}
         </TabsContent>
 
@@ -644,6 +744,28 @@ export default function VehicleDetailPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* ===== JOURNAL TAB ===== */}
+        <TabsContent value="journal" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Build Journal</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <textarea
+                className="w-full min-h-[320px] resize-y bg-secondary/30 rounded-lg border border-border p-3 text-sm focus:outline-none focus:ring-1 focus:ring-theme"
+                placeholder="Document your build journey — plans, decisions, notes, lessons learned…"
+                value={journalNotes}
+                onChange={(e) => setJournalNotes(e.target.value)}
+              />
+              <div className="flex justify-end">
+                <Button onClick={saveJournal} disabled={savingJournal} className="bg-theme hover:brightness-90">
+                  {savingJournal ? "Saving…" : "Save Journal"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
