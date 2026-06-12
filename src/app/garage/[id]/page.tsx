@@ -81,7 +81,7 @@ export default function VehicleDetailPage() {
   const [addMainOpen, setAddMainOpen] = useState(false);
   const [editLog, setEditLog] = useState<MaintenanceLog | null>(null);
   const [modFilter, setModFilter] = useState({ status: "ALL", category: "ALL", search: "" });
-  const [modSort, setModSort] = useState<"date" | "name" | "price" | "status">("date");
+  const [modSort, setModSort] = useState<"date" | "name" | "price" | "status" | "priority">("date");
   const [modView, setModView] = useState<"normal" | "compact">("normal");
   const [journalNotes, setJournalNotes] = useState("");
   const [savingJournal, setSavingJournal] = useState(false);
@@ -274,11 +274,13 @@ export default function VehicleDetailPage() {
   });
 
   // Sort then group mods by category
-  const SORT_STATUS = ["INSTALLED", "PURCHASED", "ORDERED", "RESEARCHING", "PLANNED", "REMOVED"];
+  const SORT_STATUS   = ["INSTALLED", "PURCHASED", "ORDERED", "RESEARCHING", "PLANNED", "REMOVED"];
+  const SORT_PRIORITY = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"];
   const sortedMods = [...filteredMods].sort((a, b) => {
-    if (modSort === "name")   return a.name.localeCompare(b.name);
-    if (modSort === "price")  return ((b.actualPrice ?? b.price) ?? 0) - ((a.actualPrice ?? a.price) ?? 0);
-    if (modSort === "status") return SORT_STATUS.indexOf(a.status) - SORT_STATUS.indexOf(b.status);
+    if (modSort === "name")     return a.name.localeCompare(b.name);
+    if (modSort === "price")    return ((b.actualPrice ?? b.price) ?? 0) - ((a.actualPrice ?? a.price) ?? 0);
+    if (modSort === "status")   return SORT_STATUS.indexOf(a.status) - SORT_STATUS.indexOf(b.status);
+    if (modSort === "priority") return SORT_PRIORITY.indexOf(a.priority) - SORT_PRIORITY.indexOf(b.priority);
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
   const modsByCategory = sortedMods.reduce<Record<string, Modification[]>>((acc, m) => {
@@ -465,6 +467,7 @@ export default function VehicleDetailPage() {
                 <SelectItem value="name">Name A–Z</SelectItem>
                 <SelectItem value="price">Price High–Low</SelectItem>
                 <SelectItem value="status">By Status</SelectItem>
+                <SelectItem value="priority">By Priority</SelectItem>
               </SelectContent>
             </Select>
             <Button
