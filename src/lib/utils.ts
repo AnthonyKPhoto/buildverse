@@ -58,10 +58,11 @@ export const MOD_STATUSES = [
 ] as const;
 
 export const MOD_PRIORITIES = [
-  { value: "LOW", label: "Low", color: "text-slate-400" },
-  { value: "MEDIUM", label: "Medium", color: "text-yellow-400" },
-  { value: "HIGH", label: "High", color: "text-theme" },
-  { value: "CRITICAL", label: "Critical", color: "text-red-400" },
+  { value: "NONE",     label: "—",        color: "text-muted-foreground",  badge: "",                                                    dot: "" },
+  { value: "LOW",      label: "Low",      color: "text-slate-400",         badge: "bg-slate-500/15 text-slate-400 border-slate-500/25",   dot: "bg-slate-400" },
+  { value: "MEDIUM",   label: "Medium",   color: "text-amber-400",         badge: "bg-amber-500/15 text-amber-400 border-amber-500/25",   dot: "bg-amber-400" },
+  { value: "HIGH",     label: "High",     color: "text-orange-400",        badge: "bg-orange-500/15 text-orange-400 border-orange-500/25", dot: "bg-orange-400" },
+  { value: "CRITICAL", label: "Critical", color: "text-red-400",           badge: "bg-red-500/20 text-red-400 border-red-400/40",         dot: "bg-red-400" },
 ] as const;
 
 export const INSTALL_DIFFICULTIES = [
@@ -86,7 +87,9 @@ export function getStatusConfig(status: string) {
 }
 
 export function getPriorityConfig(priority: string) {
-  return MOD_PRIORITIES.find((p) => p.value === priority) ?? MOD_PRIORITIES[1];
+  // Treat legacy MEDIUM as NONE for display
+  const key = priority === "MEDIUM" ? "NONE" : priority;
+  return MOD_PRIORITIES.find((p) => p.value === key) ?? MOD_PRIORITIES[0];
 }
 
 export function calcBuildCompletion(modifications: { status: string }[]): number {

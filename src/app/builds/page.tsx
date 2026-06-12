@@ -170,8 +170,8 @@ export default function BuildsPage() {
               <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All Priority</SelectItem>
-                {["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((p) => (
-                  <SelectItem key={p} value={p}>{p.charAt(0) + p.slice(1).toLowerCase()}</SelectItem>
+                {[{ value: "NONE", label: "None" }, { value: "LOW", label: "Low" }, { value: "MEDIUM", label: "Medium" }, { value: "HIGH", label: "High" }, { value: "CRITICAL", label: "Critical" }].map((p) => (
+                  <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -231,9 +231,9 @@ export default function BuildsPage() {
                               <div className="flex flex-wrap items-center gap-3 mt-1.5">
                                 {mod.price != null && <span className="text-sm font-semibold">{formatCurrency(mod.price)}</span>}
                                 {mod.vendor && <span className="text-xs text-muted-foreground">{mod.vendor}</span>}
-                                {mod.priority !== "MEDIUM" && (
-                                  <span className={`text-xs font-medium ${getPriorityConfig(mod.priority).color}`}>
-                                    {mod.priority.charAt(0) + mod.priority.slice(1).toLowerCase()}
+                                {mod.priority !== "NONE" && mod.priority !== "MEDIUM" && (
+                                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${getPriorityConfig(mod.priority).badge}`}>
+                                    {mod.priority === "CRITICAL" ? "⚠ Critical" : mod.priority.charAt(0) + mod.priority.slice(1).toLowerCase()}
                                   </span>
                                 )}
                               </div>

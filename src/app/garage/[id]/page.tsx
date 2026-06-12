@@ -62,8 +62,11 @@ const STATUS_COLORS: Record<string, string> = {
   INSTALLED: "bg-green-500/20 text-green-400 border-green-500/30",
   REMOVED: "bg-red-500/20 text-red-400 border-red-500/30",
 };
-const PRIORITY_COLORS: Record<string, string> = {
-  LOW: "text-slate-400", MEDIUM: "text-yellow-400", HIGH: "text-theme", CRITICAL: "text-red-400",
+const PRIORITY_BADGE: Record<string, string> = {
+  LOW:      "bg-slate-500/15 text-slate-400 border-slate-500/25",
+  MEDIUM:   "bg-amber-500/15 text-amber-400 border-amber-500/25",
+  HIGH:     "bg-orange-500/15 text-orange-400 border-orange-500/25",
+  CRITICAL: "bg-red-500/20 text-red-400 border-red-400/40",
 };
 
 export default function VehicleDetailPage() {
@@ -571,9 +574,9 @@ export default function VehicleDetailPage() {
                               {mod.price != null && (
                                 <span className="text-sm font-semibold">{formatCurrency(mod.price)}</span>
                               )}
-                              {mod.priority !== "MEDIUM" && (
-                                <span className={`text-xs font-medium ${PRIORITY_COLORS[mod.priority]}`}>
-                                  ● {mod.priority.charAt(0) + mod.priority.slice(1).toLowerCase()}
+                              {mod.priority !== "NONE" && mod.priority !== "MEDIUM" && PRIORITY_BADGE[mod.priority] && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${PRIORITY_BADGE[mod.priority]}`}>
+                                  {mod.priority === "CRITICAL" ? "⚠ Critical" : mod.priority.charAt(0) + mod.priority.slice(1).toLowerCase()}
                                 </span>
                               )}
                               {mod.difficulty && (

@@ -41,7 +41,7 @@ model Modification {
   price          Float?
   actualPrice    Float?
   notes          String?
-  priority       String    @default("MEDIUM")
+  priority       String    @default("NONE")
   status         String    @default("PLANNED")
   link           String?
   imageUrl       String?

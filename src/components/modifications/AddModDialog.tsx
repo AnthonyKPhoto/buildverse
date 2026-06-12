@@ -30,11 +30,17 @@ interface AddModDialogProps {
 }
 
 const STATUSES = ["PLANNED", "RESEARCHING", "ORDERED", "PURCHASED", "INSTALLED", "REMOVED"];
-const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const PRIORITIES = [
+  { value: "NONE",     label: "—  None" },
+  { value: "LOW",      label: "Low" },
+  { value: "MEDIUM",   label: "Medium" },
+  { value: "HIGH",     label: "High" },
+  { value: "CRITICAL", label: "Critical" },
+];
 
 const BLANK_FORM = {
   name: "", category: "", brand: "", vendor: "", price: "", actualPrice: "",
-  status: "PLANNED", priority: "MEDIUM", difficulty: "UNKNOWN",
+  status: "PLANNED", priority: "NONE", difficulty: "UNKNOWN",
   link: "", imageUrl: "", notes: "", partNumber: "", orderNumber: "",
   installDate: "", installMileage: "", laborCost: "", diyInstall: false,
 };
@@ -49,7 +55,7 @@ function formFromMod(m?: Modification | null) {
     price: m.price?.toString() ?? "",
     actualPrice: m.actualPrice?.toString() ?? "",
     status: m.status ?? "PLANNED",
-    priority: m.priority ?? "MEDIUM",
+    priority: m.priority ?? "NONE",
     difficulty: m.difficulty ?? "UNKNOWN",
     link: m.link ?? "",
     imageUrl: m.imageUrl ?? "",
@@ -222,7 +228,7 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
               <Select value={form.priority} onValueChange={(v) => set("priority", v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p.charAt(0) + p.slice(1).toLowerCase()}</SelectItem>)}
+                  {PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

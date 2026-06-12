@@ -19,7 +19,7 @@ const modSchema = z.object({
   price:          z.number().min(0).optional(),
   actualPrice:    z.number().min(0).optional(),
   notes:          z.string().max(2000).optional(),
-  priority:       z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
+  priority:       z.enum(["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("NONE"),
   status:         z.enum(["PLANNED", "RESEARCHING", "ORDERED", "PURCHASED", "INSTALLED", "REMOVED"]).default("PLANNED"),
   link:           safeUrl.optional().nullable(),
   imageUrl:       safeUrl.optional().nullable(),
