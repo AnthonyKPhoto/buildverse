@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   ArrowLeft, Car, Wrench, DollarSign, ClipboardList, Edit2, Trash2,
   Plus, ExternalLink, AlertCircle, Clock, Package,
-  TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen,
+  TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen, FileDown,
 } from "lucide-react";
 import { AddModDialog } from "@/components/modifications/AddModDialog";
 import { AddMaintenanceDialog } from "@/components/maintenance/AddMaintenanceDialog";
@@ -82,6 +82,7 @@ export default function VehicleDetailPage() {
   const [modView, setModView] = useState<"normal" | "compact">("normal");
   const [journalNotes, setJournalNotes] = useState("");
   const [savingJournal, setSavingJournal] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
   const [budgetForm, setBudgetForm] = useState({ category: "", planned: "", actual: "" });
   const [savingBudget, setSavingBudget] = useState(false);
   const imageFetchQueue = useRef<Set<string>>(new Set());
@@ -212,6 +213,29 @@ export default function VehicleDetailPage() {
     if (res.ok) { router.push("/garage"); toast({ title: "Vehicle removed" }); }
   };
 
+  const exportPDF = async () => {
+    if (!vehicle || exportingPDF) return;
+    setExportingPDF(true);
+    try {
+      const [{ pdf }, { BuildSheetDocument }] = await Promise.all([
+        import("@react-pdf/renderer"),
+        import("@/components/vehicles/BuildSheetPDF"),
+      ]);
+      const accentColor = localStorage.getItem("bv-accent") || "#e84d3d";
+      const blob = await pdf(<BuildSheetDocument vehicle={vehicle} accentColor={accentColor} />).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(vehicle.name || `${vehicle.year}-${vehicle.make}-${vehicle.model}`).replace(/\s+/g, "-")}-build-sheet.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({ title: "Export failed", description: String(err), variant: "destructive" });
+    } finally {
+      setExportingPDF(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -275,6 +299,10 @@ export default function VehicleDetailPage() {
           <span className="font-medium text-sm">{vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}</span>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportPDF} disabled={exportingPDF} className="gap-1.5">
+            <FileDown className="w-3.5 h-3.5" />
+            {exportingPDF ? "Exporting…" : "Export PDF"}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setEditVehicleOpen(true)} className="gap-1.5">
             <Edit2 className="w-3.5 h-3.5" />
             Edit
