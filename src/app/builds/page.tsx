@@ -231,7 +231,7 @@ export default function BuildsPage() {
                               <div className="flex flex-wrap items-center gap-3 mt-1.5">
                                 {mod.price != null && <span className="text-sm font-semibold">{formatCurrency(mod.price)}</span>}
                                 {mod.vendor && <span className="text-xs text-muted-foreground">{mod.vendor}</span>}
-                                {mod.priority !== "NONE" && mod.priority !== "MEDIUM" && (
+                                {mod.priority !== "NONE" && getPriorityConfig(mod.priority).badge && (
                                   <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${getPriorityConfig(mod.priority).badge}`}>
                                     {mod.priority === "CRITICAL" ? "⚠ Critical" : mod.priority.charAt(0) + mod.priority.slice(1).toLowerCase()}
                                   </span>

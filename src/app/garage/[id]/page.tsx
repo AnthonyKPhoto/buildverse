@@ -574,7 +574,7 @@ export default function VehicleDetailPage() {
                               {mod.price != null && (
                                 <span className="text-sm font-semibold">{formatCurrency(mod.price)}</span>
                               )}
-                              {mod.priority !== "NONE" && mod.priority !== "MEDIUM" && PRIORITY_BADGE[mod.priority] && (
+                              {mod.priority !== "NONE" && PRIORITY_BADGE[mod.priority] && (
                                 <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${PRIORITY_BADGE[mod.priority]}`}>
                                   {mod.priority === "CRITICAL" ? "⚠ Critical" : mod.priority.charAt(0) + mod.priority.slice(1).toLowerCase()}
                                 </span>
