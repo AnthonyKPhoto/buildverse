@@ -221,14 +221,6 @@ export function BuildSheetDocument({ vehicle, accentColor = "#e84d3d" }: { vehic
           </View>
         )}
 
-        {/* Journal/Notes */}
-        {vehicle.notes && (
-          <View style={mk.notesBox}>
-            <Text style={[mk.sectionTitle, { color: "#444", marginBottom: 6 }]}>Build Journal</Text>
-            <Text style={mk.notesText}>{vehicle.notes}</Text>
-          </View>
-        )}
-
         {/* Footer */}
         <View style={mk.footer} fixed>
           <Text style={mk.footerText}>BuildVerse — {vehicleTitle}</Text>
@@ -236,6 +228,26 @@ export function BuildSheetDocument({ vehicle, accentColor = "#e84d3d" }: { vehic
           <Text style={mk.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} / ${totalPages}`} />
         </View>
       </Page>
+
+      {/* Journal — own page */}
+      {vehicle.notes ? (
+        <Page size="A4" style={mk.page}>
+          <View style={mk.headerBar}>
+            <View style={mk.headerLeft}>
+              <Text style={mk.vehicleName}>Build Journal</Text>
+              <Text style={mk.vehicleSub}>{vehicleTitle}</Text>
+            </View>
+          </View>
+          <View style={[mk.divider, { backgroundColor: accentColor }]} />
+          <Text style={[mk.notesText, { marginTop: 12, lineHeight: 1.8 }]}>{vehicle.notes}</Text>
+
+          <View style={mk.footer} fixed>
+            <Text style={mk.footerText}>BuildVerse — {vehicleTitle}</Text>
+            <Text style={mk.footerText}>Generated {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</Text>
+            <Text style={mk.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} / ${totalPages}`} />
+          </View>
+        </Page>
+      ) : null}
     </Document>
   );
 }
