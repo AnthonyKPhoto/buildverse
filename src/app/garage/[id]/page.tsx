@@ -20,6 +20,7 @@ import {
 import { AddModDialog } from "@/components/modifications/AddModDialog";
 import { AddMaintenanceDialog } from "@/components/maintenance/AddMaintenanceDialog";
 import { AddVehicleDialog } from "@/components/vehicles/AddVehicleDialog";
+import { PDFExportDialog } from "@/components/vehicles/PDFExportDialog";
 import {
   formatCurrency, formatDate, calcBuildCompletion, calcTotalModValue,
   getStatusConfig, getPriorityConfig, MOD_CATEGORIES, MOD_STATUSES,
@@ -85,7 +86,6 @@ export default function VehicleDetailPage() {
   const [modView, setModView] = useState<"normal" | "compact">("normal");
   const [journalNotes, setJournalNotes] = useState("");
   const [savingJournal, setSavingJournal] = useState(false);
-  const [exportingPDF, setExportingPDF] = useState(false);
   const [budgetForm, setBudgetForm] = useState({ category: "", planned: "", actual: "" });
   const [savingBudget, setSavingBudget] = useState(false);
   const imageFetchQueue = useRef<Set<string>>(new Set());
@@ -216,28 +216,7 @@ export default function VehicleDetailPage() {
     if (res.ok) { router.push("/garage"); toast({ title: "Vehicle removed" }); }
   };
 
-  const exportPDF = async () => {
-    if (!vehicle || exportingPDF) return;
-    setExportingPDF(true);
-    try {
-      const [{ pdf }, { BuildSheetDocument }] = await Promise.all([
-        import("@react-pdf/renderer"),
-        import("@/components/vehicles/BuildSheetPDF"),
-      ]);
-      const accentColor = localStorage.getItem("bv-accent") || "#e84d3d";
-      const blob = await pdf(<BuildSheetDocument vehicle={vehicle} accentColor={accentColor} />).toBlob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${(vehicle.name || `${vehicle.year}-${vehicle.make}-${vehicle.model}`).replace(/\s+/g, "-")}-build-sheet.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      toast({ title: "Export failed", description: String(err), variant: "destructive" });
-    } finally {
-      setExportingPDF(false);
-    }
-  };
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
 
   if (loading) {
     return (
@@ -289,6 +268,85 @@ export default function VehicleDetailPage() {
     return acc;
   }, {});
 
+  const renderModCard = (mod: Modification) =>
+    modView === "compact" ? (
+      <div key={mod.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors group">
+        <button
+          onClick={() => cycleStatus(mod)}
+          className={`text-xs px-1.5 py-0.5 rounded-full border font-medium hover:opacity-75 transition-opacity flex-shrink-0 ${STATUS_COLORS[mod.status] || STATUS_COLORS.PLANNED}`}
+          title="Click to cycle status"
+        >
+          {mod.status.charAt(0) + mod.status.slice(1).toLowerCase()}
+        </button>
+        <span className="text-sm font-medium flex-1 truncate">{mod.name}</span>
+        {mod.brand && <span className="text-xs text-muted-foreground hidden sm:inline truncate max-w-[120px]">{mod.brand}</span>}
+        {(mod.actualPrice ?? mod.price) != null && (
+          <span className="text-sm font-semibold flex-shrink-0">{formatCurrency((mod.actualPrice ?? mod.price) ?? 0)}</span>
+        )}
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          {mod.link && (
+            <a href={mod.link} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="ghost" className="h-6 w-6 p-0"><ExternalLink className="w-3 h-3" /></Button>
+            </a>
+          )}
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditMod(mod)}><Edit2 className="w-3 h-3" /></Button>
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 hover:text-destructive" onClick={() => deleteMod(mod.id)}><Trash2 className="w-3 h-3" /></Button>
+        </div>
+      </div>
+    ) : (
+      <Card key={mod.id} className="hover:border-border/60 transition-colors">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            {mod.imageUrl ? (
+              <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-secondary">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={mod.imageUrl} alt={mod.name} className="object-cover w-full h-full" />
+              </div>
+            ) : (
+              <div className="w-14 h-14 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
+                <Package className="w-6 h-6 text-muted-foreground/40" />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium text-sm">{mod.name}</p>
+                  <p className="text-xs text-muted-foreground">{[mod.brand, mod.vendor].filter(Boolean).join(" · ")}</p>
+                </div>
+                <button
+                  onClick={() => cycleStatus(mod)}
+                  className={`text-xs px-2 py-0.5 rounded-full border font-medium hover:opacity-75 transition-opacity flex-shrink-0 ${STATUS_COLORS[mod.status] || STATUS_COLORS.PLANNED}`}
+                  title="Click to cycle status"
+                >
+                  {mod.status.charAt(0) + mod.status.slice(1).toLowerCase()}
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 mt-2">
+                {mod.price != null && <span className="text-sm font-semibold">{formatCurrency(mod.price)}</span>}
+                {mod.priority !== "NONE" && PRIORITY_BADGE[mod.priority] && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${PRIORITY_BADGE[mod.priority]}`}>
+                    {mod.priority === "CRITICAL" ? "⚠ Critical" : mod.priority.charAt(0) + mod.priority.slice(1).toLowerCase()}
+                  </span>
+                )}
+                {mod.difficulty && <span className="text-xs text-muted-foreground">{mod.difficulty.charAt(0) + mod.difficulty.slice(1).toLowerCase()} install</span>}
+                {mod.installDate && <span className="text-xs text-muted-foreground">Installed {formatDate(mod.installDate)}</span>}
+              </div>
+              {mod.notes && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{mod.notes}</p>}
+            </div>
+            <div className="flex gap-1 flex-shrink-0">
+              {mod.link && (
+                <a href={mod.link} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><ExternalLink className="w-3.5 h-3.5" /></Button>
+                </a>
+              )}
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditMod(mod)}><Edit2 className="w-3.5 h-3.5" /></Button>
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:text-destructive" onClick={() => deleteMod(mod.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Breadcrumb + actions */}
@@ -304,9 +362,9 @@ export default function VehicleDetailPage() {
           <span className="font-medium text-sm">{vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}</span>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={exportPDF} disabled={exportingPDF} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => setPdfDialogOpen(true)} className="gap-1.5">
             <FileDown className="w-3.5 h-3.5" />
-            {exportingPDF ? "Exporting…" : "Export PDF"}
+            Export PDF
           </Button>
           <Button variant="outline" size="sm" onClick={() => setEditVehicleOpen(true)} className="gap-1.5">
             <Edit2 className="w-3.5 h-3.5" />
@@ -486,131 +544,40 @@ export default function VehicleDetailPage() {
             </div>
           </div>
 
-          {/* Mod card renderer */}
-          {(() => {
-            const renderMod = (mod: Modification) =>
-              modView === "compact" ? (
-                <div key={mod.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors group">
-                  <button
-                    onClick={() => cycleStatus(mod)}
-                    className={`text-xs px-1.5 py-0.5 rounded-full border font-medium hover:opacity-75 transition-opacity flex-shrink-0 ${STATUS_COLORS[mod.status] || STATUS_COLORS.PLANNED}`}
-                    title="Click to cycle status"
-                  >
-                    {mod.status.charAt(0) + mod.status.slice(1).toLowerCase()}
-                  </button>
-                  <span className="text-sm font-medium flex-1 truncate">{mod.name}</span>
-                  {mod.brand && <span className="text-xs text-muted-foreground hidden sm:inline truncate max-w-[120px]">{mod.brand}</span>}
-                  {(mod.actualPrice ?? mod.price) != null && (
-                    <span className="text-sm font-semibold flex-shrink-0">{formatCurrency((mod.actualPrice ?? mod.price) ?? 0)}</span>
-                  )}
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                    {mod.link && (
-                      <a href={mod.link} target="_blank" rel="noopener noreferrer">
-                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0"><ExternalLink className="w-3 h-3" /></Button>
-                      </a>
-                    )}
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditMod(mod)}><Edit2 className="w-3 h-3" /></Button>
-                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 hover:text-destructive" onClick={() => deleteMod(mod.id)}><Trash2 className="w-3 h-3" /></Button>
+          {/* Mod list */}
+          {sortedMods.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center py-12 text-center">
+                <Wrench className="w-10 h-10 text-muted-foreground/40 mb-3" />
+                <p className="font-medium mb-1">No modifications {modFilter.status !== "ALL" || modFilter.category !== "ALL" ? "match your filters" : "yet"}</p>
+                <p className="text-sm text-muted-foreground mb-4">Start building your mod list</p>
+                <Button onClick={() => setAddModOpen(true)} size="sm" className="bg-theme hover:brightness-90">
+                  <Plus className="w-4 h-4 mr-1" /> Add First Mod
+                </Button>
+              </CardContent>
+            </Card>
+          ) : modSort !== "date" ? (
+            <div className={modView === "compact" ? "space-y-1" : "space-y-2"}>
+              {sortedMods.map((mod) => renderModCard(mod))}
+            </div>
+          ) : (
+            Object.entries(modsByCategory).map(([category, mods]) => {
+              const categoryTotal = mods.reduce((s, m) => s + ((m.actualPrice ?? m.price) ?? 0), 0);
+              return (
+                <div key={category}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{category}</h3>
+                    <div className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{mods.length}</div>
+                    {categoryTotal > 0 && <span className="text-xs font-semibold text-theme">{formatCurrency(categoryTotal)}</span>}
+                    <div className="flex-1 h-px bg-border ml-2" />
+                  </div>
+                  <div className={modView === "compact" ? "space-y-1" : "space-y-2"}>
+                    {mods.map((mod) => renderModCard(mod))}
                   </div>
                 </div>
-              ) : (
-                <Card key={mod.id} className="hover:border-border/60 transition-colors">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      {mod.imageUrl ? (
-                        <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-secondary">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={mod.imageUrl} alt={mod.name} className="object-cover w-full h-full" />
-                        </div>
-                      ) : (
-                        <div className="w-14 h-14 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
-                          <Package className="w-6 h-6 text-muted-foreground/40" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="font-medium text-sm">{mod.name}</p>
-                            <p className="text-xs text-muted-foreground">{[mod.brand, mod.vendor].filter(Boolean).join(" · ")}</p>
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <button
-                              onClick={() => cycleStatus(mod)}
-                              className={`text-xs px-2 py-0.5 rounded-full border font-medium hover:opacity-75 transition-opacity ${STATUS_COLORS[mod.status] || STATUS_COLORS.PLANNED}`}
-                              title="Click to cycle status"
-                            >
-                              {mod.status.charAt(0) + mod.status.slice(1).toLowerCase()}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 mt-2">
-                          {mod.price != null && <span className="text-sm font-semibold">{formatCurrency(mod.price)}</span>}
-                          {mod.priority !== "NONE" && PRIORITY_BADGE[mod.priority] && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${PRIORITY_BADGE[mod.priority]}`}>
-                              {mod.priority === "CRITICAL" ? "⚠ Critical" : mod.priority.charAt(0) + mod.priority.slice(1).toLowerCase()}
-                            </span>
-                          )}
-                          {mod.difficulty && <span className="text-xs text-muted-foreground">{mod.difficulty.charAt(0) + mod.difficulty.slice(1).toLowerCase()} install</span>}
-                          {mod.installDate && <span className="text-xs text-muted-foreground">Installed {formatDate(mod.installDate)}</span>}
-                        </div>
-                        {mod.notes && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{mod.notes}</p>}
-                      </div>
-                      <div className="flex gap-1 flex-shrink-0">
-                        {mod.link && (
-                          <a href={mod.link} target="_blank" rel="noopener noreferrer">
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><ExternalLink className="w-3.5 h-3.5" /></Button>
-                          </a>
-                        )}
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditMod(mod)}><Edit2 className="w-3.5 h-3.5" /></Button>
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:text-destructive" onClick={() => deleteMod(mod.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
               );
-
-            if (sortedMods.length === 0) return (
-              <Card className="border-dashed">
-                <CardContent className="flex flex-col items-center py-12 text-center">
-                  <Wrench className="w-10 h-10 text-muted-foreground/40 mb-3" />
-                  <p className="font-medium mb-1">No modifications {modFilter.status !== "ALL" || modFilter.category !== "ALL" ? "match your filters" : "yet"}</p>
-                  <p className="text-sm text-muted-foreground mb-4">Start building your mod list</p>
-                  <Button onClick={() => setAddModOpen(true)} size="sm" className="bg-theme hover:brightness-90">
-                    <Plus className="w-4 h-4 mr-1" /> Add First Mod
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-
-            // Flat list when any non-default sort is active
-            if (modSort !== "date") return (
-              <div className={modView === "compact" ? "space-y-1" : "space-y-2"}>
-                {sortedMods.map(renderMod)}
-              </div>
-            );
-
-            // Grouped by category (default)
-            return (
-              <>
-                {Object.entries(modsByCategory).map(([category, mods]) => {
-                  const categoryTotal = mods.reduce((s, m) => s + ((m.actualPrice ?? m.price) ?? 0), 0);
-                  return (
-                    <div key={category}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{category}</h3>
-                        <div className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{mods.length}</div>
-                        {categoryTotal > 0 && <span className="text-xs font-semibold text-theme">{formatCurrency(categoryTotal)}</span>}
-                        <div className="flex-1 h-px bg-border ml-2" />
-                      </div>
-                      <div className={modView === "compact" ? "space-y-1" : "space-y-2"}>
-                        {mods.map(renderMod)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </>
-            );
-          })()}
+            })
+          )}
         </TabsContent>
 
         {/* ===== BUDGET TAB ===== */}
@@ -813,6 +780,11 @@ export default function VehicleDetailPage() {
         vehicleId={id}
         onSaved={() => { setAddMainOpen(false); setEditLog(null); load(); }}
         editLog={editLog}
+      />
+      <PDFExportDialog
+        open={pdfDialogOpen}
+        onOpenChange={setPdfDialogOpen}
+        vehicle={vehicle}
       />
     </div>
   );

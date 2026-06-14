@@ -24,7 +24,7 @@ const vehicleUpdateSchema = z.object({
   platform:     z.string().max(100).optional(),
   color:        z.string().max(100).optional(),
   photoUrl:     safeUrl.optional(),
-  notes:        z.string().max(2000).optional(),
+  notes:        z.string().max(50000).optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
