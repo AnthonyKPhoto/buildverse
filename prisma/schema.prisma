@@ -129,12 +129,15 @@ model MaintenanceLog {
   notes     String?
   shop      String?
   diy       Boolean   @default(false)
-  nextDue   DateTime?
-  nextMiles Int?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  nextDue    DateTime?
+  nextMiles  Int?
+  externalId String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([externalId])
 }
 
 model DynoRun {

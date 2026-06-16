@@ -11,6 +11,7 @@ import {
 import { MOD_CATEGORIES } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { LubeLoggerSettings } from "@/components/integrations/LubeLoggerSettings";
 import {
   ACCENT_PRESETS, RADIUS_PRESETS, FONT_PRESETS,
   useCurrentAccent, useCurrentRadius, useCurrentFont, useCurrentScheme,
@@ -677,6 +678,12 @@ export default function SettingsPage() {
           <Toggle on={autoTrackProducts} onChange={setAutoTrackProducts} />
         </Row>
       </Section>
+
+      {/* ── Integrations ─────────────────────────────────────────────────────── */}
+      <div>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3 px-1">Integrations</p>
+        <LubeLoggerSettings />
+      </div>
 
       {/* ── Data Management ──────────────────────────────────────────────────── */}
       <Section title="Data Management" icon={HardDrive}>

@@ -61,6 +61,26 @@ export function Sidebar() {
     });
   }, []);
 
+  // Auto-sync LubeLogger silently if the configured interval has elapsed
+  useEffect(() => {
+    const INTERVALS: Record<string, number> = {
+      hourly: 3_600_000,
+      daily:  86_400_000,
+      weekly: 604_800_000,
+    };
+    fetch("/api/integrations/lubelogger/config")
+      .then((r) => r.json())
+      .then((cfg) => {
+        const ms = INTERVALS[cfg.syncInterval];
+        if (!ms || !cfg.url) return;
+        const elapsed = cfg.lastSync ? Date.now() - new Date(cfg.lastSync).getTime() : Infinity;
+        if (elapsed >= ms) {
+          fetch("/api/integrations/lubelogger/sync", { method: "POST" }).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Fire price-alert toasts once per session on launch
   useEffect(() => {
     const key = "bv-price-alerts-toasted";

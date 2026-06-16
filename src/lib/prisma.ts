@@ -97,6 +97,9 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
       "value" TEXT NOT NULL,
       "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
+    // MaintenanceLog.externalId — added in v1.3.1 for LubeLogger sync deduplication
+    `ALTER TABLE "MaintenanceLog" ADD COLUMN "externalId" TEXT`,
+    `CREATE INDEX IF NOT EXISTS "MaintenanceLog_externalId_idx" ON "MaintenanceLog"("externalId")`,
   ];
   for (const sql of stmts) {
     await prisma.$executeRawUnsafe(sql).catch(() => {});
