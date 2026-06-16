@@ -91,6 +91,12 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
       FOREIGN KEY ("vehicleId") REFERENCES "Vehicle"("id") ON DELETE CASCADE
     )`,
     `CREATE INDEX IF NOT EXISTS "TuneLog_vehicleId_idx" ON "TuneLog"("vehicleId")`,
+    // Setting table — added in v1.3.0 for custom categories and other KV settings
+    `CREATE TABLE IF NOT EXISTS "Setting" (
+      "key" TEXT NOT NULL PRIMARY KEY,
+      "value" TEXT NOT NULL,
+      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
   ];
   for (const sql of stmts) {
     await prisma.$executeRawUnsafe(sql).catch(() => {});

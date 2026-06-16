@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { MOD_CATEGORIES, INSTALL_DIFFICULTIES } from "@/lib/utils";
+import { useCategories } from "@/hooks/use-categories";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
 import { Link2, Loader2, CheckCircle2, ArrowLeft, Sparkles, ChevronRight } from "lucide-react";
@@ -115,6 +116,7 @@ function ScrapingView({ url }: { url: string }) {
 
 export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }: AddModDialogProps) {
   const { toast } = useToast();
+  const { categories: modCategories } = useCategories();
   const [saving, setSaving] = useState(false);
   const [fetchingImage, setFetchingImage] = useState(false);
   const [form, setForm] = useState(formFromMod(editMod));
@@ -409,7 +411,7 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
                 <Select value={form.category} onValueChange={(v) => set("category", v)}>
                   <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                   <SelectContent>
-                    {MOD_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    {modCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

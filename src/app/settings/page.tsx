@@ -6,7 +6,9 @@ import {
   Info, Zap, Monitor, Palette, Moon, Sun,
   Archive, RotateCcw, Trash2, ArrowUpCircle,
   CheckCircle2, AlertCircle, Loader2, X, Power, Save, ShoppingBag,
+  Tag, Plus, GripVertical,
 } from "lucide-react";
+import { MOD_CATEGORIES } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -134,6 +136,9 @@ export default function SettingsPage() {
   const [autoTrackProducts, setAutoTrackProducts] = useState(true);
   const [importing, setImporting] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
+  const [customCats, setCustomCats] = useState<string[]>([...MOD_CATEGORIES]);
+  const [catInput, setCatInput] = useState("");
+  const [savingCats, setSavingCats] = useState(false);
 
   const isElectron = typeof window !== "undefined" && !!window.electronAPI?.isElectron;
   const { accent, setAccent } = useCurrentAccent();
@@ -230,6 +235,32 @@ export default function SettingsPage() {
         loadStats();
       }
     } catch { toast({ title: "Failed to remove sample data", variant: "destructive" }); }
+  };
+
+  useEffect(() => {
+    fetch("/api/settings/categories")
+      .then((r) => r.json())
+      .then((d) => { if (Array.isArray(d.categories)) setCustomCats(d.categories); })
+      .catch(() => {});
+  }, []);
+
+  const saveCats = async () => {
+    setSavingCats(true);
+    try {
+      await fetch("/api/settings/categories", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categories: customCats }),
+      });
+      toast({ title: "Categories saved" });
+    } catch { toast({ title: "Failed to save categories", variant: "destructive" }); }
+    finally { setSavingCats(false); }
+  };
+
+  const resetCats = async () => {
+    await fetch("/api/settings/categories", { method: "DELETE" }).catch(() => {});
+    setCustomCats([...MOD_CATEGORIES]);
+    toast({ title: "Categories reset to defaults" });
   };
 
   const wipeAllData = async () => {
@@ -481,6 +512,61 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
+        </div>
+      </Section>
+
+      {/* ── Custom Mod Categories ───────────────────────────────────────────── */}
+      <Section
+        title="Mod Categories"
+        icon={Tag}
+        action={
+          <div className="flex gap-2">
+            <Btn size="xs" onClick={resetCats}>Reset to defaults</Btn>
+            <Btn size="xs" variant="primary" onClick={saveCats} disabled={savingCats}>
+              {savingCats ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+              Save
+            </Btn>
+          </div>
+        }
+      >
+        <p className="text-xs text-muted-foreground mb-3">Add, remove, or reorder mod categories. Changes apply to the add-mod form and filters.</p>
+        <div className="space-y-1.5 mb-3 max-h-64 overflow-y-auto pr-1">
+          {customCats.map((cat, i) => (
+            <div key={i} className="flex items-center gap-2 group px-2 py-1 rounded-lg hover:bg-secondary/50">
+              <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+              <span className="flex-1 text-sm">{cat}</span>
+              <button
+                onClick={() => setCustomCats((cs) => cs.filter((_, j) => j !== i))}
+                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="New category name…"
+            value={catInput}
+            onChange={(e) => setCatInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && catInput.trim()) {
+                setCustomCats((cs) => [...cs, catInput.trim()]);
+                setCatInput("");
+              }
+            }}
+            className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <Btn
+            size="sm"
+            onClick={() => {
+              if (catInput.trim()) { setCustomCats((cs) => [...cs, catInput.trim()]); setCatInput(""); }
+            }}
+            disabled={!catInput.trim()}
+          >
+            <Plus className="w-3.5 h-3.5" /> Add
+          </Btn>
         </div>
       </Section>
 

@@ -16,7 +16,8 @@ import {
   ArrowLeft, Car, Wrench, DollarSign, ClipboardList, Edit2, Trash2,
   Plus, ExternalLink, AlertCircle, Clock, Package,
   TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen, FileDown, FolderOpen,
-  Kanban, FileSpreadsheet, Activity,
+  Kanban, FileSpreadsheet, Activity, CalendarDays, Images, X, ChevronLeft, ChevronRight,
+  Share2,
 } from "lucide-react";
 import { AddModDialog } from "@/components/modifications/AddModDialog";
 import { AddMaintenanceDialog } from "@/components/maintenance/AddMaintenanceDialog";
@@ -32,6 +33,7 @@ import {
   getStatusConfig, getPriorityConfig, MOD_CATEGORIES, MOD_STATUSES,
 } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useCategories } from "@/hooks/use-categories";
 
 interface ModDep {
   id: string;
@@ -94,7 +96,9 @@ export default function VehicleDetailPage() {
   const [editLog, setEditLog] = useState<MaintenanceLog | null>(null);
   const [modFilter, setModFilter] = useState({ status: "ALL", category: "ALL", search: "" });
   const [modSort, setModSort] = useState<"date" | "name" | "price" | "status" | "priority">("date");
-  const [modView, setModView] = useState<"normal" | "compact" | "kanban">("normal");
+  const [modView, setModView] = useState<"normal" | "compact" | "kanban" | "timeline" | "gallery">("normal");
+  const [lightboxMod, setLightboxMod] = useState<Modification | null>(null);
+  const [buildCardOpen, setBuildCardOpen] = useState(false);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [journalNotes, setJournalNotes] = useState("");
   const [savingJournal, setSavingJournal] = useState(false);
@@ -155,7 +159,7 @@ export default function VehicleDetailPage() {
   useEffect(() => { load(); }, [id]);
   useEffect(() => {
     const saved = localStorage.getItem("bv-mod-view");
-    if (saved === "compact" || saved === "normal" || saved === "kanban") setModView(saved);
+    if (saved === "compact" || saved === "normal" || saved === "kanban" || saved === "timeline" || saved === "gallery") setModView(saved);
   }, []);
 
   const deleteMod = async (modId: string) => {
@@ -237,6 +241,7 @@ export default function VehicleDetailPage() {
   };
 
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const { categories: modCategories } = useCategories();
 
   if (loading) {
     return (
@@ -399,6 +404,10 @@ export default function VehicleDetailPage() {
           <span className="font-medium text-sm">{vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}</span>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setBuildCardOpen(true)} className="gap-1.5">
+            <Share2 className="w-3.5 h-3.5" />
+            Build Card
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setPdfDialogOpen(true)} className="gap-1.5">
             <FileDown className="w-3.5 h-3.5" />
             Export PDF
@@ -561,7 +570,7 @@ export default function VehicleDetailPage() {
               <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All Categories</SelectItem>
-                {MOD_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                {modCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select value={modSort} onValueChange={(v) => setModSort(v as typeof modSort)}>
@@ -581,12 +590,17 @@ export default function VehicleDetailPage() {
               variant="outline" size="sm"
               className="px-2.5"
               onClick={() => {
-                const next = modView === "normal" ? "compact" : modView === "compact" ? "kanban" : "normal";
+                const cycle: typeof modView[] = ["normal", "compact", "kanban", "timeline", "gallery"];
+                const next = cycle[(cycle.indexOf(modView) + 1) % cycle.length];
                 setModView(next); localStorage.setItem("bv-mod-view", next);
               }}
-              title={modView === "normal" ? "Switch to compact" : modView === "compact" ? "Switch to kanban" : "Switch to normal"}
+              title={`View: ${modView} — click to cycle`}
             >
-              {modView === "normal" ? <LayoutList className="w-4 h-4" /> : modView === "compact" ? <Kanban className="w-4 h-4" /> : <Grid2X2 className="w-4 h-4" />}
+              {modView === "normal" ? <LayoutList className="w-4 h-4" /> :
+               modView === "compact" ? <Kanban className="w-4 h-4" /> :
+               modView === "kanban" ? <Grid2X2 className="w-4 h-4" /> :
+               modView === "timeline" ? <CalendarDays className="w-4 h-4" /> :
+               <Images className="w-4 h-4" />}
             </Button>
             <div className="ml-auto flex gap-2">
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCsvImportOpen(true)}>
@@ -605,8 +619,112 @@ export default function VehicleDetailPage() {
             <KanbanView mods={filteredMods} onStatusChange={cycleModStatus} />
           )}
 
-          {/* Mod list (hidden in kanban mode) */}
-          {modView !== "kanban" && (sortedMods.length === 0 ? (
+          {/* Timeline view */}
+          {modView === "timeline" && (() => {
+            const withDate = [...filteredMods]
+              .filter((m) => m.installDate)
+              .sort((a, b) => new Date(a.installDate!).getTime() - new Date(b.installDate!).getTime());
+            const noDate = filteredMods.filter((m) => !m.installDate);
+            const all = [...withDate, ...noDate];
+            if (all.length === 0) return (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <CalendarDays className="w-10 h-10 text-muted-foreground/40 mb-3" />
+                  <p className="font-medium mb-1">No modifications yet</p>
+                  <Button onClick={() => setAddModOpen(true)} size="sm" className="bg-theme hover:brightness-90 mt-2">
+                    <Plus className="w-4 h-4 mr-1" /> Add First Mod
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+            return (
+              <div className="relative pl-8">
+                <div className="absolute left-3.5 top-2 bottom-2 w-px bg-border" />
+                {all.map((mod, i) => {
+                  const isNoDate = !mod.installDate;
+                  const showNodateDivider = isNoDate && (i === 0 || filteredMods[i - 1]?.installDate);
+                  return (
+                    <div key={mod.id}>
+                      {showNodateDivider && withDate.length > 0 && (
+                        <div className="flex items-center gap-2 mb-3 mt-4">
+                          <div className="absolute left-0 w-7 h-px bg-border" />
+                          <span className="text-xs text-muted-foreground/60 uppercase tracking-widest ml-0">No install date</span>
+                        </div>
+                      )}
+                      <div className="relative mb-4">
+                        <div className={`absolute -left-4.5 top-3.5 w-3 h-3 rounded-full border-2 ${
+                          mod.status === "INSTALLED" ? "bg-green-400 border-green-400" :
+                          mod.status === "REMOVED" ? "bg-red-400 border-red-400" :
+                          "bg-background border-theme"
+                        }`} style={{ left: "-1.35rem" }} />
+                        {mod.installDate && (
+                          <p className="text-xs text-muted-foreground mb-1">{formatDate(mod.installDate)}</p>
+                        )}
+                        <div className="flex items-start gap-3 p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors group">
+                          {mod.imageUrl && (
+                            <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={mod.imageUrl} alt={mod.name} className="w-full h-full object-cover" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm">{mod.name}</p>
+                            <div className="flex flex-wrap gap-2 mt-1 text-xs text-muted-foreground">
+                              <span className={`px-1.5 py-0.5 rounded-full border ${STATUS_COLORS[mod.status] || STATUS_COLORS.PLANNED}`}>
+                                {mod.status.charAt(0) + mod.status.slice(1).toLowerCase()}
+                              </span>
+                              {mod.category && <span>{mod.category}</span>}
+                              {(mod.actualPrice ?? mod.price) != null && (
+                                <span className="font-semibold text-foreground">{formatCurrency((mod.actualPrice ?? mod.price) ?? 0)}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditMod(mod)}><Edit2 className="w-3 h-3" /></Button>
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 hover:text-destructive" onClick={() => deleteMod(mod.id)}><Trash2 className="w-3 h-3" /></Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* Gallery view */}
+          {modView === "gallery" && (() => {
+            const withPhoto = filteredMods.filter((m) => m.imageUrl);
+            if (withPhoto.length === 0) return (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center py-12 text-center">
+                  <Images className="w-10 h-10 text-muted-foreground/40 mb-3" />
+                  <p className="font-medium mb-1">No mod photos yet</p>
+                  <p className="text-sm text-muted-foreground">Add a product link or image URL to a mod to see photos here.</p>
+                </CardContent>
+              </Card>
+            );
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {withPhoto.map((mod) => (
+                  <button
+                    key={mod.id}
+                    className="group relative aspect-square rounded-xl overflow-hidden bg-secondary hover:ring-2 hover:ring-theme transition-all"
+                    onClick={() => setLightboxMod(mod)}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={mod.imageUrl!} alt={mod.name} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                      <p className="text-white text-xs font-medium text-left line-clamp-2">{mod.name}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* Mod list (hidden in kanban/timeline/gallery) */}
+          {(modView === "normal" || modView === "compact") && (sortedMods.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center py-12 text-center">
                 <Wrench className="w-10 h-10 text-muted-foreground/40 mb-3" />
@@ -868,6 +986,140 @@ export default function VehicleDetailPage() {
         vehicleId={id}
         onImported={() => { setCsvImportOpen(false); load(); }}
       />
+
+      {/* Lightbox */}
+      {lightboxMod && (() => {
+        const modsWithPhoto = vehicle.modifications.filter((m) => m.imageUrl);
+        const idx = modsWithPhoto.findIndex((m) => m.id === lightboxMod.id);
+        const prev = idx > 0 ? modsWithPhoto[idx - 1] : null;
+        const next = idx < modsWithPhoto.length - 1 ? modsWithPhoto[idx + 1] : null;
+        return (
+          <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={() => setLightboxMod(null)}>
+            <button className="absolute top-4 right-4 text-white/60 hover:text-white" onClick={() => setLightboxMod(null)}>
+              <X className="w-7 h-7" />
+            </button>
+            {prev && (
+              <button className="absolute left-4 text-white/60 hover:text-white" onClick={(e) => { e.stopPropagation(); setLightboxMod(prev); }}>
+                <ChevronLeft className="w-9 h-9" />
+              </button>
+            )}
+            {next && (
+              <button className="absolute right-4 text-white/60 hover:text-white" onClick={(e) => { e.stopPropagation(); setLightboxMod(next); }}>
+                <ChevronRight className="w-9 h-9" />
+              </button>
+            )}
+            <div className="max-w-3xl max-h-[80vh] flex flex-col items-center gap-4" onClick={(e) => e.stopPropagation()}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={lightboxMod.imageUrl!} alt={lightboxMod.name} className="max-h-[65vh] max-w-full object-contain rounded-xl" />
+              <div className="text-center">
+                <p className="text-white font-semibold">{lightboxMod.name}</p>
+                <div className="flex items-center justify-center gap-3 mt-1 text-sm text-white/60">
+                  {lightboxMod.category && <span>{lightboxMod.category}</span>}
+                  {(lightboxMod.actualPrice ?? lightboxMod.price) != null && (
+                    <span>{formatCurrency((lightboxMod.actualPrice ?? lightboxMod.price) ?? 0)}</span>
+                  )}
+                  <span className={`px-1.5 py-0.5 rounded-full border text-xs ${STATUS_COLORS[lightboxMod.status] || STATUS_COLORS.PLANNED}`}>
+                    {lightboxMod.status.charAt(0) + lightboxMod.status.slice(1).toLowerCase()}
+                  </span>
+                </div>
+                <p className="text-white/40 text-xs mt-1">{idx + 1} / {modsWithPhoto.length}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Build Card Dialog */}
+      {buildCardOpen && (() => {
+        const installed = vehicle.modifications.filter((m) => m.status === "INSTALLED");
+        const topMods = [...installed].sort((a, b) => ((b.actualPrice ?? b.price) ?? 0) - ((a.actualPrice ?? a.price) ?? 0)).slice(0, 6);
+        const vehicleLabel = vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`;
+        return (
+          <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setBuildCardOpen(false)}>
+            <div className="bg-card rounded-2xl overflow-hidden shadow-2xl max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+              <div className="flex justify-between items-center px-5 pt-4 pb-0">
+                <p className="text-xs text-muted-foreground">BuildVerse · Build Card</p>
+                <button onClick={() => setBuildCardOpen(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Card content */}
+              <div id="build-card" className="p-5">
+                {/* Header */}
+                <div className="flex items-center gap-4 mb-5">
+                  {vehicle.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={vehicle.photoUrl} alt={vehicleLabel} className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-xl bg-secondary flex items-center justify-center flex-shrink-0">
+                      <Car className="w-9 h-9 text-muted-foreground/40" />
+                    </div>
+                  )}
+                  <div>
+                    <h2 className="text-xl font-bold leading-tight">{vehicleLabel}</h2>
+                    {vehicle.name && <p className="text-sm text-muted-foreground">{vehicle.year} {vehicle.make} {vehicle.model}</p>}
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {vehicle.trim && <Badge variant="outline" className="text-xs">{vehicle.trim}</Badge>}
+                      {vehicle.platform && <Badge className="text-xs bg-theme/10 text-theme border-theme/20">{vehicle.platform}</Badge>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Specs row */}
+                {(vehicle.engine || vehicle.transmission || vehicle.drivetrain) && (
+                  <div className="flex flex-wrap gap-4 text-sm mb-4 pb-4 border-b border-border">
+                    {vehicle.engine && <div><p className="text-xs text-muted-foreground">Engine</p><p className="font-medium">{vehicle.engine}</p></div>}
+                    {vehicle.transmission && <div><p className="text-xs text-muted-foreground">Trans</p><p className="font-medium">{vehicle.transmission}</p></div>}
+                    {vehicle.drivetrain && <div><p className="text-xs text-muted-foreground">Drive</p><p className="font-medium">{vehicle.drivetrain}</p></div>}
+                    {vehicle.mileage != null && <div><p className="text-xs text-muted-foreground">Miles</p><p className="font-medium">{vehicle.mileage.toLocaleString()}</p></div>}
+                  </div>
+                )}
+
+                {/* Stats */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="bg-secondary/50 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-theme">{completion}%</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Build Complete</p>
+                  </div>
+                  <div className="bg-secondary/50 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold text-green-400">{installed.length}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Mods Installed</p>
+                  </div>
+                  <div className="bg-secondary/50 rounded-xl p-3 text-center">
+                    <p className="text-xl font-bold">{formatCurrency(modValues.installed)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Installed Value</p>
+                  </div>
+                </div>
+
+                {/* Top mods */}
+                {topMods.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Top Mods</p>
+                    <div className="space-y-1.5">
+                      {topMods.map((mod) => (
+                        <div key={mod.id} className="flex items-center gap-2 text-sm">
+                          <div className="w-1.5 h-1.5 rounded-full bg-theme flex-shrink-0" />
+                          <span className="flex-1 font-medium truncate">{mod.name}</span>
+                          {(mod.actualPrice ?? mod.price) != null && (
+                            <span className="text-muted-foreground flex-shrink-0">{formatCurrency((mod.actualPrice ?? mod.price) ?? 0)}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-xs text-muted-foreground/40 text-right mt-4">buildverse.app · screenshot to share</p>
+              </div>
+
+              <div className="px-5 pb-4">
+                <p className="text-xs text-center text-muted-foreground">Screenshot this card to share your build</p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

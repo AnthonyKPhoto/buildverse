@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { VEHICLE_MAKES } from "@/lib/utils";
 import { ImageUpload } from "@/components/ui/ImageUpload";
+import { ScanLine } from "lucide-react";
 
 interface AddVehicleDialogProps {
   open: boolean;
@@ -27,6 +28,7 @@ const TRANSMISSIONS = ["Manual", "Automatic", "DCT", "CVT", "Semi-Auto"];
 export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }: AddVehicleDialogProps) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [decoding, setDecoding] = useState(false);
   const [form, setForm] = useState({
     name: editVehicle?.name ?? "",
     year: editVehicle?.year?.toString() ?? new Date().getFullYear().toString(),
@@ -65,6 +67,39 @@ export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }:
   }, [editVehicle]);
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const decodeVin = async () => {
+    const vin = form.vin.trim();
+    if (vin.length !== 17) {
+      toast({ title: "Enter a 17-character VIN first", variant: "destructive" });
+      return;
+    }
+    setDecoding(true);
+    try {
+      const res = await fetch(`/api/vin-decode?vin=${encodeURIComponent(vin)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setForm((f) => ({
+        ...f,
+        year: data.year?.toString() ?? f.year,
+        make: data.make || f.make,
+        model: data.model || f.model,
+        trim: data.trim || f.trim,
+        engine: data.engine || f.engine,
+        transmission: data.transmission || f.transmission,
+        drivetrain: data.drivetrain || f.drivetrain,
+      }));
+      toast({ title: "VIN decoded!", description: `${data.year} ${data.make} ${data.model}` });
+    } catch (err) {
+      toast({
+        title: "VIN decode failed",
+        description: err instanceof Error ? err.message : "Check VIN and try again",
+        variant: "destructive",
+      });
+    } finally {
+      setDecoding(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,7 +233,31 @@ export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }:
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label>VIN</Label>
-              <Input placeholder="17-character VIN" value={form.vin} onChange={(e) => set("vin", e.target.value)} />
+              <div className="flex gap-1.5">
+                <Input
+                  placeholder="17-character VIN"
+                  value={form.vin}
+                  onChange={(e) => set("vin", e.target.value.toUpperCase())}
+                  className="font-mono text-xs"
+                  maxLength={17}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="px-2 shrink-0"
+                  onClick={decodeVin}
+                  disabled={decoding || form.vin.length !== 17}
+                  title="Decode VIN — auto-fills year, make, model, engine"
+                >
+                  {decoding ? (
+                    <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <ScanLine className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              </div>
+              <p className="text-2xs text-muted-foreground mt-0.5">Enter VIN then click scan to auto-fill</p>
             </div>
             <div>
               <Label>Mileage</Label>

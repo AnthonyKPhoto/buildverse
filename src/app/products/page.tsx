@@ -434,6 +434,25 @@ export default function ProductsPage() {
                                 <Bell className="w-3 h-3" />Price Alert!
                               </Badge>
                             )}
+                            {(() => {
+                              if (
+                                product.highestPrice != null &&
+                                product.currentPrice != null &&
+                                product.currentPrice < product.highestPrice
+                              ) {
+                                const pct = Math.round(
+                                  ((product.highestPrice - product.currentPrice) / product.highestPrice) * 100
+                                );
+                                if (pct >= 5) {
+                                  return (
+                                    <Badge className="text-xs bg-blue-500/20 text-blue-400 border-blue-500/30 gap-1">
+                                      {pct}% off peak
+                                    </Badge>
+                                  );
+                                }
+                              }
+                              return null;
+                            })()}
                           </div>
                         </div>
 
