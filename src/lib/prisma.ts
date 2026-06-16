@@ -52,6 +52,18 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "Budget_vehicleId_category_key"
      ON "Budget"("vehicleId","category")`,
+    // VehicleFile table — added in v1.2.4
+    `CREATE TABLE IF NOT EXISTS "VehicleFile" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "vehicleId" TEXT NOT NULL,
+      "filename" TEXT NOT NULL,
+      "originalName" TEXT NOT NULL,
+      "mimeType" TEXT NOT NULL,
+      "size" INTEGER NOT NULL,
+      "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("vehicleId") REFERENCES "Vehicle"("id") ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS "VehicleFile_vehicleId_idx" ON "VehicleFile"("vehicleId")`,
   ];
   for (const sql of stmts) {
     await prisma.$executeRawUnsafe(sql).catch(() => {});

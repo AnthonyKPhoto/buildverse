@@ -15,12 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   ArrowLeft, Car, Wrench, DollarSign, ClipboardList, Edit2, Trash2,
   Plus, ExternalLink, AlertCircle, Clock, Package,
-  TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen, FileDown,
+  TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen, FileDown, FolderOpen,
 } from "lucide-react";
 import { AddModDialog } from "@/components/modifications/AddModDialog";
 import { AddMaintenanceDialog } from "@/components/maintenance/AddMaintenanceDialog";
 import { AddVehicleDialog } from "@/components/vehicles/AddVehicleDialog";
 import { PDFExportDialog } from "@/components/vehicles/PDFExportDialog";
+import { VehicleFilesTab } from "@/components/vehicles/VehicleFilesTab";
 import {
   formatCurrency, formatDate, calcBuildCompletion, calcTotalModValue,
   getStatusConfig, getPriorityConfig, MOD_CATEGORIES, MOD_STATUSES,
@@ -470,7 +471,7 @@ export default function VehicleDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="mods">
-        <TabsList className="grid grid-cols-4 w-full max-w-xl">
+        <TabsList className="grid grid-cols-5 w-full max-w-2xl">
           <TabsTrigger value="mods" className="gap-1.5">
             <Wrench className="w-3.5 h-3.5" />
             Mods ({vehicle.modifications.length})
@@ -486,6 +487,10 @@ export default function VehicleDetailPage() {
           <TabsTrigger value="journal" className="gap-1.5">
             <BookOpen className="w-3.5 h-3.5" />
             Journal
+          </TabsTrigger>
+          <TabsTrigger value="files" className="gap-1.5">
+            <FolderOpen className="w-3.5 h-3.5" />
+            Files
           </TabsTrigger>
         </TabsList>
 
@@ -757,6 +762,11 @@ export default function VehicleDetailPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ===== FILES TAB ===== */}
+        <TabsContent value="files" className="mt-4">
+          <VehicleFilesTab vehicleId={id} />
         </TabsContent>
       </Tabs>
 

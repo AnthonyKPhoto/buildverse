@@ -348,6 +348,7 @@ async function startServer(dbPath) {
     // the standalone .env — always an absolute path so it resolves correctly.
     BV_DATABASE_URL: `file:${dbPath}`,
     DATABASE_URL: `file:${dbPath}`,
+    BUILDVERSE_DATA_DIR: app.getPath("userData"),
   };
 
   serverProcess = spawn(nodeExe, [serverScript], {

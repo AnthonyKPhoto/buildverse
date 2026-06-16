@@ -29,6 +29,7 @@ model Vehicle {
   modifications   Modification[]
   maintenanceLogs MaintenanceLog[]
   budgets         Budget[]
+  files           VehicleFile[]
 }
 
 model Modification {
@@ -131,6 +132,20 @@ model MaintenanceLog {
   updatedAt DateTime  @updatedAt
 
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+}
+
+model VehicleFile {
+  id           String   @id
+  vehicleId    String
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  uploadedAt   DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
 }
 
 model Receipt {
