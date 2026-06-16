@@ -47,6 +47,33 @@ export function Sidebar() {
     });
   }, []);
 
+  // Fire price-alert toasts once per session on launch
+  useEffect(() => {
+    const key = "bv-price-alerts-toasted";
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+
+    fetch("/api/products/alerts")
+      .then((r) => r.json())
+      .then((alerts: { id: string; title: string; currentPrice: number; alertThreshold: number }[]) => {
+        if (!Array.isArray(alerts) || alerts.length === 0) return;
+        if (alerts.length === 1) {
+          toast({
+            title: "Price alert — target reached!",
+            description: `${alerts[0].title} is now $${alerts[0].currentPrice?.toFixed(2)}`,
+            duration: 8000,
+          });
+        } else {
+          toast({
+            title: `${alerts.length} price alerts triggered`,
+            description: alerts.map((a) => a.title).join(", "),
+            duration: 10000,
+          });
+        }
+      })
+      .catch(() => {});
+  }, [toast]);
+
   useEffect(() => {
     const api = (window as Window & { electronAPI?: { update: { onStatus: (cb: (s: UpdateStatus) => void) => () => void; install: () => void } } }).electronAPI;
     if (!api?.update?.onStatus) return;
