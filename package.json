@@ -1,6 +1,6 @@
 {
   "name": "buildverse",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "BuildVerse — Intelligent Vehicle Modification Manager",
   "private": true,
   "main": "electron/main.js",
@@ -40,6 +40,7 @@
     "clsx": "^2.1.1",
     "electron-updater": "^6.8.3",
     "lucide-react": "^0.447.0",
+    "mammoth": "^1.12.0",
     "next": "14.2.15",
     "node-fetch": "^3.3.2",
     "react": "^18.3.1",

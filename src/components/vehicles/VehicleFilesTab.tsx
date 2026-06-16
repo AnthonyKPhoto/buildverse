@@ -51,8 +51,18 @@ function typeBadge(mime: string): string {
   return "File";
 }
 
+const DOCX_TYPES = new Set([
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
 function canPreview(mime: string): boolean {
-  return mime.startsWith("image/") || mime === "application/pdf" || mime === "text/plain";
+  return (
+    mime.startsWith("image/") ||
+    mime === "application/pdf" ||
+    mime === "text/plain" ||
+    DOCX_TYPES.has(mime)
+  );
 }
 
 // ── Preview modal ─────────────────────────────────────────────────────────────
@@ -60,6 +70,8 @@ function canPreview(mime: string): boolean {
 function PreviewModal({ file, onClose }: { file: VehicleFile; onClose: () => void }) {
   const [text, setText] = useState<string | null>(null);
   const contentUrl = `/api/vehicles/${file.vehicleId}/files/${file.id}/content`;
+  const previewUrl = `/api/vehicles/${file.vehicleId}/files/${file.id}/preview`;
+  const isDocx = DOCX_TYPES.has(file.mimeType);
 
   useEffect(() => {
     if (file.mimeType !== "text/plain") return;
@@ -122,6 +134,14 @@ function PreviewModal({ file, onClose }: { file: VehicleFile; onClose: () => voi
           {file.mimeType === "application/pdf" && (
             <iframe
               src={contentUrl}
+              title={file.originalName}
+              className="w-full border-none"
+              style={{ height: "calc(90vh - 57px)", minHeight: 400 }}
+            />
+          )}
+          {isDocx && (
+            <iframe
+              src={previewUrl}
               title={file.originalName}
               className="w-full border-none"
               style={{ height: "calc(90vh - 57px)", minHeight: 400 }}
