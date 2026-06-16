@@ -29,4 +29,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
       return () => ipcRenderer.removeListener("update:status", handler);
     },
   },
+
+  network: {
+    getLanUrl:     ()          => ipcRenderer.invoke("network:getLanUrl"),
+    setLanAccess:  (enabled)   => ipcRenderer.invoke("network:setLanAccess", enabled),
+  },
+
+  transfer: {
+    exportZip: () => ipcRenderer.invoke("transfer:export-zip"),
+    importZip: () => ipcRenderer.invoke("transfer:import-zip"),
+  },
 });

@@ -6,8 +6,9 @@ import {
   Info, Zap, Monitor, Palette, Moon, Sun,
   Archive, RotateCcw, Trash2, ArrowUpCircle,
   CheckCircle2, AlertCircle, Loader2, X, Power, Save, ShoppingBag,
-  Tag, Plus, GripVertical,
+  Tag, Plus, GripVertical, Wifi, Smartphone,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { MOD_CATEGORIES } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -24,7 +25,7 @@ interface AppInfo { version: string; userDataPath: string; dbPath: string; isDev
 interface BackupEntry { name: string; filePath: string; size: number; createdAt: string; }
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
-  | { status: "available"; version: string }
+  | { status: "available"; version: string; downloadUrl?: string; manual?: boolean }
   | { status: "downloading"; percent: number }
   | { status: "downloaded"; version: string }
   | { status: "error" };
@@ -37,6 +38,14 @@ declare global {
       prefs: { get: () => Promise<Record<string,unknown>>; set: (o: Record<string,unknown>) => Promise<void>; };
       backup: { create: () => Promise<{success:boolean;filePath:string}>; list: () => Promise<BackupEntry[]>; restore: (f:string) => Promise<{success:boolean}>; delete: (f:string) => Promise<{success:boolean}>; };
       update:  { check: () => Promise<void>; install: () => Promise<void>; onStatus: (cb: (s:UpdateStatus) => void) => () => void; };
+      network?: {
+        getLanUrl: () => Promise<string | null>;
+        setLanAccess: (enabled: boolean) => Promise<{ success: boolean; requiresRestart: boolean }>;
+      };
+      transfer?: {
+        exportZip: () => Promise<{ canceled?: boolean; success?: boolean; filePath?: string; error?: string }>;
+        importZip: () => Promise<{ canceled?: boolean; success?: boolean; error?: string }>;
+      };
     };
   }
 }
@@ -140,6 +149,10 @@ export default function SettingsPage() {
   const [customCats, setCustomCats] = useState<string[]>([...MOD_CATEGORIES]);
   const [catInput, setCatInput] = useState("");
   const [savingCats, setSavingCats] = useState(false);
+  const [lanEnabled, setLanEnabled] = useState(false);
+  const [lanUrl, setLanUrl] = useState<string | null>(null);
+  const [zipExporting, setZipExporting] = useState(false);
+  const [zipImporting, setZipImporting] = useState(false);
 
   const isElectron = typeof window !== "undefined" && !!window.electronAPI?.isElectron;
   const { accent, setAccent } = useCurrentAccent();
@@ -181,7 +194,9 @@ export default function SettingsPage() {
       loadBackups();
       window.electronAPI!.prefs.get().then(p => {
         setCloseModeState((p.closeMode as "background" | "quit") ?? "quit");
+        setLanEnabled(!!p.lanAccess);
       }).catch(() => {});
+      window.electronAPI!.network?.getLanUrl().then(url => setLanUrl(url)).catch(() => {});
       const unsub = window.electronAPI!.update.onStatus(setUpdateStatus);
       return unsub;
     }
@@ -273,6 +288,49 @@ export default function SettingsPage() {
       setStats({ vehicleCount: 0, modCount: 0, productCount: 0 });
       toast({ title: "All data wiped. Starting fresh!" });
     } catch { toast({ title: "Wipe failed", variant: "destructive" }); }
+  };
+
+  const handleLanToggle = async (enabled: boolean) => {
+    setLanEnabled(enabled);
+    if (isElectron) {
+      await window.electronAPI!.network?.setLanAccess(enabled).catch(() => {});
+      toast({ title: enabled ? "LAN access enabled" : "LAN access disabled", description: "Restart BuildVerse to apply." });
+    }
+  };
+
+  const handleExportZip = async () => {
+    if (!isElectron) return;
+    setZipExporting(true);
+    try {
+      const result = await window.electronAPI!.transfer?.exportZip();
+      if (!result || result.canceled) return;
+      if (result.success) {
+        toast({ title: "Transfer pack exported!", description: result.filePath });
+      } else {
+        toast({ title: "Export failed", description: result.error, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Export failed", variant: "destructive" });
+    } finally {
+      setZipExporting(false);
+    }
+  };
+
+  const handleImportZip = async () => {
+    if (!isElectron) return;
+    if (!confirm("This will replace your current database with the pack and restart the app. Continue?")) return;
+    setZipImporting(true);
+    try {
+      const result = await window.electronAPI!.transfer?.importZip();
+      if (!result || result.canceled) { setZipImporting(false); return; }
+      if (!result.success) {
+        toast({ title: "Import failed", description: result.error, variant: "destructive" });
+        setZipImporting(false);
+      }
+    } catch {
+      toast({ title: "Import failed", variant: "destructive" });
+      setZipImporting(false);
+    }
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -614,14 +672,18 @@ export default function SettingsPage() {
           title="Updates"
           icon={ArrowUpCircle}
           action={
-            updateStatus.status !== "downloading" && updateStatus.status !== "downloaded" ? (
+            updateStatus.status === "downloaded" ? (
+              <Btn variant="primary" onClick={() => window.electronAPI!.update.install()}>
+                <ArrowUpCircle className="w-3.5 h-3.5" /> Restart &amp; Install
+              </Btn>
+            ) : updateStatus.status === "available" && (updateStatus as {status:"available";manual?:boolean}).manual ? (
+              <a href={(updateStatus as {status:"available";downloadUrl?:string}).downloadUrl ?? "#"} target="_blank" rel="noopener noreferrer">
+                <Btn variant="primary"><ArrowUpCircle className="w-3.5 h-3.5" /> Download</Btn>
+              </a>
+            ) : updateStatus.status !== "downloading" ? (
               <Btn onClick={() => { setUpdateStatus({ status: "checking" }); window.electronAPI!.update.check(); }} disabled={updateStatus.status === "checking"}>
                 <RefreshCw className={cn("w-3.5 h-3.5", updateStatus.status === "checking" && "animate-spin")} />
                 Check
-              </Btn>
-            ) : updateStatus.status === "downloaded" ? (
-              <Btn variant="primary" onClick={() => window.electronAPI!.update.install()}>
-                <ArrowUpCircle className="w-3.5 h-3.5" /> Restart &amp; Install
               </Btn>
             ) : null
           }
@@ -635,7 +697,10 @@ export default function SettingsPage() {
               {updateStatus.status === "idle"        && "Click 'Check' to look for updates"}
               {updateStatus.status === "checking"    && "Checking for updates…"}
               {updateStatus.status === "current"     && "BuildVerse is up to date"}
-              {updateStatus.status === "available"   && `v${(updateStatus as {status:"available";version:string}).version} available — downloading…`}
+              {updateStatus.status === "available"   && (() => {
+                const s = updateStatus as { status: "available"; version: string; manual?: boolean };
+                return s.manual ? `v${s.version} available` : `v${s.version} available — downloading…`;
+              })()}
               {updateStatus.status === "downloading" && `Downloading… ${(updateStatus as {status:"downloading";percent:number}).percent}%`}
               {updateStatus.status === "downloaded"  && `v${(updateStatus as {status:"downloaded";version:string}).version} ready — restart to install`}
               {updateStatus.status === "error"       && "Update check failed"}
@@ -685,18 +750,69 @@ export default function SettingsPage() {
         <LubeLoggerSettings />
       </div>
 
+      {/* ── Access from Phone ────────────────────────────────────────────────── */}
+      {isElectron && (
+        <Section title="Access from Phone" icon={Smartphone}>
+          <p className="text-sm text-muted-foreground mb-4">
+            Enable LAN access to open BuildVerse from your phone or any device on the same Wi-Fi network. A restart is required after toggling.
+          </p>
+          <Row label="Enable LAN Access" desc="Binds the server to all interfaces so other devices can connect" last>
+            <Toggle on={lanEnabled} onChange={handleLanToggle} />
+          </Row>
+          {lanEnabled && (
+            <div className="mt-4 p-4 rounded-xl bg-secondary space-y-3">
+              {lanUrl ? (
+                <>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <p className="font-mono text-sm font-semibold break-all">{lanUrl}</p>
+                    <Btn onClick={() => { navigator.clipboard.writeText(lanUrl); toast({ title: "Copied to clipboard" }); }}>
+                      Copy URL
+                    </Btn>
+                  </div>
+                  <div className="flex justify-center pt-2">
+                    <QRCodeSVG value={lanUrl} size={140} bgColor="transparent" fgColor="currentColor" className="rounded-lg opacity-90" />
+                  </div>
+                  <p className="text-xs text-center text-muted-foreground">Scan with your phone — must be on the same Wi-Fi</p>
+                </>
+              ) : (
+                <p className="text-xs text-amber-400">
+                  <Wifi className="inline w-3.5 h-3.5 mr-1" />
+                  Could not detect local IP. Ensure you&apos;re connected to a network, then restart.
+                </p>
+              )}
+            </div>
+          )}
+        </Section>
+      )}
+
       {/* ── Data Management ──────────────────────────────────────────────────── */}
       <Section title="Data Management" icon={HardDrive}>
         <Row label="Export Data" desc="Download all vehicles, mods & products as JSON">
-          <Btn onClick={handleExport}><Download className="w-3.5 h-3.5" /> Export</Btn>
+          <Btn onClick={handleExport}><Download className="w-3.5 h-3.5" /> Export JSON</Btn>
         </Row>
         <Row label="Import Data" desc="Restore from a BuildVerse JSON export file">
           <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
           <Btn onClick={() => importRef.current?.click()} disabled={importing}>
             {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-            {importing ? "Importing…" : "Import"}
+            {importing ? "Importing…" : "Import JSON"}
           </Btn>
         </Row>
+        {isElectron && (
+          <>
+            <Row label="Export Transfer Pack" desc="Full ZIP archive with database + all uploaded files — use to move BuildVerse to another computer">
+              <Btn onClick={handleExportZip} disabled={zipExporting}>
+                {zipExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                {zipExporting ? "Exporting…" : "Export Pack"}
+              </Btn>
+            </Row>
+            <Row label="Import Transfer Pack" desc="Restore from a .zip transfer pack — replaces all data and restarts">
+              <Btn onClick={handleImportZip} disabled={zipImporting}>
+                {zipImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                {zipImporting ? "Importing…" : "Import Pack"}
+              </Btn>
+            </Row>
+          </>
+        )}
         <Row label="Refresh Product Prices" desc="Re-scrape all tracked product URLs">
           <Btn onClick={refreshAll}><RefreshCw className="w-3.5 h-3.5" /> Refresh All</Btn>
         </Row>
@@ -765,10 +881,6 @@ export default function SettingsPage() {
           )}
         </Section>
       )}
-
-      <p className="text-xs text-center text-muted-foreground/50">
-        All data is stored locally — no cloud, no accounts
-      </p>
 
       {/* ── Sticky Save Button ───────────────────────────────────────────────── */}
       <div className="sticky bottom-0 pb-4 pt-2 bg-background/80 backdrop-blur border-t border-border/40 flex justify-end">

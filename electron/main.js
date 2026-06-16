@@ -10,9 +10,11 @@ process.on('uncaughtException', (err) => {
 const { app, BrowserWindow, Tray, Menu, nativeImage, shell, ipcMain, dialog } = require("electron");
 let autoUpdater = null;
 try { autoUpdater = require("electron-updater").autoUpdater; } catch (_) { /* not bundled — updates disabled */ }
-const { spawn } = require("child_process");
+const { spawn, execFileSync } = require("child_process");
 const path = require("path");
 const http = require("http");
+const https = require("https");
+const os = require("os");
 const fs = require("fs");
 
 // ──────────────────────────────────────────────────────────
@@ -231,6 +233,136 @@ ipcMain.handle("backup:delete", (_, rawPath) => {
 });
 
 // ──────────────────────────────────────────────────────────
+// Network helpers
+// ──────────────────────────────────────────────────────────
+
+function getLanIp() {
+  try {
+    const interfaces = os.networkInterfaces();
+    for (const ifaces of Object.values(interfaces)) {
+      for (const iface of (ifaces || [])) {
+        if (iface.family === "IPv4" && !iface.internal) return iface.address;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+ipcMain.handle("network:getLanUrl", () => {
+  const ip = getLanIp();
+  return ip ? `http://${ip}:${PORT}` : null;
+});
+
+ipcMain.handle("network:setLanAccess", (_, enabled) => {
+  savePrefs({ lanAccess: !!enabled });
+  return { success: true, requiresRestart: true };
+});
+
+// ──────────────────────────────────────────────────────────
+// Transfer pack (ZIP export / import)
+// ──────────────────────────────────────────────────────────
+
+function copyDirSync(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, entry.name);
+    const d = path.join(dest, entry.name);
+    if (entry.isDirectory()) copyDirSync(s, d);
+    else fs.copyFileSync(s, d);
+  }
+}
+
+ipcMain.handle("transfer:export-zip", async () => {
+  const userData = app.getPath("userData");
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: "Save BuildVerse Transfer Pack",
+    defaultPath: `BuildVerse-export-${new Date().toISOString().slice(0, 10)}.zip`,
+    filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
+  });
+  if (canceled || !filePath) return { canceled: true };
+
+  const tmpDir = path.join(userData, "_bv_export_tmp");
+  try {
+    if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const dbSrc = path.join(userData, "buildverse.db");
+    if (fs.existsSync(dbSrc)) fs.copyFileSync(dbSrc, path.join(tmpDir, "buildverse.db"));
+
+    for (const dir of ["vehicle-files", "tune-logs"]) {
+      const src = path.join(userData, dir);
+      if (fs.existsSync(src)) copyDirSync(src, path.join(tmpDir, dir));
+    }
+
+    fs.writeFileSync(path.join(tmpDir, "manifest.json"), JSON.stringify({
+      app: "BuildVerse", version: app.getVersion(), exportedAt: new Date().toISOString(),
+    }));
+
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    execFileSync("powershell.exe", [
+      "-NonInteractive", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+      `Add-Type -Assembly System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('${tmpDir.replace(/'/g, "''")}', '${filePath.replace(/'/g, "''")}')`,
+    ], { timeout: 120000 });
+
+    return { success: true, filePath };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    try { if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+ipcMain.handle("transfer:import-zip", async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    title: "Import BuildVerse Transfer Pack",
+    filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
+    properties: ["openFile"],
+  });
+  if (canceled || !filePaths[0]) return { canceled: true };
+
+  const userData = app.getPath("userData");
+  const tmpDir = path.join(userData, "_bv_import_tmp");
+  try {
+    if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    execFileSync("powershell.exe", [
+      "-NonInteractive", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+      `Add-Type -Assembly System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('${filePaths[0].replace(/'/g, "''")}', '${tmpDir.replace(/'/g, "''")}')`,
+    ], { timeout: 120000 });
+
+    let baseDir = tmpDir;
+    if (!fs.existsSync(path.join(tmpDir, "buildverse.db"))) {
+      const entries = fs.readdirSync(tmpDir, { withFileTypes: true }).filter(e => e.isDirectory());
+      if (entries.length === 1) baseDir = path.join(tmpDir, entries[0].name);
+    }
+    if (!fs.existsSync(path.join(baseDir, "buildverse.db"))) {
+      return { success: false, error: "Invalid export file — buildverse.db not found" };
+    }
+
+    if (serverProcess && !serverProcess.killed) { serverProcess.kill("SIGTERM"); serverProcess = null; }
+    await new Promise(r => setTimeout(r, 1000));
+
+    fs.copyFileSync(path.join(baseDir, "buildverse.db"), path.join(userData, "buildverse.db"));
+    for (const dir of ["vehicle-files", "tune-logs"]) {
+      const src = path.join(baseDir, dir);
+      if (fs.existsSync(src)) {
+        const dest = path.join(userData, dir);
+        if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
+        copyDirSync(src, dest);
+      }
+    }
+
+    app.relaunch(); app.isQuitting = true; app.quit();
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    try { if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+// ──────────────────────────────────────────────────────────
 // Auto-updater
 // ──────────────────────────────────────────────────────────
 
@@ -240,8 +372,62 @@ function sendUpdateStatus(status, extra) {
   }
 }
 
+function checkGitHubVersion() {
+  return new Promise((resolve) => {
+    try {
+      const req = https.get({
+        hostname: "api.github.com",
+        path: "/repos/AnthonyKPhoto/buildverse/releases/latest",
+        headers: { "User-Agent": `BuildVerse/${app.getVersion()}`, "Accept": "application/vnd.github.v3+json" },
+        timeout: 8000,
+      }, (res) => {
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => {
+          try { resolve(JSON.parse(data).tag_name || null); } catch { resolve(null); }
+        });
+      });
+      req.on("error", () => resolve(null));
+      req.on("timeout", () => { req.destroy(); resolve(null); });
+    } catch { resolve(null); }
+  });
+}
+
+function compareVersions(a, b) {
+  const parse = (s) => String(s).replace(/^v/, "").split(".").map(Number);
+  const [av, bv] = [parse(a), parse(b)];
+  for (let i = 0; i < 3; i++) {
+    const d = (av[i] || 0) - (bv[i] || 0);
+    if (d !== 0) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+async function checkGitHubForUpdates() {
+  try {
+    const latestTag = await checkGitHubVersion();
+    if (!latestTag) return;
+    if (compareVersions(latestTag, `v${app.getVersion()}`) > 0) {
+      sendUpdateStatus("available", {
+        version: latestTag.replace(/^v/, ""),
+        downloadUrl: "https://github.com/AnthonyKPhoto/buildverse/releases/latest",
+        manual: true,
+      });
+    } else {
+      sendUpdateStatus("current");
+    }
+  } catch {}
+}
+
 function initAutoUpdater() {
-  if (IS_DEV || !autoUpdater) return;
+  if (!autoUpdater) {
+    setTimeout(() => checkGitHubForUpdates(), 5000);
+    return;
+  }
+  if (IS_DEV) {
+    setTimeout(() => checkGitHubForUpdates(), 5000);
+    return;
+  }
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -250,26 +436,40 @@ function initAutoUpdater() {
   autoUpdater.on("checking-for-update", () => sendUpdateStatus("checking"));
   autoUpdater.on("update-available", (info) => sendUpdateStatus("available", { version: info.version }));
   autoUpdater.on("update-not-available", () => sendUpdateStatus("current"));
-  autoUpdater.on("error", (err) => { console.error("[updater]", err?.message || err); sendUpdateStatus("error"); });
+  autoUpdater.on("error", async (err) => {
+    console.error("[updater]", err?.message || err);
+    await checkGitHubForUpdates();
+  });
   autoUpdater.on("download-progress", (p) => sendUpdateStatus("downloading", { percent: Math.round(p.percent) }));
   autoUpdater.on("update-downloaded", (info) => sendUpdateStatus("downloaded", { version: info.version }));
 
-  // Initial check 5 seconds after launch
-  setTimeout(() => autoUpdater.checkForUpdates().catch((err) => { console.error("[updater] auto-check:", err?.message || err); }), 5000);
+  // Initial check 5 seconds after launch — fall back to GitHub API if electron-updater fails
+  setTimeout(async () => {
+    try {
+      await autoUpdater.checkForUpdates();
+    } catch {
+      await checkGitHubForUpdates();
+    }
+  }, 5000);
 
   // Recurring check every hour
-  setInterval(() => {
-    autoUpdater.checkForUpdates().catch((err) => { console.error("[updater] hourly check:", err?.message || err); });
+  setInterval(async () => {
+    try {
+      await autoUpdater.checkForUpdates();
+    } catch {
+      await checkGitHubForUpdates();
+    }
   }, 60 * 60 * 1000);
 }
 
-ipcMain.handle("update:check", () => {
-  if (IS_DEV) return;
-  if (!autoUpdater) { sendUpdateStatus("error"); console.warn("[updater] not available"); return; }
-  return autoUpdater.checkForUpdates().catch((err) => {
-    console.error("[updater] check failed:", err?.message || err);
-    sendUpdateStatus("error");
-  });
+ipcMain.handle("update:check", async () => {
+  sendUpdateStatus("checking");
+  if (!autoUpdater || IS_DEV) { await checkGitHubForUpdates(); return; }
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch {
+    await checkGitHubForUpdates();
+  }
 });
 
 ipcMain.handle("update:install", () => {
@@ -342,7 +542,7 @@ async function startServer(dbPath) {
   const env = {
     ...process.env,
     PORT: String(PORT),
-    HOSTNAME: "127.0.0.1",
+    HOSTNAME: loadPrefs().lanAccess ? "0.0.0.0" : "127.0.0.1",
     NODE_ENV: "production",
     // BV_DATABASE_URL takes priority over the relative DATABASE_URL baked into
     // the standalone .env — always an absolute path so it resolves correctly.
