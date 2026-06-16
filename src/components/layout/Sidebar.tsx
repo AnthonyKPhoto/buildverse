@@ -15,7 +15,7 @@ import { GlobalSearch } from "@/components/layout/GlobalSearch";
 
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
-  | { status: "available"; version: string }
+  | { status: "available"; version: string; manual?: boolean; downloadUrl?: string }
   | { status: "downloading"; percent: number }
   | { status: "downloaded"; version: string }
   | { status: "error" };
@@ -121,7 +121,12 @@ export function Sidebar() {
       toastedRef.current.add(key);
 
       if (info.status === "available") {
-        toast({ title: `Update v${info.version} available`, description: "Downloading in the background…" });
+        toast({
+          title: `Update v${info.version} available`,
+          description: info.manual
+            ? "Visit GitHub to download the latest release."
+            : "Downloading in the background…",
+        });
       } else if (info.status === "downloaded") {
         toast({
           title: `BuildVerse v${info.version} ready`,
@@ -230,6 +235,22 @@ export function Sidebar() {
                 style={{ width: `${(update as { percent: number }).percent}%` }}
               />
             </div>
+          </div>
+        )}
+
+        {/* Manual update available badge */}
+        {update.status === "available" && update.manual && (
+          <div className="px-3 py-2.5 rounded-xl bg-theme/8 border border-theme/25">
+            <div className="flex items-center gap-2 mb-1.5">
+              <ArrowUpCircle className="w-3.5 h-3.5 text-theme flex-shrink-0" />
+              <span className="text-2xs font-semibold text-theme">v{update.version} available</span>
+            </div>
+            <button
+              onClick={() => window.open(update.downloadUrl ?? "https://github.com/AnthonyKPhoto/buildverse/releases/latest", "_blank")}
+              className="block w-full text-center text-2xs font-semibold text-white bg-theme hover:brightness-90 rounded-lg py-1.5 transition-all"
+            >
+              Download on GitHub →
+            </button>
           </div>
         )}
 

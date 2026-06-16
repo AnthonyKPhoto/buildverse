@@ -754,32 +754,39 @@ export default function SettingsPage() {
       {isElectron && (
         <Section title="Access from Phone" icon={Smartphone}>
           <p className="text-sm text-muted-foreground mb-4">
-            Enable LAN access to open BuildVerse from your phone or any device on the same Wi-Fi network. A restart is required after toggling.
+            Open BuildVerse from your phone or any device on the same Wi-Fi network.
+            <strong className="text-foreground"> Restart required</strong> after toggling.
           </p>
-          <Row label="Enable LAN Access" desc="Binds the server to all interfaces so other devices can connect" last>
+          <Row label="Enable LAN Access" desc="Binds the server to all network interfaces" last>
             <Toggle on={lanEnabled} onChange={handleLanToggle} />
           </Row>
           {lanEnabled && (
-            <div className="mt-4 p-4 rounded-xl bg-secondary space-y-3">
+            <div className="mt-4 space-y-3">
               {lanUrl ? (
-                <>
+                <div className="p-4 rounded-xl bg-secondary space-y-3">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <p className="font-mono text-sm font-semibold break-all">{lanUrl}</p>
-                    <Btn onClick={() => { navigator.clipboard.writeText(lanUrl); toast({ title: "Copied to clipboard" }); }}>
+                    <Btn onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied to clipboard" }); }}>
                       Copy URL
                     </Btn>
                   </div>
                   <div className="flex justify-center pt-2">
                     <QRCodeSVG value={lanUrl} size={140} bgColor="transparent" fgColor="currentColor" className="rounded-lg opacity-90" />
                   </div>
-                  <p className="text-xs text-center text-muted-foreground">Scan with your phone — must be on the same Wi-Fi</p>
-                </>
+                  <p className="text-xs text-center text-muted-foreground">Scan with your phone — both devices must be on the same Wi-Fi</p>
+                </div>
               ) : (
-                <p className="text-xs text-amber-400">
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
                   <Wifi className="inline w-3.5 h-3.5 mr-1" />
-                  Could not detect local IP. Ensure you&apos;re connected to a network, then restart.
-                </p>
+                  Could not detect local IP — restart BuildVerse after enabling LAN access to see your URL here.
+                </div>
               )}
+              <div className="p-3 rounded-xl bg-secondary/60 border border-border/60 text-xs text-muted-foreground space-y-1">
+                <p className="font-medium text-foreground">If the page shows blank on your phone:</p>
+                <p>1. <strong>Restart BuildVerse</strong> after enabling — the server only rebinds on launch.</p>
+                <p>2. <strong>Allow in Windows Firewall</strong> — open Windows Security → Firewall &amp; network protection → Allow an app, add BuildVerse or allow port {lanUrl?.split(":")[2] ?? "3456"} for private networks.</p>
+                <p>3. Both devices must be on the <strong>same Wi-Fi network</strong>.</p>
+              </div>
             </div>
           )}
         </Section>

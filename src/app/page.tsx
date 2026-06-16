@@ -108,7 +108,8 @@ export default function DashboardPage() {
     ),
   };
 
-  const spotlight = vehicles[0];
+  const spotlights = vehicles.slice(0, 2);
+  const restVehicles = vehicles.slice(2);
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
 
   if (loading) return (
@@ -219,8 +220,17 @@ export default function DashboardPage() {
 
       {vehicles.length > 0 && (
         <div className="space-y-8">
-          {/* ── Spotlight ─────────────────────────────────────────────────────── */}
-          {visible.spotlight && spotlight && <SpotlightCard vehicle={spotlight} />}
+          {/* ── Spotlight (up to 2 vehicles) ──────────────────────────────────── */}
+          {visible.spotlight && spotlights.length > 0 && (
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                Spotlight Build{spotlights.length > 1 ? "s" : ""}
+              </h2>
+              <div className={spotlights.length === 2 ? "grid grid-cols-1 lg:grid-cols-2 gap-4" : ""}>
+                {spotlights.map(v => <SpotlightCard key={v.id} vehicle={v} />)}
+              </div>
+            </div>
+          )}
 
           {/* ── Activity + Quick Links ────────────────────────────────────────── */}
           {(visible.activity || visible.links) && (
@@ -238,8 +248,8 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── All Vehicles ──────────────────────────────────────────────────── */}
-          {visible.garage && vehicles.length > 1 && (
+          {/* ── All Vehicles (vehicles beyond the first 2) ────────────────────── */}
+          {visible.garage && restVehicles.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">All Vehicles</h2>
@@ -250,7 +260,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                {vehicles.slice(1).map(v => <GarageCard key={v.id} vehicle={v} />)}
+                {restVehicles.map(v => <GarageCard key={v.id} vehicle={v} />)}
               </div>
             </div>
           )}
@@ -263,73 +273,76 @@ export default function DashboardPage() {
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function SpotlightCard({ vehicle }: { vehicle: Vehicle }) {
+  const [imgErr, setImgErr] = useState(false);
   const completion = calcBuildCompletion(vehicle.modifications);
   const installedValue = vehicle.modifications
     .filter(m => m.status === "INSTALLED")
     .reduce((s, m) => s + (m.price ?? 0), 0);
 
   return (
-    <div>
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Spotlight Build</h2>
-      <Link href={`/garage/${vehicle.id}`} className="block group">
-        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card hover:border-theme/30 transition-colors duration-200 min-h-[160px]">
-          {/* Photo strip */}
-          {vehicle.photoUrl ? (
-            <div className="absolute right-0 top-0 bottom-0 w-5/12 overflow-hidden">
-              <img src={vehicle.photoUrl} alt="" className="w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity duration-300" />
-              <div className="absolute inset-0 bg-gradient-to-r from-card via-card/70 to-transparent" />
-            </div>
-          ) : (
-            <div className="absolute right-0 top-0 bottom-0 w-5/12 bg-gradient-to-r from-card to-theme/5" />
-          )}
+    <Link href={`/garage/${vehicle.id}`} className="block group">
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card hover:border-theme/30 transition-colors duration-200 min-h-[160px]">
+        {/* Photo strip */}
+        {vehicle.photoUrl && !imgErr ? (
+          <div className="absolute right-0 top-0 bottom-0 w-5/12 overflow-hidden">
+            <img
+              src={vehicle.photoUrl}
+              alt=""
+              className="w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity duration-300"
+              onError={() => setImgErr(true)}
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-card via-card/70 to-transparent" />
+          </div>
+        ) : (
+          <div className="absolute right-0 top-0 bottom-0 w-5/12 bg-gradient-to-r from-card to-theme/5" />
+        )}
 
-          {/* Content */}
-          <div className="relative p-6 max-w-[62%]">
-            <div className="flex items-start gap-3 mb-4">
-              <div className="w-11 h-11 rounded-xl bg-theme/10 ring-1 ring-theme/20 flex items-center justify-center shrink-0">
-                <Car className="w-5 h-5 text-theme" />
-              </div>
-              <div className="min-w-0">
-                <h3 className="font-bold text-lg leading-tight truncate">
-                  {vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-                </h3>
-                {vehicle.name && (
-                  <p className="text-sm text-muted-foreground">{vehicle.year} {vehicle.make} {vehicle.model}</p>
-                )}
-                {vehicle.trim && <Badge variant="outline" className="mt-1 text-xs">{vehicle.trim}</Badge>}
-              </div>
+        {/* Content */}
+        <div className="relative p-6 max-w-[62%]">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-11 h-11 rounded-xl bg-theme/10 ring-1 ring-theme/20 flex items-center justify-center shrink-0">
+              <Car className="w-5 h-5 text-theme" />
             </div>
-
-            <div className="space-y-1 mb-4">
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Build progress</span>
-                <span className="font-semibold">{completion}%</span>
-              </div>
-              <Progress value={completion} className="h-1.5" />
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 pt-4 border-t border-border/60 mb-4">
-              <div>
-                <p className="text-xs text-muted-foreground">Mods</p>
-                <p className="text-base font-bold">{vehicle._count.modifications}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Invested</p>
-                <p className="text-base font-bold">{formatCurrency(installedValue)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Services</p>
-                <p className="text-base font-bold">{vehicle._count.maintenanceLogs}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 text-theme text-sm font-medium group-hover:gap-3 transition-all duration-200">
-              View full build <ArrowRight className="w-4 h-4" />
+            <div className="min-w-0">
+              <h3 className="font-bold text-lg leading-tight truncate">
+                {vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+              </h3>
+              {vehicle.name && (
+                <p className="text-sm text-muted-foreground">{vehicle.year} {vehicle.make} {vehicle.model}</p>
+              )}
+              {vehicle.trim && <Badge variant="outline" className="mt-1 text-xs">{vehicle.trim}</Badge>}
             </div>
           </div>
+
+          <div className="space-y-1 mb-4">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Build progress</span>
+              <span className="font-semibold">{completion}%</span>
+            </div>
+            <Progress value={completion} className="h-1.5" />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 pt-4 border-t border-border/60 mb-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Mods</p>
+              <p className="text-base font-bold">{vehicle._count.modifications}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Invested</p>
+              <p className="text-base font-bold">{formatCurrency(installedValue)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Services</p>
+              <p className="text-base font-bold">{vehicle._count.maintenanceLogs}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-theme text-sm font-medium group-hover:gap-3 transition-all duration-200">
+            View full build <ArrowRight className="w-4 h-4" />
+          </div>
         </div>
-      </Link>
-    </div>
+      </div>
+    </Link>
   );
 }
 
@@ -407,12 +420,18 @@ function QuickLinks() {
 }
 
 function GarageCard({ vehicle }: { vehicle: Vehicle }) {
+  const [imgErr, setImgErr] = useState(false);
   const completion = calcBuildCompletion(vehicle.modifications);
   return (
     <Link href={`/garage/${vehicle.id}`}>
       <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 hover:border-theme/30 transition-colors group cursor-pointer">
-        {vehicle.photoUrl ? (
-          <img src={vehicle.photoUrl} alt="" className="w-12 h-12 rounded-lg object-cover shrink-0" />
+        {vehicle.photoUrl && !imgErr ? (
+          <img
+            src={vehicle.photoUrl}
+            alt=""
+            className="w-12 h-12 rounded-lg object-cover shrink-0"
+            onError={() => setImgErr(true)}
+          />
         ) : (
           <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center shrink-0">
             <Car className="w-5 h-5 text-muted-foreground" />

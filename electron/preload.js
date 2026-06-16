@@ -39,4 +39,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     exportZip: () => ipcRenderer.invoke("transfer:export-zip"),
     importZip: () => ipcRenderer.invoke("transfer:import-zip"),
   },
+
+  captureBuildCard: (rect) => ipcRenderer.invoke("capture:build-card", rect),
 });

@@ -17,7 +17,7 @@ import {
   Plus, ExternalLink, AlertCircle, Clock, Package,
   TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen, FileDown, FolderOpen,
   Kanban, FileSpreadsheet, Activity, CalendarDays, Images, X, ChevronLeft, ChevronRight,
-  Share2, Link2 as LinkIcon, ShieldAlert, Instagram, Facebook, Tag,
+  Share2, Link2 as LinkIcon, ShieldAlert, Instagram, Facebook, Tag, Download,
 } from "lucide-react";
 import { AddModDialog } from "@/components/modifications/AddModDialog";
 import { AddMaintenanceDialog } from "@/components/maintenance/AddMaintenanceDialog";
@@ -111,6 +111,7 @@ export default function VehicleDetailPage() {
   const [modView, setModView] = useState<"normal" | "compact" | "kanban" | "timeline" | "gallery">("normal");
   const [lightboxMod, setLightboxMod] = useState<Modification | null>(null);
   const [buildCardOpen, setBuildCardOpen] = useState(false);
+  const [bcImgError, setBcImgError] = useState(false);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [journalNotes, setJournalNotes] = useState("");
   const [savingJournal, setSavingJournal] = useState(false);
@@ -155,6 +156,26 @@ export default function VehicleDetailPage() {
         })
       );
     }
+  };
+
+  const handleDownloadBuildCard = async () => {
+    const el = document.getElementById("build-card");
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const api = (window as Window & { electronAPI?: { captureBuildCard?: (r: object) => Promise<string | null> } }).electronAPI;
+    if (!api?.captureBuildCard) return;
+    const base64 = await api.captureBuildCard({
+      x: Math.round(rect.left), y: Math.round(rect.top),
+      width: Math.round(rect.width), height: Math.round(rect.height),
+    });
+    if (!base64) return;
+    const label = vehicle?.name || `${vehicle?.year}-${vehicle?.make}-${vehicle?.model}`;
+    const a = document.createElement("a");
+    a.href = `data:image/png;base64,${base64}`;
+    a.download = `${label.replace(/\s+/g, "-")}-build-card.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const load = () =>
@@ -475,7 +496,7 @@ export default function VehicleDetailPage() {
             <ShieldAlert className="w-3.5 h-3.5" />
             Recalls
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setBuildCardOpen(true)} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => { setBcImgError(false); setBuildCardOpen(true); }} className="gap-1.5">
             <Share2 className="w-3.5 h-3.5" />
             Build Card
           </Button>
@@ -1218,14 +1239,14 @@ export default function VehicleDetailPage() {
               <div id="build-card" className="p-5">
                 {/* Header */}
                 <div className="flex items-start gap-4 mb-5">
-                  {vehicle.photoUrl ? (
+                  {vehicle.photoUrl && !bcImgError ? (
                     // Use img (not Next/Image) so data: URIs and all URL types work in Electron
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={vehicle.photoUrl}
                       alt={vehicleLabel}
                       className="w-24 h-24 rounded-xl object-cover flex-shrink-0 bg-secondary"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                      onError={() => setBcImgError(true)}
                     />
                   ) : (
                     <div className="w-24 h-24 rounded-xl bg-secondary flex items-center justify-center flex-shrink-0">
@@ -1305,8 +1326,14 @@ export default function VehicleDetailPage() {
                 <p className="text-xs text-muted-foreground/40 text-right mt-4">buildverse.app · screenshot to share</p>
               </div>
 
-              <div className="px-5 pb-4">
-                <p className="text-xs text-center text-muted-foreground">Screenshot this card to share your build</p>
+              <div className="px-5 pb-5 flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">Screenshot or download to share your build</p>
+                {(window as Window & { electronAPI?: unknown }).electronAPI && (
+                  <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={handleDownloadBuildCard}>
+                    <Download className="w-3.5 h-3.5" />
+                    Download PNG
+                  </Button>
+                )}
               </div>
             </div>
           </div>

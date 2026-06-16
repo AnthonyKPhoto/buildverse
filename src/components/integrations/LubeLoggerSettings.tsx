@@ -86,14 +86,18 @@ export function LubeLoggerSettings() {
   }, [open, loadConfig]);
 
   const testConnection = async () => {
-    // Save current form state first so the test uses the latest values
-    await handleSave(true);
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch("/api/integrations/lubelogger/test");
+      const res = await fetch("/api/integrations/lubelogger/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, authType, apiKey, username, password }),
+      });
       const data = await res.json();
       if (res.ok && data.ok) {
+        // Save in background so subsequent syncs pick up the latest config
+        handleSave(true);
         setTestResult({ ok: true, msg: `Connected — ${data.vehicleCount} vehicle${data.vehicleCount !== 1 ? "s" : ""} found` });
         await loadVehicles();
       } else {

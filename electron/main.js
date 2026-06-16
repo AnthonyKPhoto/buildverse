@@ -253,6 +253,16 @@ ipcMain.handle("network:getLanUrl", () => {
   return ip ? `http://${ip}:${PORT}` : null;
 });
 
+ipcMain.handle("capture:build-card", async (event, rect) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  try {
+    const image = await mainWindow.webContents.capturePage(rect);
+    return image.toPNG().toString("base64");
+  } catch {
+    return null;
+  }
+});
+
 ipcMain.handle("network:setLanAccess", (_, enabled) => {
   savePrefs({ lanAccess: !!enabled });
   return { success: true, requiresRestart: true };
