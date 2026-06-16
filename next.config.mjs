@@ -10,6 +10,7 @@ const nextConfig = {
     // private-network URL can ever be stored as an imageUrl in the first place.
     remotePatterns: [
       { protocol: "https", hostname: "**" },
+      { protocol: "http", hostname: "**" },
     ],
   },
   experimental: {

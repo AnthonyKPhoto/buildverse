@@ -5,10 +5,23 @@ async function runTest(cfg: LubeLoggerConfig) {
   if (!cfg.url) return NextResponse.json({ error: "No URL configured" }, { status: 400 });
   try {
     const res = await llFetch(cfg, "/api/vehicles");
+    const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok) {
+      if (contentType.includes("text/html")) {
+        return NextResponse.json(
+          { error: `Server returned ${res.status} with an HTML page — check your reverse proxy or Authelia passthrough config` },
+          { status: 502 }
+        );
+      }
       const text = await res.text().catch(() => "");
       return NextResponse.json(
         { error: `LubeLogger returned ${res.status}`, detail: text.slice(0, 200) },
+        { status: 502 }
+      );
+    }
+    if (contentType.includes("text/html")) {
+      return NextResponse.json(
+        { error: "Got an HTML login page instead of API data — your reverse proxy isn't forwarding the Authorization header to LubeLogger" },
         { status: 502 }
       );
     }
@@ -20,7 +33,10 @@ async function runTest(cfg: LubeLoggerConfig) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: msg }, { status: 502 });
+    const friendly = msg.includes("fetch") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")
+      ? `Cannot reach ${normaliseUrl(cfg.url)} — check the URL and that LubeLogger is running`
+      : msg;
+    return NextResponse.json({ error: friendly }, { status: 502 });
   }
 }
 

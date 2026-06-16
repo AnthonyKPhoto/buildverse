@@ -47,11 +47,11 @@ export async function saveConfig(partial: Partial<LubeLoggerConfig>): Promise<Lu
   return next;
 }
 
-// Normalise the base URL — strip trailing slash, add https if no protocol
+// Normalise the base URL — strip trailing slash, default to http:// for bare hostnames/IPs
 export function normaliseUrl(raw: string): string {
   let u = raw.trim();
   if (!u) return "";
-  if (!/^https?:\/\//i.test(u)) u = "https://" + u;
+  if (!/^https?:\/\//i.test(u)) u = "http://" + u;
   return u.replace(/\/+$/, "");
 }
 

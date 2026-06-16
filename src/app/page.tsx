@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -285,12 +286,22 @@ function SpotlightCard({ vehicle }: { vehicle: Vehicle }) {
         {/* Photo strip */}
         {vehicle.photoUrl && !imgErr ? (
           <div className="absolute right-0 top-0 bottom-0 w-5/12 overflow-hidden">
-            <img
-              src={vehicle.photoUrl}
-              alt=""
-              className="w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity duration-300"
-              onError={() => setImgErr(true)}
-            />
+            {vehicle.photoUrl.startsWith("data:") ? (
+              <img
+                src={vehicle.photoUrl}
+                alt=""
+                className="w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity duration-300"
+                onError={() => setImgErr(true)}
+              />
+            ) : (
+              <Image
+                src={vehicle.photoUrl}
+                alt=""
+                fill
+                className="object-cover opacity-35 group-hover:opacity-50 transition-opacity duration-300"
+                onError={() => setImgErr(true)}
+              />
+            )}
             <div className="absolute inset-0 bg-gradient-to-r from-card via-card/70 to-transparent" />
           </div>
         ) : (
@@ -426,12 +437,18 @@ function GarageCard({ vehicle }: { vehicle: Vehicle }) {
     <Link href={`/garage/${vehicle.id}`}>
       <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 hover:border-theme/30 transition-colors group cursor-pointer">
         {vehicle.photoUrl && !imgErr ? (
-          <img
-            src={vehicle.photoUrl}
-            alt=""
-            className="w-12 h-12 rounded-lg object-cover shrink-0"
-            onError={() => setImgErr(true)}
-          />
+          vehicle.photoUrl.startsWith("data:") ? (
+            <img
+              src={vehicle.photoUrl}
+              alt=""
+              className="w-12 h-12 rounded-lg object-cover shrink-0"
+              onError={() => setImgErr(true)}
+            />
+          ) : (
+            <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 relative">
+              <Image src={vehicle.photoUrl} alt="" fill className="object-cover" onError={() => setImgErr(true)} />
+            </div>
+          )
         ) : (
           <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center shrink-0">
             <Car className="w-5 h-5 text-muted-foreground" />

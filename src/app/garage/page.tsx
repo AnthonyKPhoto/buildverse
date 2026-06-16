@@ -3,11 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Car, Plus, Wrench, Edit2, Trash2, TrendingUp } from "lucide-react";
+import { Car, Plus, Wrench, Edit2, Trash2, TrendingUp, DollarSign, Zap, ArrowRight } from "lucide-react";
 import { AddVehicleDialog } from "@/components/vehicles/AddVehicleDialog";
 import { formatCurrency, calcBuildCompletion } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -28,6 +27,125 @@ interface Vehicle {
   mileage?: number;
   modifications: { id: string; status: string; price?: number | null }[];
   _count: { modifications: number; maintenanceLogs: number };
+}
+
+function VehicleCard({ vehicle, onEdit, onDelete }: { vehicle: Vehicle; onEdit: () => void; onDelete: () => void }) {
+  const [imgErr, setImgErr] = useState(false);
+  const completion = calcBuildCompletion(vehicle.modifications);
+  const installedMods = vehicle.modifications.filter((m) => m.status === "INSTALLED");
+  const installedValue = installedMods.reduce((s, m) => s + (m.price ?? 0), 0);
+  const plannedValue = vehicle.modifications
+    .filter((m) => m.status !== "INSTALLED")
+    .reduce((s, m) => s + (m.price ?? 0), 0);
+
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card hover:border-theme/30 transition-all duration-200">
+      {/* Photo area */}
+      <div className="relative h-48 bg-secondary overflow-hidden">
+        {vehicle.photoUrl && !imgErr ? (
+          vehicle.photoUrl.startsWith("data:") ? (
+            <img
+              src={vehicle.photoUrl}
+              alt={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              onError={() => setImgErr(true)}
+            />
+          ) : (
+            <Image
+              src={vehicle.photoUrl}
+              alt={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+              fill
+              className="object-cover group-hover:scale-105 transition-transform duration-500"
+              onError={() => setImgErr(true)}
+            />
+          )
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Car className="w-16 h-16 text-muted-foreground/15" />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-card/80 via-transparent to-transparent" />
+
+        {/* Action buttons */}
+        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button
+            size="sm" variant="secondary"
+            className="h-7 w-7 p-0 bg-card/90 hover:bg-card"
+            onClick={(e) => { e.preventDefault(); onEdit(); }}
+          >
+            <Edit2 className="w-3 h-3" />
+          </Button>
+          <Button
+            size="sm" variant="secondary"
+            className="h-7 w-7 p-0 bg-card/90 hover:bg-destructive hover:text-destructive-foreground"
+            onClick={(e) => { e.preventDefault(); onDelete(); }}
+          >
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        </div>
+
+        {vehicle.color && (
+          <div className="absolute bottom-2 left-2">
+            <Badge variant="secondary" className="text-xs bg-card/90">{vehicle.color}</Badge>
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <Link href={`/garage/${vehicle.id}`}>
+        <div className="p-5">
+          <div className="mb-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-bold text-base leading-tight">
+                  {vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+                </h3>
+                {vehicle.name && (
+                  <p className="text-sm text-muted-foreground">{vehicle.year} {vehicle.make} {vehicle.model}</p>
+                )}
+              </div>
+              {vehicle.trim && <Badge variant="outline" className="text-xs shrink-0">{vehicle.trim}</Badge>}
+            </div>
+            <div className="flex flex-wrap gap-2 mt-1.5">
+              {vehicle.platform && <span className="text-xs text-theme font-medium">{vehicle.platform}</span>}
+              {vehicle.engine && <span className="text-xs text-muted-foreground">{vehicle.engine}</span>}
+              {vehicle.drivetrain && <span className="text-xs text-muted-foreground">{vehicle.drivetrain}</span>}
+            </div>
+            {vehicle.mileage != null && (
+              <p className="text-xs text-muted-foreground mt-1">{vehicle.mileage.toLocaleString()} mi</p>
+            )}
+          </div>
+
+          <div className="space-y-1 mb-4">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Build progress</span>
+              <span className="font-semibold">{completion}%</span>
+            </div>
+            <Progress value={completion} className="h-1.5" />
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-center pt-3 border-t border-border/60 mb-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Mods</p>
+              <p className="text-sm font-bold">{vehicle._count.modifications}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Installed</p>
+              <p className="text-sm font-bold text-green-400">{formatCurrency(installedValue)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Planned</p>
+              <p className="text-sm font-bold text-theme">{formatCurrency(plannedValue)}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-theme text-sm font-medium group-hover:gap-3 transition-all duration-200">
+            View build <ArrowRight className="w-4 h-4" />
+          </div>
+        </div>
+      </Link>
+    </div>
+  );
 }
 
 export default function GaragePage() {
@@ -57,6 +175,11 @@ export default function GaragePage() {
 
   const handleSaved = () => { setAddOpen(false); setEditVehicle(null); load(); };
 
+  const totalMods = vehicles.reduce((s, v) => s + v._count.modifications, 0);
+  const totalInstalled = vehicles.reduce(
+    (s, v) => s + v.modifications.filter(m => m.status === "INSTALLED").reduce((ms, m) => ms + (m.price ?? 0), 0), 0
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -69,163 +192,83 @@ export default function GaragePage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">My Garage</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {vehicles.length === 0 ? "No vehicles yet" : `${vehicles.length} vehicle${vehicles.length !== 1 ? "s" : ""}`}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {vehicles.length >= 2 && (
-            <Link href="/garage/compare">
-              <Button variant="outline" className="gap-2">
-                <TrendingUp className="w-4 h-4" />
-                Compare
+    <div className="animate-fade-in">
+      {/* Hero banner */}
+      <div className="-mx-6 -mt-8 mb-8 px-6 pt-8 pb-6 border-b border-border/60 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-72 h-36 bg-theme/8 rounded-full blur-3xl -translate-y-8 translate-x-8 pointer-events-none" />
+        <div className="relative">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground/60 tracking-wider uppercase mb-1">Garage</p>
+              <h1 className="text-3xl font-bold tracking-tight">My Builds</h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                {vehicles.length === 0
+                  ? "No vehicles yet — add your first build"
+                  : `${vehicles.length} vehicle${vehicles.length !== 1 ? "s" : ""} · ${totalMods} mod${totalMods !== 1 ? "s" : ""} tracked`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {vehicles.length >= 2 && (
+                <Link href="/garage/compare">
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <TrendingUp className="w-4 h-4" /> Compare
+                  </Button>
+                </Link>
+              )}
+              <Button size="sm" className="gap-2 bg-theme hover:brightness-90" onClick={() => setAddOpen(true)}>
+                <Plus className="w-4 h-4" /> Add Vehicle
               </Button>
-            </Link>
+            </div>
+          </div>
+
+          {/* Stats row */}
+          {vehicles.length > 0 && (
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Vehicles",  value: vehicles.length.toString(),       icon: Car,        color: "text-theme",     bg: "bg-theme/10" },
+                { label: "Total Mods", value: totalMods.toString(),            icon: Wrench,     color: "text-blue-400",  bg: "bg-blue-500/10" },
+                { label: "Invested",  value: formatCurrency(totalInstalled),   icon: DollarSign, color: "text-amber-400", bg: "bg-amber-500/10" },
+              ].map(({ label, value, icon: Icon, color, bg }) => (
+                <div key={label} className="flex items-center gap-3 bg-card/80 backdrop-blur-sm border border-border/60 rounded-xl px-4 py-3">
+                  <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+                    <Icon className={`w-4 h-4 ${color}`} />
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold leading-none">{value}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-          <Button onClick={() => setAddOpen(true)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Add Vehicle
-          </Button>
         </div>
       </div>
 
+      {/* Empty state */}
       {vehicles.length === 0 ? (
-        <Card className="border-dashed border-2">
-          <CardContent className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-4">
-              <Car className="w-7 h-7 text-muted-foreground" />
-            </div>
-            <h3 className="text-base font-semibold mb-1.5">Your garage is empty</h3>
-            <p className="text-muted-foreground text-sm max-w-xs mb-5">
-              Add your first vehicle to start planning and tracking modifications.
-            </p>
-            <Button onClick={() => setAddOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add First Vehicle
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <div className="w-20 h-20 rounded-2xl bg-theme/10 ring-1 ring-theme/20 flex items-center justify-center mb-5">
+            <Zap className="w-10 h-10 text-theme" />
+          </div>
+          <h2 className="text-xl font-bold mb-2">Your garage is empty</h2>
+          <p className="text-sm text-muted-foreground max-w-sm mb-6">
+            Add your first vehicle to start planning and tracking modifications.
+          </p>
+          <Button className="bg-theme hover:brightness-90 gap-2" onClick={() => setAddOpen(true)}>
+            <Plus className="w-4 h-4" /> Add First Vehicle
+          </Button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {vehicles.map((v) => {
-            const completion = calcBuildCompletion(v.modifications);
-            const installedMods = v.modifications.filter((m) => m.status === "INSTALLED");
-            const installedValue = installedMods.reduce((s, m) => s + (m.price ?? 0), 0);
-            const plannedValue = v.modifications
-              .filter((m) => m.status !== "INSTALLED")
-              .reduce((s, m) => s + (m.price ?? 0), 0);
-
-            return (
-              <Card key={v.id} className="overflow-hidden hover:border-theme/30 transition-colors duration-150 group">
-                {/* Vehicle Photo */}
-                <div className="relative h-44 bg-secondary overflow-hidden">
-                  {v.photoUrl ? (
-                    v.photoUrl.startsWith("data:") ? (
-                      <img src={v.photoUrl} alt={v.name || `${v.year} ${v.make} ${v.model}`} className="w-full h-full object-cover" />
-                    ) : (
-                      <Image src={v.photoUrl} alt={v.name || `${v.year} ${v.make} ${v.model}`} fill className="object-cover" />
-                    )
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Car className="w-14 h-14 text-muted-foreground/20" />
-                    </div>
-                  )}
-                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="h-7 w-7 p-0 bg-card/90 hover:bg-card"
-                      onClick={(e) => { e.preventDefault(); setEditVehicle(v); }}
-                    >
-                      <Edit2 className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="h-7 w-7 p-0 bg-card/90 hover:bg-destructive hover:text-destructive-foreground"
-                      onClick={(e) => { e.preventDefault(); handleDelete(v.id); }}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
-                  {v.color && (
-                    <div className="absolute bottom-2 left-2">
-                      <Badge variant="secondary" className="text-xs bg-card/90">{v.color}</Badge>
-                    </div>
-                  )}
-                </div>
-
-                <CardContent className="p-5">
-                  <div className="mb-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className="font-semibold text-base leading-tight">
-                          {v.name || `${v.year} ${v.make} ${v.model}`}
-                        </h3>
-                        {v.name && (
-                          <p className="text-sm text-muted-foreground">{v.year} {v.make} {v.model}</p>
-                        )}
-                      </div>
-                      {v.trim && (
-                        <Badge variant="outline" className="text-xs flex-shrink-0">{v.trim}</Badge>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {v.platform && <span className="text-xs text-theme font-medium">{v.platform}</span>}
-                      {v.engine && <span className="text-xs text-muted-foreground">{v.engine}</span>}
-                      {v.drivetrain && <span className="text-xs text-muted-foreground">{v.drivetrain}</span>}
-                    </div>
-                    {v.mileage != null && (
-                      <p className="text-xs text-muted-foreground mt-1">{v.mileage.toLocaleString()} mi</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5 mb-4">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Build completion</span>
-                      <span className="font-medium text-foreground">{completion}%</span>
-                    </div>
-                    <Progress value={completion} className="h-1.5" />
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 text-center pb-4 border-b border-border">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Total Mods</p>
-                      <p className="text-sm font-bold">{v._count.modifications}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Installed</p>
-                      <p className="text-sm font-bold text-green-400">{formatCurrency(installedValue)}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Planned</p>
-                      <p className="text-sm font-bold text-theme">{formatCurrency(plannedValue)}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 pt-3">
-                    <Link href={`/garage/${v.id}`} className="flex-1">
-                      <Button variant="outline" size="sm" className="w-full gap-1.5">
-                        <Car className="w-3.5 h-3.5" />
-                        View Details
-                      </Button>
-                    </Link>
-                    <Link href={`/garage/${v.id}`} className="flex-1">
-                      <Button size="sm" className="w-full gap-1.5 bg-theme/10 text-theme hover:bg-theme hover:text-white border border-theme/20">
-                        <Wrench className="w-3.5 h-3.5" />
-                        Build Plan
-                      </Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+          {vehicles.map((v) => (
+            <VehicleCard
+              key={v.id}
+              vehicle={v}
+              onEdit={() => setEditVehicle(v)}
+              onDelete={() => handleDelete(v.id)}
+            />
+          ))}
         </div>
       )}
 
