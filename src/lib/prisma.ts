@@ -97,6 +97,21 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
       "value" TEXT NOT NULL,
       "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
+    // Vehicle social links — added in v1.3.2
+    `ALTER TABLE "Vehicle" ADD COLUMN "instagramUrl" TEXT`,
+    `ALTER TABLE "Vehicle" ADD COLUMN "facebookUrl" TEXT`,
+    // VehicleLink table — added in v1.3.2 for reference links tab
+    `CREATE TABLE IF NOT EXISTS "VehicleLink" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "vehicleId" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "url" TEXT NOT NULL,
+      "description" TEXT,
+      "category" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("vehicleId") REFERENCES "Vehicle"("id") ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS "VehicleLink_vehicleId_idx" ON "VehicleLink"("vehicleId")`,
     // MaintenanceLog.externalId — added in v1.3.1 for LubeLogger sync deduplication
     `ALTER TABLE "MaintenanceLog" ADD COLUMN "externalId" TEXT`,
     `CREATE INDEX IF NOT EXISTS "MaintenanceLog_externalId_idx" ON "MaintenanceLog"("externalId")`,

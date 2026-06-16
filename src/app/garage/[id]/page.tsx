@@ -17,7 +17,7 @@ import {
   Plus, ExternalLink, AlertCircle, Clock, Package,
   TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen, FileDown, FolderOpen,
   Kanban, FileSpreadsheet, Activity, CalendarDays, Images, X, ChevronLeft, ChevronRight,
-  Share2,
+  Share2, Link2 as LinkIcon, ShieldAlert, Instagram, Facebook, Tag,
 } from "lucide-react";
 import { AddModDialog } from "@/components/modifications/AddModDialog";
 import { AddMaintenanceDialog } from "@/components/maintenance/AddMaintenanceDialog";
@@ -27,6 +27,7 @@ import { VehicleFilesTab } from "@/components/vehicles/VehicleFilesTab";
 import { DynoTab } from "@/components/vehicles/DynoTab";
 import { KanbanView } from "@/components/vehicles/KanbanView";
 import { TuneLogsTab } from "@/components/vehicles/TuneLogsTab";
+import { LinksTab } from "@/components/vehicles/LinksTab";
 import { CSVImportDialog } from "@/components/modifications/CSVImportDialog";
 import {
   formatCurrency, formatDate, calcBuildCompletion, calcTotalModValue,
@@ -63,9 +64,20 @@ interface Vehicle {
   id: string; name?: string; year: number; make: string; model: string; trim?: string;
   platform?: string; engine?: string; transmission?: string; drivetrain?: string;
   vin?: string; mileage?: number; color?: string; photoUrl?: string; notes?: string;
+  instagramUrl?: string; facebookUrl?: string;
   modifications: Modification[];
   maintenanceLogs: MaintenanceLog[];
   budgets: Budget[];
+}
+
+interface RecallResult {
+  campaignNumber: string; component: string; summary: string;
+  consequence: string; remedy: string; nhtsaUrl: string; reportDate: string;
+}
+
+interface TrackedPrice {
+  id: string; title: string; currentPrice: number | null;
+  lowestPrice: number | null; highestPrice: number | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -241,7 +253,39 @@ export default function VehicleDetailPage() {
   };
 
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+  const [recallOpen, setRecallOpen] = useState(false);
+  const [recalls, setRecalls] = useState<RecallResult[] | null>(null);
+  const [recallLoading, setRecallLoading] = useState(false);
+  // url → tracked price, lazy-loaded when mod card is hovered
+  const [priceCache, setPriceCache] = useState<Record<string, TrackedPrice | null>>({});
   const { categories: modCategories } = useCategories();
+
+  const checkRecalls = async () => {
+    setRecallOpen(true);
+    if (recalls !== null) return; // already loaded
+    setRecallLoading(true);
+    try {
+      const res = await fetch(`/api/vehicles/${id}/recalls`);
+      const data = await res.json();
+      setRecalls(Array.isArray(data.recalls) ? data.recalls : []);
+    } catch {
+      setRecalls([]);
+    } finally {
+      setRecallLoading(false);
+    }
+  };
+
+  const lookupPrice = async (url: string) => {
+    if (url in priceCache) return;
+    setPriceCache((prev) => ({ ...prev, [url]: null })); // mark as loading
+    try {
+      const res = await fetch(`/api/products/lookup?url=${encodeURIComponent(url)}`);
+      const { product } = await res.json();
+      setPriceCache((prev) => ({ ...prev, [url]: product ?? null }));
+    } catch {
+      setPriceCache((prev) => ({ ...prev, [url]: null }));
+    }
+  };
 
   if (loading) {
     return (
@@ -357,6 +401,29 @@ export default function VehicleDetailPage() {
                 {mod.installDate && <span className="text-xs text-muted-foreground">Installed {formatDate(mod.installDate)}</span>}
               </div>
               {mod.notes && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{mod.notes}</p>}
+              {/* Price tracking badge */}
+              {mod.link && (() => {
+                const tracked = priceCache[mod.link];
+                if (tracked === undefined && mod.link) {
+                  // Trigger lazy lookup on first render of this mod card
+                  setTimeout(() => lookupPrice(mod.link!), 0);
+                }
+                if (!tracked) return null;
+                return (
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <Tag className="w-3 h-3 text-theme" />
+                    <span className="text-xs text-theme font-medium">
+                      Tracking: {tracked.currentPrice != null ? `$${tracked.currentPrice.toFixed(2)}` : "No price"}
+                    </span>
+                    {tracked.lowestPrice != null && tracked.currentPrice != null && tracked.currentPrice <= tracked.lowestPrice && (
+                      <span className="text-xs text-green-400">· Lowest ever!</span>
+                    )}
+                    {tracked.highestPrice != null && tracked.currentPrice != null && tracked.currentPrice < tracked.highestPrice && (
+                      <span className="text-xs text-blue-400">· {Math.round((tracked.highestPrice - tracked.currentPrice) / tracked.highestPrice * 100)}% off peak</span>
+                    )}
+                  </div>
+                );
+              })()}
               {mod.dependencies && mod.dependencies.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {mod.dependencies.map((dep) => (
@@ -403,7 +470,11 @@ export default function VehicleDetailPage() {
           <span className="text-muted-foreground">/</span>
           <span className="font-medium text-sm">{vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}</span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
+          <Button variant="outline" size="sm" onClick={checkRecalls} className="gap-1.5">
+            <ShieldAlert className="w-3.5 h-3.5" />
+            Recalls
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setBuildCardOpen(true)} className="gap-1.5">
             <Share2 className="w-3.5 h-3.5" />
             Build Card
@@ -495,6 +566,24 @@ export default function VehicleDetailPage() {
               )}
             </div>
 
+            {/* Social links */}
+            {(vehicle.instagramUrl || vehicle.facebookUrl) && (
+              <div className="flex gap-3 mt-2">
+                {vehicle.instagramUrl && (
+                  <a href={vehicle.instagramUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-pink-400 transition-colors">
+                    <Instagram className="w-3.5 h-3.5" /> Instagram
+                  </a>
+                )}
+                {vehicle.facebookUrl && (
+                  <a href={vehicle.facebookUrl} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-blue-400 transition-colors">
+                    <Facebook className="w-3.5 h-3.5" /> Facebook
+                  </a>
+                )}
+              </div>
+            )}
+
             {/* Value stats */}
             <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-border">
               <div>
@@ -516,25 +605,29 @@ export default function VehicleDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="mods">
-        <TabsList className="grid grid-cols-7 w-full max-w-4xl">
-          <TabsTrigger value="mods" className="gap-1.5">
-            <Wrench className="w-3.5 h-3.5" />
-            Mods ({vehicle.modifications.length})
+        <TabsList className="grid grid-cols-8 w-full max-w-4xl">
+          <TabsTrigger value="mods" className="gap-1">
+            <Wrench className="w-3 h-3" />
+            Mods
           </TabsTrigger>
-          <TabsTrigger value="budget" className="gap-1.5">
-            <DollarSign className="w-3.5 h-3.5" />
+          <TabsTrigger value="budget" className="gap-1">
+            <DollarSign className="w-3 h-3" />
             Budget
           </TabsTrigger>
-          <TabsTrigger value="maintenance" className="gap-1.5">
-            <ClipboardList className="w-3.5 h-3.5" />
-            Service ({vehicle.maintenanceLogs.length})
+          <TabsTrigger value="maintenance" className="gap-1">
+            <ClipboardList className="w-3 h-3" />
+            Service
           </TabsTrigger>
-          <TabsTrigger value="journal" className="gap-1.5">
-            <BookOpen className="w-3.5 h-3.5" />
+          <TabsTrigger value="journal" className="gap-1">
+            <BookOpen className="w-3 h-3" />
             Journal
           </TabsTrigger>
-          <TabsTrigger value="files" className="gap-1.5">
-            <FolderOpen className="w-3.5 h-3.5" />
+          <TabsTrigger value="links" className="gap-1">
+            <LinkIcon className="w-3 h-3" />
+            Links
+          </TabsTrigger>
+          <TabsTrigger value="files" className="gap-1">
+            <FolderOpen className="w-3 h-3" />
             Files
           </TabsTrigger>
           <TabsTrigger value="dyno" className="gap-1.5">
@@ -938,6 +1031,11 @@ export default function VehicleDetailPage() {
           </Card>
         </TabsContent>
 
+        {/* ===== LINKS TAB ===== */}
+        <TabsContent value="links" className="mt-4">
+          <LinksTab vehicleId={id} />
+        </TabsContent>
+
         {/* ===== FILES TAB ===== */}
         <TabsContent value="files" className="mt-4">
           <VehicleFilesTab vehicleId={id} />
@@ -986,6 +1084,78 @@ export default function VehicleDetailPage() {
         vehicleId={id}
         onImported={() => { setCsvImportOpen(false); load(); }}
       />
+
+      {/* Recall Dialog */}
+      {recallOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setRecallOpen(false)}>
+          <div className="bg-card rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-theme" />
+                <h3 className="font-semibold">NHTSA Recall Check</h3>
+                <span className="text-xs text-muted-foreground">
+                  {vehicle.year} {vehicle.make} {vehicle.model}
+                </span>
+              </div>
+              <button onClick={() => setRecallOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              {recallLoading ? (
+                <div className="flex items-center justify-center h-32 text-muted-foreground">
+                  <div className="w-5 h-5 border-2 border-theme border-t-transparent rounded-full animate-spin mr-3" />
+                  Checking NHTSA database…
+                </div>
+              ) : recalls === null || recalls.length === 0 ? (
+                <div className="text-center py-12">
+                  <ShieldAlert className="w-10 h-10 text-green-400 mx-auto mb-3" />
+                  <p className="font-semibold text-green-400">No open recalls found</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    NHTSA has no recalls on record for this vehicle.
+                  </p>
+                  <a
+                    href={`https://www.nhtsa.gov/vehicle/safety-issues/recalls#recalls`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-theme hover:underline mt-3"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Check NHTSA directly
+                  </a>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-amber-400 font-medium mb-3">
+                    {recalls.length} recall{recalls.length !== 1 ? "s" : ""} found
+                  </p>
+                  {recalls.map((r) => (
+                    <div key={r.campaignNumber} className="border border-amber-500/30 bg-amber-500/8 rounded-xl p-4">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div>
+                          <p className="font-semibold text-sm">{r.component}</p>
+                          <p className="text-xs text-muted-foreground">Campaign #{r.campaignNumber}</p>
+                        </div>
+                        <a
+                          href={r.nhtsaUrl}
+                          target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-xs text-theme hover:underline flex-shrink-0"
+                        >
+                          NHTSA <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                      {r.summary && <p className="text-xs text-muted-foreground mb-1"><span className="font-medium text-foreground">Summary: </span>{r.summary}</p>}
+                      {r.consequence && <p className="text-xs text-muted-foreground mb-1"><span className="font-medium text-foreground">Risk: </span>{r.consequence}</p>}
+                      {r.remedy && <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">Remedy: </span>{r.remedy}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-5 py-3 border-t border-border flex-shrink-0">
+              <p className="text-xs text-muted-foreground">Data from <a href="https://api.nhtsa.gov" target="_blank" rel="noopener noreferrer" className="text-theme hover:underline">NHTSA.gov</a> · Make/model based lookup — for VIN-specific results visit nhtsa.gov directly.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox */}
       {lightboxMod && (() => {
@@ -1047,22 +1217,44 @@ export default function VehicleDetailPage() {
               {/* Card content */}
               <div id="build-card" className="p-5">
                 {/* Header */}
-                <div className="flex items-center gap-4 mb-5">
+                <div className="flex items-start gap-4 mb-5">
                   {vehicle.photoUrl ? (
+                    // Use img (not Next/Image) so data: URIs and all URL types work in Electron
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={vehicle.photoUrl} alt={vehicleLabel} className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
+                    <img
+                      src={vehicle.photoUrl}
+                      alt={vehicleLabel}
+                      className="w-24 h-24 rounded-xl object-cover flex-shrink-0 bg-secondary"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                    />
                   ) : (
-                    <div className="w-20 h-20 rounded-xl bg-secondary flex items-center justify-center flex-shrink-0">
-                      <Car className="w-9 h-9 text-muted-foreground/40" />
+                    <div className="w-24 h-24 rounded-xl bg-secondary flex items-center justify-center flex-shrink-0">
+                      <Car className="w-10 h-10 text-muted-foreground/40" />
                     </div>
                   )}
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <h2 className="text-xl font-bold leading-tight">{vehicleLabel}</h2>
                     {vehicle.name && <p className="text-sm text-muted-foreground">{vehicle.year} {vehicle.make} {vehicle.model}</p>}
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
                       {vehicle.trim && <Badge variant="outline" className="text-xs">{vehicle.trim}</Badge>}
                       {vehicle.platform && <Badge className="text-xs bg-theme/10 text-theme border-theme/20">{vehicle.platform}</Badge>}
                     </div>
+                    {(vehicle.instagramUrl || vehicle.facebookUrl) && (
+                      <div className="flex gap-3 mt-2">
+                        {vehicle.instagramUrl && (
+                          <span className="text-xs text-pink-400 flex items-center gap-1">
+                            <Instagram className="w-3 h-3" />
+                            {vehicle.instagramUrl.replace(/^https?:\/\/(www\.)?instagram\.com\//i, "@").replace(/\/$/, "")}
+                          </span>
+                        )}
+                        {vehicle.facebookUrl && (
+                          <span className="text-xs text-blue-400 flex items-center gap-1">
+                            <Facebook className="w-3 h-3" />
+                            {vehicle.facebookUrl.replace(/^https?:\/\/(www\.)?facebook\.com\//i, "").replace(/\/$/, "")}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 

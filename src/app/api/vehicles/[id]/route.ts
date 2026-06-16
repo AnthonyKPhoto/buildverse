@@ -25,6 +25,8 @@ const vehicleUpdateSchema = z.object({
   color:        z.string().max(100).optional(),
   photoUrl:     safeUrl.optional(),
   notes:        z.string().max(50000).optional(),
+  instagramUrl: z.string().url().max(500).optional().or(z.literal("")),
+  facebookUrl:  z.string().url().max(500).optional().or(z.literal("")),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { VEHICLE_MAKES } from "@/lib/utils";
 import { ImageUpload } from "@/components/ui/ImageUpload";
-import { ScanLine } from "lucide-react";
+import { ScanLine, Instagram, Facebook } from "lucide-react";
 
 interface AddVehicleDialogProps {
   open: boolean;
@@ -19,6 +19,7 @@ interface AddVehicleDialogProps {
     id: string; name?: string; year: number; make: string; model: string; trim?: string;
     engine?: string; transmission?: string; drivetrain?: string; vin?: string;
     mileage?: number; platform?: string; color?: string; photoUrl?: string; notes?: string;
+    instagramUrl?: string; facebookUrl?: string;
   } | null;
 }
 
@@ -44,6 +45,8 @@ export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }:
     color: editVehicle?.color ?? "",
     photoUrl: editVehicle?.photoUrl ?? "",
     notes: editVehicle?.notes ?? "",
+    instagramUrl: editVehicle?.instagramUrl ?? "",
+    facebookUrl: editVehicle?.facebookUrl ?? "",
   });
 
   // Re-populate form whenever the dialog opens with a different vehicle
@@ -63,6 +66,8 @@ export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }:
       color: editVehicle?.color ?? "",
       photoUrl: editVehicle?.photoUrl ?? "",
       notes: editVehicle?.notes ?? "",
+      instagramUrl: editVehicle?.instagramUrl ?? "",
+      facebookUrl: editVehicle?.facebookUrl ?? "",
     });
   }, [editVehicle]);
 
@@ -124,6 +129,8 @@ export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }:
         color: form.color || undefined,
         photoUrl: form.photoUrl || undefined,
         notes: form.notes || undefined,
+        instagramUrl: form.instagramUrl || undefined,
+        facebookUrl: form.facebookUrl || undefined,
       };
 
       const url = editVehicle ? `/api/vehicles/${editVehicle.id}` : "/api/vehicles";
@@ -275,6 +282,18 @@ export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }:
             value={form.photoUrl}
             onChange={(v) => set("photoUrl", v)}
           />
+
+          {/* Social links */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="flex items-center gap-1.5"><Instagram className="w-3.5 h-3.5 text-pink-400" /> Instagram</Label>
+              <Input placeholder="https://instagram.com/yourbuild" value={form.instagramUrl} onChange={(e) => set("instagramUrl", e.target.value)} />
+            </div>
+            <div>
+              <Label className="flex items-center gap-1.5"><Facebook className="w-3.5 h-3.5 text-blue-400" /> Facebook</Label>
+              <Input placeholder="https://facebook.com/yourbuild" value={form.facebookUrl} onChange={(e) => set("facebookUrl", e.target.value)} />
+            </div>
+          </div>
 
           {/* Notes */}
           <div>
