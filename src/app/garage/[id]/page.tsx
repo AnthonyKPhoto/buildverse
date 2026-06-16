@@ -16,7 +16,7 @@ import {
   ArrowLeft, Car, Wrench, DollarSign, ClipboardList, Edit2, Trash2,
   Plus, ExternalLink, AlertCircle, Clock, Package,
   TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen, FileDown, FolderOpen,
-  Share2, Kanban, FileSpreadsheet,
+  Kanban, FileSpreadsheet, Activity,
 } from "lucide-react";
 import { AddModDialog } from "@/components/modifications/AddModDialog";
 import { AddMaintenanceDialog } from "@/components/maintenance/AddMaintenanceDialog";
@@ -24,8 +24,8 @@ import { AddVehicleDialog } from "@/components/vehicles/AddVehicleDialog";
 import { PDFExportDialog } from "@/components/vehicles/PDFExportDialog";
 import { VehicleFilesTab } from "@/components/vehicles/VehicleFilesTab";
 import { DynoTab } from "@/components/vehicles/DynoTab";
-import { ShareDialog } from "@/components/vehicles/ShareDialog";
 import { KanbanView } from "@/components/vehicles/KanbanView";
+import { TuneLogsTab } from "@/components/vehicles/TuneLogsTab";
 import { CSVImportDialog } from "@/components/modifications/CSVImportDialog";
 import {
   formatCurrency, formatDate, calcBuildCompletion, calcTotalModValue,
@@ -59,7 +59,6 @@ interface Vehicle {
   modifications: Modification[];
   maintenanceLogs: MaintenanceLog[];
   budgets: Budget[];
-  shareToken?: string | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -91,7 +90,6 @@ export default function VehicleDetailPage() {
   const [modFilter, setModFilter] = useState({ status: "ALL", category: "ALL", search: "" });
   const [modSort, setModSort] = useState<"date" | "name" | "price" | "status" | "priority">("date");
   const [modView, setModView] = useState<"normal" | "compact" | "kanban">("normal");
-  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [journalNotes, setJournalNotes] = useState("");
   const [savingJournal, setSavingJournal] = useState(false);
@@ -431,13 +429,9 @@ export default function VehicleDetailPage() {
                   {vehicle.drivetrain && <Badge variant="secondary">{vehicle.drivetrain}</Badge>}
                 </div>
               </div>
-              <div className="text-right flex flex-col items-end gap-2">
+              <div className="text-right">
                 <div className="text-2xl font-bold">{completion}%</div>
-                <div className="text-xs text-muted-foreground mb-1">Build Complete</div>
-                <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setShareDialogOpen(true)}>
-                  <Share2 className="w-3.5 h-3.5" />
-                  {vehicle.shareToken ? "Sharing" : "Share"}
-                </Button>
+                <div className="text-xs text-muted-foreground">Build Complete</div>
               </div>
             </div>
 
@@ -491,7 +485,7 @@ export default function VehicleDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="mods">
-        <TabsList className="grid grid-cols-6 w-full max-w-3xl">
+        <TabsList className="grid grid-cols-7 w-full max-w-4xl">
           <TabsTrigger value="mods" className="gap-1.5">
             <Wrench className="w-3.5 h-3.5" />
             Mods ({vehicle.modifications.length})
@@ -515,6 +509,10 @@ export default function VehicleDetailPage() {
           <TabsTrigger value="dyno" className="gap-1.5">
             <Gauge className="w-3.5 h-3.5" />
             Dyno
+          </TabsTrigger>
+          <TabsTrigger value="tunelogs" className="gap-1.5">
+            <Activity className="w-3.5 h-3.5" />
+            Logs
           </TabsTrigger>
         </TabsList>
 
@@ -809,6 +807,11 @@ export default function VehicleDetailPage() {
         <TabsContent value="dyno" className="mt-4">
           <DynoTab vehicleId={id} />
         </TabsContent>
+
+        {/* ===== TUNE LOGS TAB ===== */}
+        <TabsContent value="tunelogs" className="mt-4">
+          <TuneLogsTab vehicleId={id} />
+        </TabsContent>
       </Tabs>
 
       {/* Dialogs */}
@@ -836,14 +839,6 @@ export default function VehicleDetailPage() {
         open={pdfDialogOpen}
         onOpenChange={setPdfDialogOpen}
         vehicle={vehicle}
-      />
-      <ShareDialog
-        open={shareDialogOpen}
-        onOpenChange={setShareDialogOpen}
-        vehicleId={id}
-        vehicleName={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-        currentToken={vehicle.shareToken}
-        onTokenChange={(token) => setVehicle((v) => v ? { ...v, shareToken: token } : v)}
       />
       <CSVImportDialog
         open={csvImportOpen}

@@ -77,11 +77,20 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
       FOREIGN KEY ("vehicleId") REFERENCES "Vehicle"("id") ON DELETE CASCADE
     )`,
     `CREATE INDEX IF NOT EXISTS "DynoRun_vehicleId_idx" ON "DynoRun"("vehicleId")`,
-    // Vehicle.shareToken — added in v1.2.6
-    `ALTER TABLE "Vehicle" ADD COLUMN "shareToken" TEXT`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS "Vehicle_shareToken_key" ON "Vehicle"("shareToken")`,
     // TrackedProduct.alertThreshold — added in v1.2.6
     `ALTER TABLE "TrackedProduct" ADD COLUMN "alertThreshold" REAL`,
+    // TuneLog table — added in v1.2.8
+    `CREATE TABLE IF NOT EXISTS "TuneLog" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "vehicleId" TEXT NOT NULL,
+      "name" TEXT NOT NULL,
+      "filename" TEXT NOT NULL,
+      "originalName" TEXT NOT NULL,
+      "size" INTEGER NOT NULL,
+      "uploadedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("vehicleId") REFERENCES "Vehicle"("id") ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS "TuneLog_vehicleId_idx" ON "TuneLog"("vehicleId")`,
   ];
   for (const sql of stmts) {
     await prisma.$executeRawUnsafe(sql).catch(() => {});
