@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   ShoppingCart, Plus, RefreshCw, Trash2, ExternalLink,
-  Package, Clock, Search, Download, CheckCircle2,
+  Package, Clock, Search, Download, CheckCircle2, Bell, BellOff,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -22,8 +22,8 @@ interface PriceHistory { id: string; price: number; createdAt: string; }
 interface TrackedProduct {
   id: string; url: string; title: string; brand?: string; imageUrl?: string;
   description?: string; currentPrice?: number; lowestPrice?: number;
-  highestPrice?: number; vendor?: string; availability?: string; sku?: string;
-  lastChecked?: string; createdAt: string;
+  highestPrice?: number; alertThreshold?: number | null; vendor?: string;
+  availability?: string; sku?: string; lastChecked?: string; createdAt: string;
   priceHistory: PriceHistory[];
 }
 
@@ -47,6 +47,9 @@ export default function ProductsPage() {
   const [syncing, setSyncing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [alertFilter, setAlertFilter] = useState(false);
+  const [thresholdEditing, setThresholdEditing] = useState<string | null>(null);
+  const [thresholdInput, setThresholdInput] = useState("");
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = useCallback(() =>
@@ -178,11 +181,32 @@ export default function ProductsPage() {
     }
   };
 
-  const filtered = products.filter((p) =>
-    !search || p.title.toLowerCase().includes(search.toLowerCase()) ||
-    p.vendor?.toLowerCase().includes(search.toLowerCase()) ||
-    p.brand?.toLowerCase().includes(search.toLowerCase())
-  );
+  const saveThreshold = async (id: string, value: string) => {
+    const threshold = value.trim() ? parseFloat(value.replace("$", "")) : null;
+    const res = await fetch(`/api/products/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ alertThreshold: threshold }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setProducts((p) => p.map((x) => x.id === id ? { ...x, alertThreshold: updated.alertThreshold } : x));
+    }
+    setThresholdEditing(null);
+  };
+
+  const alertCount = products.filter((p) =>
+    p.alertThreshold != null && p.currentPrice != null && p.currentPrice <= p.alertThreshold
+  ).length;
+
+  const filtered = products.filter((p) => {
+    if (alertFilter) {
+      if (p.alertThreshold == null || p.currentPrice == null || p.currentPrice > p.alertThreshold) return false;
+    }
+    return !search || p.title.toLowerCase().includes(search.toLowerCase()) ||
+      p.vendor?.toLowerCase().includes(search.toLowerCase()) ||
+      p.brand?.toLowerCase().includes(search.toLowerCase());
+  });
 
   if (loading) {
     return (
@@ -234,6 +258,18 @@ export default function ProductsPage() {
             </Button>
           )}
 
+          {/* Alert filter */}
+          {alertCount > 0 && (
+            <Button
+              variant={alertFilter ? "default" : "outline"}
+              className={`gap-2 ${alertFilter ? "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" : ""}`}
+              onClick={() => setAlertFilter((f) => !f)}
+            >
+              <Bell className="w-3.5 h-3.5" />
+              {alertCount} Alert{alertCount !== 1 ? "s" : ""}
+            </Button>
+          )}
+
           {/* Add manual */}
           <Button onClick={() => setAddOpen(true)} className="bg-theme hover:brightness-90 gap-2">
             <Plus className="w-4 h-4" />
@@ -279,9 +315,9 @@ export default function ProductsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4">
           {filtered.map((product) => {
-            const isExpanded = expandedId === product.id;
-            const isAtLowest = product.currentPrice != null && product.lowestPrice != null &&
-              product.currentPrice <= product.lowestPrice;
+            const isExpanded   = expandedId === product.id;
+            const isAtLowest   = product.currentPrice != null && product.lowestPrice != null && product.currentPrice <= product.lowestPrice;
+            const alertTripped = product.alertThreshold != null && product.currentPrice != null && product.currentPrice <= product.alertThreshold;
             const stale = isStale(product.lastChecked);
 
             const chartData = [...product.priceHistory]
@@ -324,6 +360,11 @@ export default function ProductsPage() {
                             {isAtLowest && (
                               <Badge className="text-xs bg-green-500/20 text-green-400 border-green-500/30 gap-1">
                                 <CheckCircle2 className="w-3 h-3" />Lowest Price!
+                              </Badge>
+                            )}
+                            {alertTripped && (
+                              <Badge className="text-xs bg-green-500/20 text-green-400 border-green-500/30 gap-1">
+                                <Bell className="w-3 h-3" />Price Alert!
                               </Badge>
                             )}
                           </div>
@@ -369,11 +410,40 @@ export default function ProductsPage() {
                       >
                         <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === product.id ? "animate-spin" : ""}`} />
                       </Button>
+                      <Button
+                        size="sm" variant="ghost"
+                        className={`h-7 w-7 p-0 ${alertTripped ? "text-green-400" : product.alertThreshold != null ? "text-theme" : ""}`}
+                        title={product.alertThreshold != null ? `Alert at ${formatCurrency(product.alertThreshold)} — click to edit` : "Set price alert"}
+                        onClick={() => { setThresholdEditing(product.id); setThresholdInput(product.alertThreshold?.toString() ?? ""); }}
+                      >
+                        {product.alertThreshold != null ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
+                      </Button>
                       <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:text-destructive" onClick={() => handleDelete(product.id)} title="Stop tracking">
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>
+
+                  {/* Alert threshold editor */}
+                  {thresholdEditing === product.id && (
+                    <div className="mt-3 pt-3 border-t border-border flex items-center gap-2">
+                      <Bell className="w-3.5 h-3.5 text-theme shrink-0" />
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">Alert when price drops to</span>
+                      <input
+                        className="w-24 px-2 py-1 text-xs rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="$0.00"
+                        value={thresholdInput}
+                        onChange={(e) => setThresholdInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveThreshold(product.id, thresholdInput); if (e.key === "Escape") setThresholdEditing(null); }}
+                        autoFocus
+                      />
+                      <button className="text-xs text-theme hover:underline" onClick={() => saveThreshold(product.id, thresholdInput)}>Save</button>
+                      {product.alertThreshold != null && (
+                        <button className="text-xs text-muted-foreground hover:text-destructive" onClick={() => saveThreshold(product.id, "")}>Remove</button>
+                      )}
+                      <button className="text-xs text-muted-foreground" onClick={() => setThresholdEditing(null)}>Cancel</button>
+                    </div>
+                  )}
 
                   {/* Price history chart */}
                   {chartData.length > 1 && (

@@ -23,6 +23,7 @@ model Vehicle {
   color        String?
   photoUrl     String?
   notes        String?
+  shareToken   String?  @unique
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -30,6 +31,7 @@ model Vehicle {
   maintenanceLogs MaintenanceLog[]
   budgets         Budget[]
   files           VehicleFile[]
+  dynoRuns        DynoRun[]
 }
 
 model Modification {
@@ -79,15 +81,16 @@ model TrackedProduct {
   brand        String?
   imageUrl     String?
   description  String?
-  currentPrice Float?
-  lowestPrice  Float?
-  highestPrice Float?
-  lastChecked  DateTime?
-  vendor       String?
-  availability String?
-  sku          String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  currentPrice    Float?
+  lowestPrice     Float?
+  highestPrice    Float?
+  alertThreshold  Float?
+  lastChecked     DateTime?
+  vendor          String?
+  availability    String?
+  sku             String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   priceHistory PriceHistory[]
 }
@@ -132,6 +135,21 @@ model MaintenanceLog {
   updatedAt DateTime  @updatedAt
 
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+}
+
+model DynoRun {
+  id        String   @id @default(cuid())
+  vehicleId String
+  date      DateTime
+  hp        Float?
+  torque    Float?
+  label     String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
 }
 
 model VehicleFile {

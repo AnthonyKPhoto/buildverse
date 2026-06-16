@@ -16,12 +16,17 @@ import {
   ArrowLeft, Car, Wrench, DollarSign, ClipboardList, Edit2, Trash2,
   Plus, ExternalLink, AlertCircle, Clock, Package,
   TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen, FileDown, FolderOpen,
+  Share2, Kanban, FileSpreadsheet,
 } from "lucide-react";
 import { AddModDialog } from "@/components/modifications/AddModDialog";
 import { AddMaintenanceDialog } from "@/components/maintenance/AddMaintenanceDialog";
 import { AddVehicleDialog } from "@/components/vehicles/AddVehicleDialog";
 import { PDFExportDialog } from "@/components/vehicles/PDFExportDialog";
 import { VehicleFilesTab } from "@/components/vehicles/VehicleFilesTab";
+import { DynoTab } from "@/components/vehicles/DynoTab";
+import { ShareDialog } from "@/components/vehicles/ShareDialog";
+import { KanbanView } from "@/components/vehicles/KanbanView";
+import { CSVImportDialog } from "@/components/modifications/CSVImportDialog";
 import {
   formatCurrency, formatDate, calcBuildCompletion, calcTotalModValue,
   getStatusConfig, getPriorityConfig, MOD_CATEGORIES, MOD_STATUSES,
@@ -54,6 +59,7 @@ interface Vehicle {
   modifications: Modification[];
   maintenanceLogs: MaintenanceLog[];
   budgets: Budget[];
+  shareToken?: string | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -84,7 +90,9 @@ export default function VehicleDetailPage() {
   const [editLog, setEditLog] = useState<MaintenanceLog | null>(null);
   const [modFilter, setModFilter] = useState({ status: "ALL", category: "ALL", search: "" });
   const [modSort, setModSort] = useState<"date" | "name" | "price" | "status" | "priority">("date");
-  const [modView, setModView] = useState<"normal" | "compact">("normal");
+  const [modView, setModView] = useState<"normal" | "compact" | "kanban">("normal");
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [journalNotes, setJournalNotes] = useState("");
   const [savingJournal, setSavingJournal] = useState(false);
   const [budgetForm, setBudgetForm] = useState({ category: "", planned: "", actual: "" });
@@ -144,7 +152,7 @@ export default function VehicleDetailPage() {
   useEffect(() => { load(); }, [id]);
   useEffect(() => {
     const saved = localStorage.getItem("bv-mod-view");
-    if (saved === "compact" || saved === "normal") setModView(saved);
+    if (saved === "compact" || saved === "normal" || saved === "kanban") setModView(saved);
   }, []);
 
   const deleteMod = async (modId: string) => {
@@ -215,6 +223,14 @@ export default function VehicleDetailPage() {
     if (!confirm(`Delete ${vehicle?.name || vehicle?.make} and all its data? This cannot be undone.`)) return;
     const res = await fetch(`/api/vehicles/${id}`, { method: "DELETE" });
     if (res.ok) { router.push("/garage"); toast({ title: "Vehicle removed" }); }
+  };
+
+  const cycleModStatus = async (modId: string, newStatus: string) => {
+    setVehicle((v) => v ? { ...v, modifications: v.modifications.map((m) => m.id === modId ? { ...m, status: newStatus } : m) } : v);
+    await fetch(`/api/modifications/${modId}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: newStatus }),
+    }).catch(() => {});
   };
 
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
@@ -415,9 +431,13 @@ export default function VehicleDetailPage() {
                   {vehicle.drivetrain && <Badge variant="secondary">{vehicle.drivetrain}</Badge>}
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-right flex flex-col items-end gap-2">
                 <div className="text-2xl font-bold">{completion}%</div>
-                <div className="text-xs text-muted-foreground">Build Complete</div>
+                <div className="text-xs text-muted-foreground mb-1">Build Complete</div>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setShareDialogOpen(true)}>
+                  <Share2 className="w-3.5 h-3.5" />
+                  {vehicle.shareToken ? "Sharing" : "Share"}
+                </Button>
               </div>
             </div>
 
@@ -471,7 +491,7 @@ export default function VehicleDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="mods">
-        <TabsList className="grid grid-cols-5 w-full max-w-2xl">
+        <TabsList className="grid grid-cols-6 w-full max-w-3xl">
           <TabsTrigger value="mods" className="gap-1.5">
             <Wrench className="w-3.5 h-3.5" />
             Mods ({vehicle.modifications.length})
@@ -491,6 +511,10 @@ export default function VehicleDetailPage() {
           <TabsTrigger value="files" className="gap-1.5">
             <FolderOpen className="w-3.5 h-3.5" />
             Files
+          </TabsTrigger>
+          <TabsTrigger value="dyno" className="gap-1.5">
+            <Gauge className="w-3.5 h-3.5" />
+            Dyno
           </TabsTrigger>
         </TabsList>
 
@@ -536,12 +560,19 @@ export default function VehicleDetailPage() {
             <Button
               variant="outline" size="sm"
               className="px-2.5"
-              onClick={() => { const next = modView === "normal" ? "compact" : "normal"; setModView(next); localStorage.setItem("bv-mod-view", next); }}
-              title={modView === "normal" ? "Switch to compact view" : "Switch to normal view"}
+              onClick={() => {
+                const next = modView === "normal" ? "compact" : modView === "compact" ? "kanban" : "normal";
+                setModView(next); localStorage.setItem("bv-mod-view", next);
+              }}
+              title={modView === "normal" ? "Switch to compact" : modView === "compact" ? "Switch to kanban" : "Switch to normal"}
             >
-              {modView === "normal" ? <LayoutList className="w-4 h-4" /> : <Grid2X2 className="w-4 h-4" />}
+              {modView === "normal" ? <LayoutList className="w-4 h-4" /> : modView === "compact" ? <Kanban className="w-4 h-4" /> : <Grid2X2 className="w-4 h-4" />}
             </Button>
-            <div className="ml-auto">
+            <div className="ml-auto flex gap-2">
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCsvImportOpen(true)}>
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                Import CSV
+              </Button>
               <Button onClick={() => setAddModOpen(true)} className="bg-theme hover:brightness-90 gap-2">
                 <Plus className="w-4 h-4" />
                 Add Modification
@@ -549,8 +580,13 @@ export default function VehicleDetailPage() {
             </div>
           </div>
 
-          {/* Mod list */}
-          {sortedMods.length === 0 ? (
+          {/* Kanban view */}
+          {modView === "kanban" && (
+            <KanbanView mods={filteredMods} onStatusChange={cycleModStatus} />
+          )}
+
+          {/* Mod list (hidden in kanban mode) */}
+          {modView !== "kanban" && (sortedMods.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center py-12 text-center">
                 <Wrench className="w-10 h-10 text-muted-foreground/40 mb-3" />
@@ -582,7 +618,7 @@ export default function VehicleDetailPage() {
                 </div>
               );
             })
-          )}
+          ))}
         </TabsContent>
 
         {/* ===== BUDGET TAB ===== */}
@@ -768,6 +804,11 @@ export default function VehicleDetailPage() {
         <TabsContent value="files" className="mt-4">
           <VehicleFilesTab vehicleId={id} />
         </TabsContent>
+
+        {/* ===== DYNO TAB ===== */}
+        <TabsContent value="dyno" className="mt-4">
+          <DynoTab vehicleId={id} />
+        </TabsContent>
       </Tabs>
 
       {/* Dialogs */}
@@ -795,6 +836,20 @@ export default function VehicleDetailPage() {
         open={pdfDialogOpen}
         onOpenChange={setPdfDialogOpen}
         vehicle={vehicle}
+      />
+      <ShareDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        vehicleId={id}
+        vehicleName={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+        currentToken={vehicle.shareToken}
+        onTokenChange={(token) => setVehicle((v) => v ? { ...v, shareToken: token } : v)}
+      />
+      <CSVImportDialog
+        open={csvImportOpen}
+        onOpenChange={setCsvImportOpen}
+        vehicleId={id}
+        onImported={() => { setCsvImportOpen(false); load(); }}
       />
     </div>
   );
