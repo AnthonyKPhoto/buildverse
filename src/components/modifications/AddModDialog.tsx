@@ -10,9 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { MOD_CATEGORIES, INSTALL_DIFFICULTIES } from "@/lib/utils";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
-import { Link2, Loader2, CheckCircle2, ArrowLeft, Sparkles } from "lucide-react";
+import { Link2, Loader2, CheckCircle2, ArrowLeft, Sparkles, ChevronRight } from "lucide-react";
 
 interface Suggestions { brands: string[]; vendors: string[]; names: string[]; }
+interface VehicleMod { id: string; name: string; status: string; category: string; }
 
 interface Modification {
   id: string; vehicleId: string; name: string; category: string; vendor?: string; brand?: string;
@@ -118,6 +119,8 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
   const [fetchingImage, setFetchingImage] = useState(false);
   const [form, setForm] = useState(formFromMod(editMod));
   const [suggestions, setSuggestions] = useState<Suggestions>({ brands: [], vendors: [], names: [] });
+  const [vehicleMods, setVehicleMods] = useState<VehicleMod[]>([]);
+  const [dependsOn, setDependsOn] = useState<string[]>([]);
 
   // URL step
   const [step, setStep] = useState<"url" | "form">(editMod ? "form" : "url");
@@ -140,10 +143,29 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
       setUrlInput("");
       setScraping(false);
       setAutoFilled([]);
+      setDependsOn([]);
+
+      // Fetch all other mods for this vehicle for dependency selector
+      fetch(`/api/vehicles/${vehicleId}/modifications`)
+        .then((r) => r.json())
+        .then((data: VehicleMod[]) => {
+          if (Array.isArray(data)) setVehicleMods(data.filter((m) => m.id !== editMod?.id));
+        })
+        .catch(() => {});
+
+      // Fetch existing dependencies when editing
+      if (editMod) {
+        fetch(`/api/modifications/${editMod.id}/dependencies`)
+          .then((r) => r.json())
+          .then((data: { id: string }[]) => {
+            if (Array.isArray(data)) setDependsOn(data.map((m) => m.id));
+          })
+          .catch(() => {});
+      }
     } else {
       abortRef.current?.abort();
     }
-  }, [open, editMod]);
+  }, [open, editMod, vehicleId]);
 
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -242,6 +264,13 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
       const res    = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error(await res.text());
       const mod = await res.json();
+
+      // Sync dependencies
+      await fetch(`/api/modifications/${mod.id}/dependencies`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dependsOn }),
+      }).catch(() => {});
 
       if (form.link) {
         const autoTrack = localStorage.getItem("bv_autoTrackProducts");
@@ -520,6 +549,47 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
               />
               <Label htmlFor="diyInstall" className="cursor-pointer">DIY Install</Label>
             </div>
+
+            {/* Dependencies */}
+            {vehicleMods.length > 0 && (
+              <details className="group">
+                <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground list-none select-none">
+                  <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90 shrink-0" />
+                  Dependencies
+                  {dependsOn.length > 0 && (
+                    <span className="ml-1 text-xs bg-theme/15 text-theme px-1.5 py-0.5 rounded-full">
+                      {dependsOn.length} required
+                    </span>
+                  )}
+                </summary>
+                <div className="mt-2 space-y-0.5 max-h-40 overflow-y-auto border border-input rounded-xl p-2">
+                  <p className="text-xs text-muted-foreground px-2 pb-1.5">Select mods that must be installed before this one</p>
+                  {vehicleMods.map((m) => (
+                    <label key={m.id} className="flex items-center gap-2 cursor-pointer hover:bg-secondary/40 px-2 py-1.5 rounded-lg transition-colors">
+                      <input
+                        type="checkbox"
+                        className="rounded border-input accent-theme"
+                        checked={dependsOn.includes(m.id)}
+                        onChange={(e) => {
+                          setDependsOn((prev) =>
+                            e.target.checked ? [...prev, m.id] : prev.filter((id) => id !== m.id)
+                          );
+                        }}
+                      />
+                      <span className="text-sm flex-1 truncate">{m.name}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{m.category}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full border shrink-0 ${
+                        m.status === "INSTALLED" ? "bg-green-500/15 text-green-400 border-green-500/25" :
+                        m.status === "PLANNED" ? "bg-slate-500/15 text-slate-400 border-slate-500/25" :
+                        "bg-yellow-500/15 text-yellow-400 border-yellow-500/25"
+                      }`}>
+                        {m.status.charAt(0) + m.status.slice(1).toLowerCase()}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </details>
+            )}
 
             {/* Notes */}
             <div>

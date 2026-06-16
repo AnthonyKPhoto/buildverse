@@ -7,10 +7,11 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Car, DollarSign,
   ShoppingBag, Settings, ClipboardList, Store,
-  ArrowUpCircle, Loader2,
+  ArrowUpCircle, Loader2, Search,
 } from "lucide-react";
 import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
+import { GlobalSearch } from "@/components/layout/GlobalSearch";
 
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
@@ -33,7 +34,20 @@ export function Sidebar() {
   const { toast } = useToast();
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [update, setUpdate] = useState<UpdateStatus>({ status: "idle" });
+  const [searchOpen, setSearchOpen] = useState(false);
   const toastedRef = useRef<Set<string>>(new Set());
+
+  // Cmd+K / Ctrl+K global shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   useEffect(() => {
     Promise.allSettled([
@@ -104,6 +118,7 @@ export function Sidebar() {
   const downloaded  = update.status === "downloaded";
 
   return (
+    <>
     <aside
       className="flex-shrink-0 flex flex-col border-r border-border bg-card"
       style={{ width: "var(--sidebar-width, 240px)" }}
@@ -124,6 +139,18 @@ export function Sidebar() {
         <p className="px-3 mb-2 text-2xs font-semibold text-muted-foreground uppercase tracking-widest">
           Menu
         </p>
+
+        {/* Global search */}
+        <button
+          onClick={() => setSearchOpen(true)}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all duration-150 mb-1"
+        >
+          <Search className="w-[18px] h-[18px] shrink-0 text-muted-foreground" strokeWidth={1.8} />
+          Search
+          <kbd className="ml-auto text-2xs text-muted-foreground/40 border border-border rounded px-1 py-0.5 font-sans">
+            ⌘K
+          </kbd>
+        </button>
 
         {navItems.map(({ href, label, icon: Icon, countKey }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -230,5 +257,7 @@ export function Sidebar() {
         </p>
       </div>
     </aside>
+    <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+    </>
   );
 }

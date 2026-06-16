@@ -32,7 +32,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     const vehicle = await prisma.vehicle.findUnique({
       where: { id: params.id },
       include: {
-        modifications: { orderBy: [{ category: "asc" }, { createdAt: "desc" }] },
+        modifications: {
+          orderBy: [{ category: "asc" }, { createdAt: "desc" }],
+          include: {
+            dependencies: {
+              include: { dependsOn: { select: { id: true, name: true, status: true } } },
+            },
+          },
+        },
         maintenanceLogs: { orderBy: { date: "desc" } },
         budgets: true,
       },

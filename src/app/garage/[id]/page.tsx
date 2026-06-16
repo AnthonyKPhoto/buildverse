@@ -33,6 +33,10 @@ import {
 } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
+interface ModDep {
+  id: string;
+  dependsOn: { id: string; name: string; status: string };
+}
 interface Modification {
   id: string; vehicleId: string; name: string; category: string; vendor?: string; brand?: string;
   price?: number | null; actualPrice?: number | null; notes?: string; priority: string;
@@ -40,6 +44,7 @@ interface Modification {
   installDate?: string; installMileage?: number | null; laborCost?: number | null;
   diyInstall: boolean; partNumber?: string; orderNumber?: string;
   createdAt: string; updatedAt: string;
+  dependencies?: ModDep[];
 }
 
 interface MaintenanceLog {
@@ -347,6 +352,23 @@ export default function VehicleDetailPage() {
                 {mod.installDate && <span className="text-xs text-muted-foreground">Installed {formatDate(mod.installDate)}</span>}
               </div>
               {mod.notes && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{mod.notes}</p>}
+              {mod.dependencies && mod.dependencies.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {mod.dependencies.map((dep) => (
+                    <span
+                      key={dep.id}
+                      title={`Requires: ${dep.dependsOn.name} (${dep.dependsOn.status})`}
+                      className={`text-xs px-1.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                        dep.dependsOn.status === "INSTALLED"
+                          ? "bg-green-500/10 text-green-400/70 border-green-500/20"
+                          : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                      }`}
+                    >
+                      {dep.dependsOn.status !== "INSTALLED" && "⚠ "}Requires: {dep.dependsOn.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex gap-1 flex-shrink-0">
               {mod.link && (

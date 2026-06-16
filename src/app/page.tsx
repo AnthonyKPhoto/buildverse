@@ -9,8 +9,19 @@ import { Badge } from "@/components/ui/badge";
 import {
   Car, DollarSign, TrendingUp, Plus, ArrowRight,
   Zap, ShoppingCart, ClipboardList, Package, BarChart3,
+  Wrench, FolderOpen, Bell,
 } from "lucide-react";
 import { formatCurrency, calcBuildCompletion } from "@/lib/utils";
+
+type ActivityType = "mod" | "service" | "file" | "alert";
+interface ActivityItem {
+  type: ActivityType;
+  id: string;
+  text: string;
+  sub: string;
+  vehicleId: string | null;
+  createdAt: string;
+}
 
 interface Vehicle {
   id: string;
@@ -25,18 +36,28 @@ interface Vehicle {
   _count: { modifications: number; maintenanceLogs: number };
 }
 
+const ACTIVITY_ICONS: Record<ActivityType, React.ComponentType<{ className?: string }>> = {
+  mod: Wrench, service: ClipboardList, file: FolderOpen, alert: Bell,
+};
+const ACTIVITY_COLORS: Record<ActivityType, string> = {
+  mod: "bg-theme/10 text-theme", service: "bg-blue-500/10 text-blue-400",
+  file: "bg-purple-500/10 text-purple-400", alert: "bg-green-500/10 text-green-400",
+};
+
 export default function DashboardPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/vehicles")
-      .then((r) => r.json())
-      .then((v) => {
-        setVehicles(Array.isArray(v) ? v : []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    Promise.all([
+      fetch("/api/vehicles").then((r) => r.json()),
+      fetch("/api/activity").then((r) => r.json()),
+    ]).then(([v, a]) => {
+      setVehicles(Array.isArray(v) ? v : []);
+      setActivity(Array.isArray(a) ? a : []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   // Compute stats directly from vehicles data — avoids a separate DB call
@@ -190,6 +211,36 @@ export default function DashboardPage() {
             </Link>
           </CardContent>
         </Card>
+      )}
+
+      {/* Recent Activity */}
+      {activity.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">Recent Activity</h2>
+          <div className="space-y-1.5">
+            {activity.map((item) => {
+              const Icon = ACTIVITY_ICONS[item.type];
+              const colorClass = ACTIVITY_COLORS[item.type];
+              const href = item.vehicleId ? `/garage/${item.vehicleId}` : "/products";
+              return (
+                <Link key={item.id} href={href}>
+                  <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary/50 transition-colors group">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${colorClass}`}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.text}</p>
+                      <p className="text-xs text-muted-foreground truncate">{item.sub}</p>
+                    </div>
+                    <span className="text-2xs text-muted-foreground/50 shrink-0">
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* Quick links */}

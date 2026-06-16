@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   ShoppingCart, Plus, RefreshCw, Trash2, ExternalLink,
-  Package, Clock, Search, Download, CheckCircle2, Bell, BellOff,
+  Package, Clock, Search, Download, CheckCircle2, Bell, BellOff, Percent, DollarSign,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -45,11 +45,15 @@ export default function ProductsPage() {
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+
   const [alertFilter, setAlertFilter] = useState(false);
   const [thresholdEditing, setThresholdEditing] = useState<string | null>(null);
   const [thresholdInput, setThresholdInput] = useState("");
+  // Bulk alert
+  const [bulkMode, setBulkMode] = useState<"fixed" | "pct">("pct");
+  const [bulkValue, setBulkValue] = useState("");
+  const [bulkApplying, setBulkApplying] = useState(false);
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = useCallback(() =>
@@ -181,6 +185,29 @@ export default function ProductsPage() {
     }
   };
 
+  const handleBulkAlert = async () => {
+    const num = parseFloat(bulkValue);
+    if (isNaN(num) || num < 0) { toast({ title: "Enter a valid number", variant: "destructive" }); return; }
+    if (bulkMode === "pct" && num > 100) { toast({ title: "Percentage must be 0–100", variant: "destructive" }); return; }
+    setBulkApplying(true);
+    try {
+      const res = await fetch("/api/products/bulk-alert", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: bulkMode, value: num }),
+      });
+      if (!res.ok) throw new Error();
+      const updated = await res.json();
+      setProducts(Array.isArray(updated) ? updated : products);
+      setBulkValue("");
+      toast({ title: `Alerts set on ${products.length} product${products.length !== 1 ? "s" : ""}` });
+    } catch {
+      toast({ title: "Failed to set alerts", variant: "destructive" });
+    } finally {
+      setBulkApplying(false);
+    }
+  };
+
   const saveThreshold = async (id: string, value: string) => {
     const threshold = value.trim() ? parseFloat(value.replace("$", "")) : null;
     const res = await fetch(`/api/products/${id}`, {
@@ -278,16 +305,57 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Search */}
+      {/* Search + Bulk alert row */}
       {products.length > 0 && (
-        <div className="relative max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search products…"
-            className="pl-8"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="relative w-52 shrink-0">
+            <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Search products…" className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+
+          {/* Bulk alert setter */}
+          <div className="flex items-center gap-2 p-2 rounded-xl border border-border bg-card flex-wrap">
+            <span className="text-xs text-muted-foreground font-medium whitespace-nowrap">Bulk alert:</span>
+            <div className="flex rounded-lg overflow-hidden border border-input text-xs">
+              <button
+                onClick={() => setBulkMode("pct")}
+                className={`px-2.5 py-1.5 flex items-center gap-1 transition-colors ${bulkMode === "pct" ? "bg-theme text-white" : "hover:bg-secondary"}`}
+              >
+                <Percent className="w-3 h-3" /> % off
+              </button>
+              <button
+                onClick={() => setBulkMode("fixed")}
+                className={`px-2.5 py-1.5 flex items-center gap-1 transition-colors ${bulkMode === "fixed" ? "bg-theme text-white" : "hover:bg-secondary"}`}
+              >
+                <DollarSign className="w-3 h-3" /> fixed $
+              </button>
+            </div>
+            <div className="relative w-24">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
+                {bulkMode === "pct" ? "%" : "$"}
+              </span>
+              <input
+                type="number"
+                min="0"
+                max={bulkMode === "pct" ? "100" : undefined}
+                step="0.01"
+                placeholder={bulkMode === "pct" ? "10" : "0.00"}
+                value={bulkValue}
+                onChange={(e) => setBulkValue(e.target.value)}
+                className="w-full pl-5 pr-2 py-1.5 text-xs rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <button
+              onClick={handleBulkAlert}
+              disabled={bulkApplying || !bulkValue.trim()}
+              className="text-xs px-3 py-1.5 rounded-lg bg-theme text-white hover:brightness-90 disabled:opacity-50 transition-all whitespace-nowrap"
+            >
+              {bulkApplying ? "Setting…" : `Set all ${products.length}`}
+            </button>
+            <span className="text-xs text-muted-foreground/60 hidden md:inline">
+              {bulkMode === "pct" ? "Alert when price drops by this %" : "Alert when price drops below this $"}
+            </span>
+          </div>
         </div>
       )}
 
@@ -315,7 +383,6 @@ export default function ProductsPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4">
           {filtered.map((product) => {
-            const isExpanded   = expandedId === product.id;
             const isAtLowest   = product.currentPrice != null && product.lowestPrice != null && product.currentPrice <= product.lowestPrice;
             const alertTripped = product.alertThreshold != null && product.currentPrice != null && product.currentPrice <= product.alertThreshold;
             const stale = isStale(product.lastChecked);
@@ -445,32 +512,22 @@ export default function ProductsPage() {
                     </div>
                   )}
 
-                  {/* Price history chart */}
+                  {/* Price history chart — always visible when 2+ points */}
                   {chartData.length > 1 && (
                     <div className="mt-3 pt-3 border-t border-border">
-                      <Button
-                        variant="ghost" size="sm"
-                        className="text-xs text-muted-foreground h-6 px-0"
-                        onClick={() => setExpandedId(isExpanded ? null : product.id)}
-                      >
-                        {isExpanded ? "Hide price history" : `Show price history (${chartData.length} data points)`}
-                      </Button>
-                      {isExpanded && (
-                        <div className="mt-3">
-                          <ResponsiveContainer width="100%" height={160}>
-                            <LineChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(217 33% 17%)" />
-                              <XAxis dataKey="date" tick={{ fill: "hsl(215 20% 55%)", fontSize: 10 }} />
-                              <YAxis tick={{ fill: "hsl(215 20% 55%)", fontSize: 10 }} tickFormatter={(v) => `$${v}`} />
-                              <Tooltip
-                                contentStyle={{ backgroundColor: "hsl(222 47% 9%)", border: "1px solid hsl(217 33% 17%)", borderRadius: "8px", fontSize: 12 }}
-                                formatter={(v: number) => [formatCurrency(v), "Price"]}
-                              />
-                              <Line type="monotone" dataKey="price" stroke="hsl(var(--theme))" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--theme))" }} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-                      )}
+                      <p className="text-xs text-muted-foreground mb-2">{chartData.length} price points</p>
+                      <ResponsiveContainer width="100%" height={130}>
+                        <LineChart data={chartData} margin={{ top: 4, right: 5, left: 0, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(217 33% 17%)" />
+                          <XAxis dataKey="date" tick={{ fill: "hsl(215 20% 55%)", fontSize: 10 }} />
+                          <YAxis tick={{ fill: "hsl(215 20% 55%)", fontSize: 10 }} tickFormatter={(v) => `$${v}`} width={48} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "hsl(222 47% 9%)", border: "1px solid hsl(217 33% 17%)", borderRadius: "8px", fontSize: 12 }}
+                            formatter={(v: number) => [formatCurrency(v), "Price"]}
+                          />
+                          <Line type="monotone" dataKey="price" stroke="hsl(var(--theme))" strokeWidth={2} dot={{ r: 3, fill: "hsl(var(--theme))" }} />
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
                   )}
                 </CardContent>
