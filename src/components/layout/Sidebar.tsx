@@ -2,13 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Car, DollarSign,
   ShoppingBag, Settings, ClipboardList, Store,
+  ArrowUpCircle, Loader2,
 } from "lucide-react";
 import Image from "next/image";
+import { useToast } from "@/hooks/use-toast";
+
+type UpdateStatus =
+  | { status: "idle" } | { status: "checking" } | { status: "current" }
+  | { status: "available"; version: string }
+  | { status: "downloading"; percent: number }
+  | { status: "downloaded"; version: string }
+  | { status: "error" };
 
 const navItems = [
   { href: "/",            label: "Dashboard",       icon: LayoutDashboard, countKey: null },
@@ -21,7 +30,10 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { toast } = useToast();
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [update, setUpdate] = useState<UpdateStatus>({ status: "idle" });
+  const toastedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     Promise.allSettled([
@@ -34,6 +46,35 @@ export function Sidebar() {
       });
     });
   }, []);
+
+  useEffect(() => {
+    const api = (window as Window & { electronAPI?: { update: { onStatus: (cb: (s: UpdateStatus) => void) => () => void; install: () => void } } }).electronAPI;
+    if (!api?.update?.onStatus) return;
+
+    const cleanup = api.update.onStatus((info) => {
+      setUpdate(info);
+
+      // Toast once per version event to avoid re-toasting on re-render
+      const key = info.status + ("version" in info ? info.version : "");
+      if (toastedRef.current.has(key)) return;
+      toastedRef.current.add(key);
+
+      if (info.status === "available") {
+        toast({ title: `Update v${info.version} available`, description: "Downloading in the background…" });
+      } else if (info.status === "downloaded") {
+        toast({
+          title: `BuildVerse v${info.version} ready`,
+          description: "Click 'Restart to install' in the sidebar.",
+          duration: 8000,
+        });
+      }
+    });
+
+    return cleanup;
+  }, [toast]);
+
+  const downloading = update.status === "downloading";
+  const downloaded  = update.status === "downloaded";
 
   return (
     <aside
@@ -98,7 +139,44 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-3 py-3 border-t border-border shrink-0 space-y-0.5">
+      <div className="px-3 py-3 border-t border-border shrink-0 space-y-1.5">
+
+        {/* Downloading progress bar */}
+        {downloading && (
+          <div className="px-3 py-2.5 rounded-xl bg-secondary/60 border border-border">
+            <div className="flex items-center gap-2 mb-2">
+              <Loader2 className="w-3.5 h-3.5 text-theme animate-spin flex-shrink-0" />
+              <span className="text-2xs font-medium">
+                Downloading update… {(update as { percent: number }).percent}%
+              </span>
+            </div>
+            <div className="w-full bg-border/60 rounded-full h-1">
+              <div
+                className="bg-theme h-1 rounded-full transition-all duration-500"
+                style={{ width: `${(update as { percent: number }).percent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Update ready badge */}
+        {downloaded && (
+          <div className="px-3 py-2.5 rounded-xl bg-green-500/8 border border-green-500/25">
+            <div className="flex items-center gap-2 mb-1.5">
+              <ArrowUpCircle className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+              <span className="text-2xs font-semibold text-green-400">
+                v{(update as { version: string }).version} ready to install
+              </span>
+            </div>
+            <button
+              onClick={() => (window as Window & { electronAPI?: { update: { install: () => void } } }).electronAPI?.update.install()}
+              className="w-full text-2xs font-semibold text-green-900 bg-green-400 hover:bg-green-300 rounded-lg py-1.5 transition-colors"
+            >
+              Restart to install →
+            </button>
+          </div>
+        )}
+
         <Link
           href="/settings"
           className={cn(
@@ -120,7 +198,7 @@ export function Sidebar() {
             <span className="ml-auto w-1.5 h-1.5 rounded-full bg-theme" />
           )}
         </Link>
-        <p className="text-2xs text-muted-foreground/50 px-3 pt-1.5 pb-1">
+        <p className="text-2xs text-muted-foreground/50 px-3 pt-1 pb-0.5">
           BuildVerse
         </p>
       </div>

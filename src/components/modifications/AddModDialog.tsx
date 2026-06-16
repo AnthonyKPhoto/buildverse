@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { MOD_CATEGORIES, INSTALL_DIFFICULTIES } from "@/lib/utils";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
+import { Link2, Loader2, CheckCircle2, ArrowLeft, Sparkles } from "lucide-react";
 
 interface Suggestions { brands: string[]; vendors: string[]; names: string[]; }
 
@@ -69,12 +70,61 @@ function formFromMod(m?: Modification | null) {
   };
 }
 
+function extractDomain(url: string) {
+  try { return new URL(url).hostname.replace("www.", ""); } catch { return url; }
+}
+
+// ── Scraping animation ────────────────────────────────────────────────────────
+
+const SCRAPE_PHASES = ["Connecting to site…", "Reading product page…", "Extracting details…"];
+
+function ScrapingView({ url }: { url: string }) {
+  const [phase, setPhase] = useState(0);
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase(1), 3000);
+    const t2 = setTimeout(() => setPhase(2), 7000);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center py-10 gap-5">
+      <div className="w-14 h-14 rounded-2xl bg-theme/10 flex items-center justify-center">
+        <Loader2 className="w-7 h-7 text-theme animate-spin" />
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-medium">{SCRAPE_PHASES[phase]}</p>
+        <p className="text-xs text-muted-foreground mt-1">{extractDomain(url)}</p>
+      </div>
+      <div className="flex gap-1.5">
+        {SCRAPE_PHASES.map((_, i) => (
+          <div
+            key={i}
+            className={`h-1.5 rounded-full transition-all duration-500 ${
+              i <= phase ? "w-4 bg-theme" : "w-1.5 bg-border"
+            }`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }: AddModDialogProps) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [fetchingImage, setFetchingImage] = useState(false);
   const [form, setForm] = useState(formFromMod(editMod));
   const [suggestions, setSuggestions] = useState<Suggestions>({ brands: [], vendors: [], names: [] });
+
+  // URL step
+  const [step, setStep] = useState<"url" | "form">(editMod ? "form" : "url");
+  const [urlInput, setUrlInput] = useState("");
+  const [scraping, setScraping] = useState(false);
+  const [autoFilled, setAutoFilled] = useState<string[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetch("/api/suggestions")
@@ -84,10 +134,63 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
   }, []);
 
   useEffect(() => {
-    if (open) setForm(formFromMod(editMod));
+    if (open) {
+      setForm(formFromMod(editMod));
+      setStep(editMod ? "form" : "url");
+      setUrlInput("");
+      setScraping(false);
+      setAutoFilled([]);
+    } else {
+      abortRef.current?.abort();
+    }
   }, [open, editMod]);
 
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
+
+  // ── Scrape ──────────────────────────────────────────────────────────────────
+
+  const handleScrape = async () => {
+    const url = urlInput.trim();
+    if (!url) return;
+
+    setScraping(true);
+    abortRef.current = new AbortController();
+    const timer = setTimeout(() => abortRef.current?.abort(), 15000);
+
+    try {
+      const res = await fetch(`/api/scrape-mod?url=${encodeURIComponent(url)}`, {
+        signal: abortRef.current.signal,
+      });
+      clearTimeout(timer);
+
+      if (!res.ok) throw new Error("scrape failed");
+      const data = await res.json();
+
+      const filled: string[] = [];
+      const updates: Partial<typeof BLANK_FORM> = { link: url };
+
+      if (data.name)          { updates.name = data.name;             filled.push("name"); }
+      if (data.brand)         { updates.brand = data.brand;           filled.push("brand"); }
+      if (data.vendor)        { updates.vendor = data.vendor;         filled.push("vendor"); }
+      if (data.price != null) { updates.price = String(data.price);   filled.push("price"); }
+      if (data.imageUrl)      { updates.imageUrl = data.imageUrl;     filled.push("photo"); }
+      if (data.notes)         { updates.notes = data.notes;           filled.push("notes"); }
+      if (data.partNumber)    { updates.partNumber = data.partNumber; filled.push("part number"); }
+
+      setForm((f) => ({ ...f, ...updates }));
+      setAutoFilled(filled);
+    } catch {
+      clearTimeout(timer);
+      setForm((f) => ({ ...f, link: url }));
+      setAutoFilled([]);
+      toast({ title: "Couldn't auto-fill", description: "Fill in the details manually." });
+    } finally {
+      setScraping(false);
+      setStep("form");
+    }
+  };
+
+  // ── Image auto-fetch on link blur ───────────────────────────────────────────
 
   const handleLinkBlur = async () => {
     if (!form.link || form.imageUrl || fetchingImage) return;
@@ -97,11 +200,13 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
       const data = await res.json();
       if (data.imageUrl) set("imageUrl", data.imageUrl);
     } catch {
-      // silently ignore — user can paste image URL manually
+      // silently ignore
     } finally {
       setFetchingImage(false);
     }
   };
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,13 +237,12 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
         diyInstall: form.diyInstall,
       };
 
-      const url = editMod ? `/api/modifications/${editMod.id}` : `/api/vehicles/${vehicleId}/modifications`;
+      const url    = editMod ? `/api/modifications/${editMod.id}` : `/api/vehicles/${vehicleId}/modifications`;
       const method = editMod ? "PUT" : "POST";
-      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const res    = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!res.ok) throw new Error(await res.text());
       const mod = await res.json();
 
-      // Auto-track product link if enabled
       if (form.link) {
         const autoTrack = localStorage.getItem("bv_autoTrackProducts");
         const shouldTrack = autoTrack === null ? true : autoTrack === "true";
@@ -147,7 +251,7 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url: form.link }),
-          }).catch(() => {}); // silent — don't block mod save
+          }).catch(() => {});
         }
       }
 
@@ -161,188 +265,281 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
     }
   };
 
+  // ── Render ──────────────────────────────────────────────────────────────────
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editMod ? "Edit Modification" : "Add Modification"}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name / Category */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Name *</Label>
-              <AutocompleteInput
-                placeholder="BC Racing BR Coilovers…"
-                value={form.name}
-                onChange={(v) => set("name", v)}
-                suggestions={suggestions.names}
-              />
-            </div>
-            <div>
-              <Label>Category *</Label>
-              <Select value={form.category} onValueChange={(v) => set("category", v)}>
-                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                <SelectContent>
-                  {MOD_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
 
-          {/* Brand / Vendor */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Brand</Label>
-              <AutocompleteInput
-                placeholder="BC Racing, APR, 034…"
-                value={form.brand}
-                onChange={(v) => set("brand", v)}
-                suggestions={suggestions.brands}
-              />
-            </div>
-            <div>
-              <Label>Vendor</Label>
-              <AutocompleteInput
-                placeholder="ECS Tuning, FCP Euro…"
-                value={form.vendor}
-                onChange={(v) => set("vendor", v)}
-                suggestions={suggestions.vendors}
-              />
-            </div>
-          </div>
+        {/* ── Step 0: URL entry ─────────────────────────────────────────── */}
+        {step === "url" && !editMod && (
+          <div className="py-2">
+            {scraping ? (
+              <ScrapingView url={urlInput} />
+            ) : (
+              <div className="space-y-5">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2.5 px-4 py-3.5 rounded-xl bg-theme/5 border border-theme/15">
+                    <Sparkles className="w-4 h-4 text-theme flex-shrink-0" />
+                    <p className="text-sm text-muted-foreground">
+                      Paste a product link and we&apos;ll auto-fill the name, brand, price, and photo.
+                    </p>
+                  </div>
 
-          {/* Status / Priority / Difficulty */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <Label>Status</Label>
-              <Select value={form.status} onValueChange={(v) => set("status", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {STATUSES.map((s) => <SelectItem key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Priority</Label>
-              <Select value={form.priority} onValueChange={(v) => set("priority", v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Install Difficulty</Label>
-              <Select value={form.difficulty} onValueChange={(v) => set("difficulty", v)}>
-                <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="UNKNOWN">Unknown</SelectItem>
-                  {INSTALL_DIFFICULTIES.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+                  <div>
+                    <Label className="mb-1.5 block">Product URL</Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                          className="pl-9"
+                          placeholder="https://ecstuning.com/product/…"
+                          value={urlInput}
+                          onChange={(e) => setUrlInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleScrape(); } }}
+                          autoFocus
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={handleScrape}
+                        disabled={!urlInput.trim()}
+                        className="bg-theme hover:brightness-90 shrink-0"
+                      >
+                        Auto-fill
+                      </Button>
+                    </div>
+                  </div>
+                </div>
 
-          {/* Price / Actual Price */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Estimated Price ($)</Label>
-              <Input type="number" min="0" step="0.01" placeholder="1200.00" value={form.price} onChange={(e) => set("price", e.target.value)} />
-            </div>
-            <div>
-              <Label>Actual Price Paid ($)</Label>
-              <Input type="number" min="0" step="0.01" placeholder="1149.99" value={form.actualPrice} onChange={(e) => set("actualPrice", e.target.value)} />
-            </div>
-          </div>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full h-px bg-border" />
+                  </div>
+                  <div className="relative flex justify-center">
+                    <span className="bg-background px-3 text-xs text-muted-foreground">or</span>
+                  </div>
+                </div>
 
-          {/* Link — blurring auto-fetches the product image if none is set yet */}
-          <div>
-            <Label className="flex items-center gap-2">
-              Product Link
-              {fetchingImage && (
-                <span className="text-xs text-muted-foreground font-normal flex items-center gap-1">
-                  <span className="w-3 h-3 border border-muted-foreground border-t-transparent rounded-full animate-spin inline-block" />
-                  fetching image…
-                </span>
-              )}
-            </Label>
-            <Input
-              placeholder="https://ecstuning.com/…"
-              value={form.link}
-              onChange={(e) => set("link", e.target.value)}
-              onBlur={handleLinkBlur}
-            />
-            {!form.imageUrl && !fetchingImage && form.link && (
-              <p className="text-xs text-muted-foreground mt-1">Image will auto-fill when you leave this field</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setStep("form")}
+                >
+                  Skip — fill in manually
+                </Button>
+              </div>
             )}
           </div>
+        )}
 
-          {/* Image upload */}
-          <ImageUpload
-            label="Mod Photo"
-            value={form.imageUrl}
-            onChange={(v) => set("imageUrl", v)}
-          />
+        {/* ── Step 1: Form ──────────────────────────────────────────────── */}
+        {step === "form" && (
+          <form onSubmit={handleSubmit} className="space-y-4">
 
-          {/* Part# / Order# */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Part Number</Label>
-              <Input placeholder="ES#1234567" value={form.partNumber} onChange={(e) => set("partNumber", e.target.value)} />
-            </div>
-            <div>
-              <Label>Order Number</Label>
-              <Input placeholder="ORD-20240101" value={form.orderNumber} onChange={(e) => set("orderNumber", e.target.value)} />
-            </div>
-          </div>
+            {/* Auto-fill banner */}
+            {autoFilled.length > 0 && (
+              <div className="flex items-start gap-2.5 px-3.5 py-3 bg-green-500/8 border border-green-500/20 rounded-xl">
+                <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-green-400">Auto-filled from URL</p>
+                  <p className="text-xs text-green-400/70 mt-0.5">
+                    {autoFilled.join(", ")} — verify and edit before adding
+                  </p>
+                </div>
+                {!editMod && (
+                  <button
+                    type="button"
+                    onClick={() => { setStep("url"); setAutoFilled([]); }}
+                    className="flex items-center gap-1 text-2xs text-green-400/60 hover:text-green-400 transition-colors flex-shrink-0"
+                  >
+                    <ArrowLeft className="w-3 h-3" />
+                    Change URL
+                  </button>
+                )}
+              </div>
+            )}
 
-          {/* Install info (shown when status is INSTALLED) */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <Label>Install Date</Label>
-              <Input type="date" value={form.installDate} onChange={(e) => set("installDate", e.target.value)} />
+            {/* Name / Category */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Name *</Label>
+                <AutocompleteInput
+                  placeholder="BC Racing BR Coilovers…"
+                  value={form.name}
+                  onChange={(v) => set("name", v)}
+                  suggestions={suggestions.names}
+                />
+              </div>
+              <div>
+                <Label>Category *</Label>
+                <Select value={form.category} onValueChange={(v) => set("category", v)}>
+                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    {MOD_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div>
-              <Label>Install Mileage</Label>
-              <Input type="number" min="0" placeholder="52000" value={form.installMileage} onChange={(e) => set("installMileage", e.target.value)} />
-            </div>
-            <div>
-              <Label>Labor Cost ($)</Label>
-              <Input type="number" min="0" step="0.01" placeholder="0" value={form.laborCost} onChange={(e) => set("laborCost", e.target.value)} />
-            </div>
-          </div>
 
-          {/* DIY checkbox */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="diyInstall"
-              checked={form.diyInstall}
-              onChange={(e) => set("diyInstall", e.target.checked)}
-              className="rounded border-input"
+            {/* Brand / Vendor */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Brand</Label>
+                <AutocompleteInput
+                  placeholder="BC Racing, APR, 034…"
+                  value={form.brand}
+                  onChange={(v) => set("brand", v)}
+                  suggestions={suggestions.brands}
+                />
+              </div>
+              <div>
+                <Label>Vendor</Label>
+                <AutocompleteInput
+                  placeholder="ECS Tuning, FCP Euro…"
+                  value={form.vendor}
+                  onChange={(v) => set("vendor", v)}
+                  suggestions={suggestions.vendors}
+                />
+              </div>
+            </div>
+
+            {/* Status / Priority / Difficulty */}
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Status</Label>
+                <Select value={form.status} onValueChange={(v) => set("status", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {STATUSES.map((s) => <SelectItem key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Priority</Label>
+                <Select value={form.priority} onValueChange={(v) => set("priority", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Install Difficulty</Label>
+                <Select value={form.difficulty} onValueChange={(v) => set("difficulty", v)}>
+                  <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UNKNOWN">Unknown</SelectItem>
+                    {INSTALL_DIFFICULTIES.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Price / Actual Price */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Estimated Price ($)</Label>
+                <Input type="number" min="0" step="0.01" placeholder="1200.00" value={form.price} onChange={(e) => set("price", e.target.value)} />
+              </div>
+              <div>
+                <Label>Actual Price Paid ($)</Label>
+                <Input type="number" min="0" step="0.01" placeholder="1149.99" value={form.actualPrice} onChange={(e) => set("actualPrice", e.target.value)} />
+              </div>
+            </div>
+
+            {/* Link */}
+            <div>
+              <Label className="flex items-center gap-2">
+                Product Link
+                {fetchingImage && (
+                  <span className="text-xs text-muted-foreground font-normal flex items-center gap-1">
+                    <span className="w-3 h-3 border border-muted-foreground border-t-transparent rounded-full animate-spin inline-block" />
+                    fetching image…
+                  </span>
+                )}
+              </Label>
+              <Input
+                placeholder="https://ecstuning.com/…"
+                value={form.link}
+                onChange={(e) => set("link", e.target.value)}
+                onBlur={handleLinkBlur}
+              />
+              {!form.imageUrl && !fetchingImage && form.link && (
+                <p className="text-xs text-muted-foreground mt-1">Image will auto-fill when you leave this field</p>
+              )}
+            </div>
+
+            {/* Image upload */}
+            <ImageUpload
+              label="Mod Photo"
+              value={form.imageUrl}
+              onChange={(v) => set("imageUrl", v)}
             />
-            <Label htmlFor="diyInstall" className="cursor-pointer">DIY Install</Label>
-          </div>
 
-          {/* Notes */}
-          <div>
-            <Label>Notes</Label>
-            <textarea
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-none"
-              placeholder="Any notes, fitment info, install tips…"
-              value={form.notes}
-              onChange={(e) => set("notes", e.target.value)}
-            />
-          </div>
+            {/* Part# / Order# */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Part Number</Label>
+                <Input placeholder="ES#1234567" value={form.partNumber} onChange={(e) => set("partNumber", e.target.value)} />
+              </div>
+              <div>
+                <Label>Order Number</Label>
+                <Input placeholder="ORD-20240101" value={form.orderNumber} onChange={(e) => set("orderNumber", e.target.value)} />
+              </div>
+            </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={saving || fetchingImage}>
-              {saving ? "Saving…" : editMod ? "Save Changes" : "Add Modification"}
-            </Button>
-          </DialogFooter>
-        </form>
+            {/* Install info */}
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Install Date</Label>
+                <Input type="date" value={form.installDate} onChange={(e) => set("installDate", e.target.value)} />
+              </div>
+              <div>
+                <Label>Install Mileage</Label>
+                <Input type="number" min="0" placeholder="52000" value={form.installMileage} onChange={(e) => set("installMileage", e.target.value)} />
+              </div>
+              <div>
+                <Label>Labor Cost ($)</Label>
+                <Input type="number" min="0" step="0.01" placeholder="0" value={form.laborCost} onChange={(e) => set("laborCost", e.target.value)} />
+              </div>
+            </div>
+
+            {/* DIY checkbox */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="diyInstall"
+                checked={form.diyInstall}
+                onChange={(e) => set("diyInstall", e.target.checked)}
+                className="rounded border-input"
+              />
+              <Label htmlFor="diyInstall" className="cursor-pointer">DIY Install</Label>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <Label>Notes</Label>
+              <textarea
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-none"
+                placeholder="Any notes, fitment info, install tips…"
+                value={form.notes}
+                onChange={(e) => set("notes", e.target.value)}
+              />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="submit" disabled={saving || fetchingImage}>
+                {saving ? "Saving…" : editMod ? "Save Changes" : "Add Modification"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

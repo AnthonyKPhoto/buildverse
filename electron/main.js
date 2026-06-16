@@ -254,7 +254,13 @@ function initAutoUpdater() {
   autoUpdater.on("download-progress", (p) => sendUpdateStatus("downloading", { percent: Math.round(p.percent) }));
   autoUpdater.on("update-downloaded", (info) => sendUpdateStatus("downloaded", { version: info.version }));
 
+  // Initial check 5 seconds after launch
   setTimeout(() => autoUpdater.checkForUpdates().catch((err) => { console.error("[updater] auto-check:", err?.message || err); }), 5000);
+
+  // Recurring check every hour
+  setInterval(() => {
+    autoUpdater.checkForUpdates().catch((err) => { console.error("[updater] hourly check:", err?.message || err); });
+  }, 60 * 60 * 1000);
 }
 
 ipcMain.handle("update:check", () => {
