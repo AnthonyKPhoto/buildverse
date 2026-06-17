@@ -138,7 +138,7 @@ export function LubeLoggerSettings() {
     setSaveError(null);
     try {
       const res = await fetch("/api/integrations/lubelogger/config", {
-        method: "PUT",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url, authType,

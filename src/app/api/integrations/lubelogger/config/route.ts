@@ -13,7 +13,7 @@ export async function GET() {
   });
 }
 
-export async function PUT(req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     // If client sends the masked placeholder, don't overwrite the real value
