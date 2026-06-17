@@ -153,6 +153,18 @@ export interface LLRecord {
 }
 
 
+function parseFloat2(val: unknown): number | null {
+  if (val == null) return null;
+  const n = parseFloat(String(val));
+  return isNaN(n) || !isFinite(n) ? null : n;
+}
+
+function parseInt2(val: unknown): number | null {
+  if (val == null) return null;
+  const n = parseInt(String(val), 10);
+  return isNaN(n) ? null : n;
+}
+
 // Map a LubeLogger record to a BuildVerse MaintenanceLog payload
 export function mapRecord(
   rec: LLRecord,
@@ -188,8 +200,8 @@ export function mapRecord(
     vehicleId: bvVehicleId,
     service,
     date: parseLLDate(rec.date),
-    mileage: rec.mileage || null,
-    cost: rec.cost || null,
+    mileage: parseInt2(rec.mileage),
+    cost: parseFloat2(rec.cost),
     notes: notes || null,
     diy: false,
     externalId,
