@@ -275,7 +275,7 @@ export function LubeLoggerSettings() {
                   onClick={() => setAuthType("apikey")}
                   className={cn("px-3 py-1.5 font-medium transition-colors", authType === "apikey" ? "bg-theme text-white" : "hover:bg-secondary")}
                 >
-                  API Key / Token
+                  API Key
                 </button>
                 <button
                   onClick={() => setAuthType("basic")}
@@ -288,10 +288,10 @@ export function LubeLoggerSettings() {
 
             {authType === "apikey" ? (
               <div>
-                <label className="text-xs font-medium block mb-1">API Key / Bearer Token</label>
+                <label className="text-xs font-medium block mb-1">API Key</label>
                 <input
                   type="password"
-                  placeholder="Generate one in LubeLogger → Profile → API Token"
+                  placeholder="Click your username in LubeLogger → Manage API Keys"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring font-mono"

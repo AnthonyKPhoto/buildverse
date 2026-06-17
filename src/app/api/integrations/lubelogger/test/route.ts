@@ -24,8 +24,8 @@ async function runTest(cfg: LubeLoggerConfig) {
         );
       }
 
-      // 500 with API Key often means auth is disabled and Bearer token confused it — retry without auth
-      if (res.status === 500 && cfg.authType === "apikey") {
+      // Check if LubeLogger is accessible without auth (auth disabled)
+      if (!res.ok) {
         const retry = await tryFetchNoAuth(cfg.url, "/api/vehicles").catch(() => null);
         if (retry?.ok) {
           const retryType = retry.headers.get("content-type") ?? "";
@@ -39,16 +39,17 @@ async function runTest(cfg: LubeLoggerConfig) {
             });
           }
         }
-        return NextResponse.json(
-          { error: "API key was rejected (500). In LubeLogger go to ⚙ Settings → scroll to 'Root User API Key' and copy that value here. Or switch to Username + Password and enter your LubeLogger login (not your SSO/proxy credentials)." },
-          { status: 502 }
-        );
       }
 
-      // 401 after basic/cookie login = session cookie not accepted by the API
-      if (res.status === 401 && cfg.authType === "basic") {
+      if (res.status === 401 || res.status === 403) {
+        if (cfg.authType === "apikey") {
+          return NextResponse.json(
+            { error: "API key rejected. In LubeLogger click your username → Manage API Keys, create a key with Manager role, and paste the value here." },
+            { status: 502 }
+          );
+        }
         return NextResponse.json(
-          { error: "Login succeeded but LubeLogger rejected the session on API calls. Switch to API Key auth — in LubeLogger go to ⚙ Settings → Root User API Key and paste that value here." },
+          { error: "Incorrect username or password. Enter your LubeLogger login credentials." },
           { status: 502 }
         );
       }
