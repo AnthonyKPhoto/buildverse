@@ -128,7 +128,7 @@ export function LubeLoggerSettings() {
   const handleSave = async (silent = false) => {
     setSaving(true);
     try {
-      await fetch("/api/integrations/lubelogger/config", {
+      const res = await fetch("/api/integrations/lubelogger/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -139,9 +139,17 @@ export function LubeLoggerSettings() {
           importTypes, syncInterval, vehicleMap,
         }),
       });
-      // Refresh cfg so the header shows the saved URL / vehicle count
-      await loadConfig();
-      if (!silent) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
+      if (res.ok) {
+        // Update header state from current form values — do NOT re-fetch from DB
+        // (re-fetching resets the form fields including URL and API key)
+        setCfg((prev) => ({
+          ...(prev ?? {} as Config),
+          url, authType, username, vehicleMap, importTypes, syncInterval,
+          hasApiKey: apiKey !== "••••••••" ? !!apiKey : (prev?.hasApiKey ?? false),
+          hasPassword: password !== "••••••••" ? !!password : (prev?.hasPassword ?? false),
+        }));
+        if (!silent) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
+      }
     } finally {
       setSaving(false);
     }
