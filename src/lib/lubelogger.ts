@@ -1,6 +1,10 @@
 import { prisma } from "./prisma";
+import { LL_RECORD_TYPES, LLRecordType } from "./lubelogger-constants";
 import * as fs from "fs";
 import * as path from "path";
+
+export { LL_RECORD_TYPES };
+export type { LLRecordType };
 
 export interface LubeLoggerConfig {
   url: string;
@@ -148,14 +152,6 @@ export interface LLRecord {
   frontRight?: string;
 }
 
-export const LL_RECORD_TYPES = [
-  { key: "servicerecords", label: "Service Records",  path: "/servicerecords" },
-  { key: "oilchanges",     label: "Oil Changes",      path: "/oilchanges" },
-  { key: "repairs",        label: "Repairs",          path: "/repairs" },
-  { key: "tirerecords",    label: "Tire Records",     path: "/tirerecords" },
-] as const;
-
-export type LLRecordType = typeof LL_RECORD_TYPES[number]["key"];
 
 // Map a LubeLogger record to a BuildVerse MaintenanceLog payload
 export function mapRecord(

@@ -6,7 +6,7 @@ import {
   Link2, Link2Off, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { LL_RECORD_TYPES } from "@/lib/lubelogger";
+import { LL_RECORD_TYPES } from "@/lib/lubelogger-constants";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface LLVehicle { id: number; year: string; make: string; model: string; licensePlate?: string; vin?: string; }
