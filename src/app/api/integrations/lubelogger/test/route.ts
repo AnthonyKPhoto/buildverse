@@ -40,7 +40,7 @@ async function runTest(cfg: LubeLoggerConfig) {
           }
         }
         return NextResponse.json(
-          { error: "LubeLogger returned 500. If your LubeLogger has no authentication, switch to Username + Password auth (leave fields blank). If auth is enabled, check your API key." },
+          { error: "API key was rejected (500). In LubeLogger go to ⚙ Settings → scroll to 'Root User API Key' and copy that value here. Or switch to Username + Password and enter your LubeLogger login (not your SSO/proxy credentials)." },
           { status: 502 }
         );
       }

@@ -250,10 +250,20 @@ export function LubeLoggerSettings() {
                 placeholder="https://lubelogger.yourserver.com  or  192.168.1.100:8080"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
+                onBlur={(e) => {
+                  // Strip any path — only keep scheme+host+port
+                  try {
+                    const raw = e.target.value.trim();
+                    if (!raw) return;
+                    const withScheme = /^https?:\/\//i.test(raw) ? raw : "http://" + raw;
+                    const parsed = new URL(withScheme);
+                    setUrl(`${parsed.protocol}//${parsed.host}`);
+                  } catch {}
+                }}
                 className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Any format works — local IP, domain name, with or without port, HTTP or HTTPS.
+                Enter just the host and port — any path (e.g. /Login/Index) is stripped automatically.
               </p>
             </div>
 

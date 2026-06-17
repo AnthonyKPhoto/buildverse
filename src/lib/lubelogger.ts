@@ -77,6 +77,10 @@ export async function getAuthHeaders(cfg: LubeLoggerConfig): Promise<Record<stri
     // Accept any 2xx or 3xx redirect after successful login
     // 404 = LubeLogger has no built-in auth enabled — proceed without credentials
     if (res.status === 404) return {};
+    // 401/403 = wrong credentials
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`Incorrect username or password (${res.status}). Use your LubeLogger credentials — not your Home Assistant, Authelia, or proxy login.`);
+    }
     // Accept any 2xx or 3xx — LubeLogger redirects (302/303) after successful login
     if (res.status >= 400) {
       throw new Error(`LubeLogger login failed (${res.status})`);
