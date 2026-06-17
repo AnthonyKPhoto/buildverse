@@ -383,7 +383,7 @@ export function LubeLoggerSettings() {
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Vehicle Mapping</p>
                 <button
-                  onClick={loadVehicles}
+                  onClick={() => loadVehicles()}
                   disabled={loadingVehicles}
                   className="text-xs text-theme hover:underline flex items-center gap-1"
                 >
