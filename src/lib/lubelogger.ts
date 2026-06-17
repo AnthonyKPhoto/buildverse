@@ -67,10 +67,11 @@ export async function getAuthHeaders(cfg: LubeLoggerConfig): Promise<Record<stri
     return { Authorization: `Bearer ${cfg.apiKey}` };
   }
   if (cfg.authType === "basic" && cfg.username) {
+    const formBody = new URLSearchParams({ username: cfg.username, password: cfg.password });
     const res = await fetch(`${base}/api/user/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: cfg.username, password: cfg.password }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formBody.toString(),
       // don't follow redirects — Authelia might redirect on failure
       redirect: "manual",
     });
