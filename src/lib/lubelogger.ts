@@ -60,6 +60,14 @@ export function normaliseUrl(raw: string): string {
   }
 }
 
+function extractCookies(res: Response): string {
+  const headers = res.headers as unknown as { getSetCookie?: () => string[] };
+  const raw = typeof headers.getSetCookie === "function"
+    ? headers.getSetCookie()
+    : [res.headers.get("set-cookie")].filter(Boolean) as string[];
+  return raw.map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
+}
+
 // Build auth headers; for basic auth we POST to /api/user/login and reuse the session cookie
 export async function getAuthHeaders(cfg: LubeLoggerConfig): Promise<Record<string, string>> {
   const base = normaliseUrl(cfg.url);
@@ -67,30 +75,42 @@ export async function getAuthHeaders(cfg: LubeLoggerConfig): Promise<Record<stri
     return { Authorization: `Bearer ${cfg.apiKey}` };
   }
   if (cfg.authType === "basic" && cfg.username) {
+    // Try JSON login first (/api/user/login with [FromBody])
     const res = await fetch(`${base}/api/user/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username: cfg.username, password: cfg.password }),
       redirect: "manual",
     });
+
     // 404 = no built-in auth on this LubeLogger — proceed without credentials
     if (res.status === 404) return {};
-    // 401/403 = wrong credentials
+
+    // If JSON login returns 401, try form-encoded to /Login/Index (browser form path)
     if (res.status === 401 || res.status === 403) {
-      throw new Error(`Incorrect username or password (${res.status}). Use your LubeLogger login credentials.`);
+      const formRes = await fetch(`${base}/Login/Index`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ UserName: cfg.username, Password: cfg.password }).toString(),
+        redirect: "manual",
+      });
+      if (formRes.status === 401 || formRes.status === 403 || formRes.status === 404) {
+        throw new Error(`Incorrect username or password. Use your LubeLogger login credentials (not Home Assistant or proxy credentials).`);
+      }
+      if (formRes.status >= 400) throw new Error(`LubeLogger login failed (${formRes.status})`);
+      const formCookie = extractCookies(formRes);
+      if (formCookie) return { Cookie: formCookie };
+      throw new Error("Login succeeded but LubeLogger returned no session cookie — try API Key auth instead.");
     }
-    // Accept any 2xx or 3xx — LubeLogger redirects (302/303) after successful login
-    if (res.status >= 400) {
-      throw new Error(`LubeLogger login failed (${res.status})`);
+
+    if (res.status >= 400) throw new Error(`LubeLogger login failed (${res.status})`);
+
+    // Extract only name=value pairs from Set-Cookie, stripping path/httponly/secure attributes
+    const cookieString = extractCookies(res);
+    if (!cookieString) {
+      throw new Error("Login succeeded but LubeLogger returned no session cookie — try API Key auth instead.");
     }
-    // Extract only name=value from Set-Cookie — strip path/httponly/secure attributes
-    // so the Cookie request header is well-formed and ASP.NET Core can find the auth token
-    const rawCookies =
-      typeof (res.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie === "function"
-        ? (res.headers as unknown as { getSetCookie: () => string[] }).getSetCookie()
-        : [res.headers.get("set-cookie")].filter(Boolean) as string[];
-    const cookieString = rawCookies.map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
-    return cookieString ? { Cookie: cookieString } : {};
+    return { Cookie: cookieString };
   }
   throw new Error("No credentials configured");
 }
