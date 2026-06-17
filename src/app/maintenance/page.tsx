@@ -39,8 +39,26 @@ export default function MaintenancePage() {
         fetch("/api/maintenance").then((r) => r.json()),
         fetch("/api/vehicles").then((r) => r.json()),
       ]);
-      setLogs(Array.isArray(logsData) ? logsData : []);
-      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+      const allVehicles: Vehicle[] = Array.isArray(vehiclesData) ? vehiclesData : [];
+      // Auto-remove Example/S2K sample data if user has other vehicles
+      const hasSample = allVehicles.some(
+        (v) => v.name?.startsWith("Example") || (v.make === "Honda" && v.model === "S2000")
+      );
+      const hasReal = allVehicles.some(
+        (v) => !v.name?.startsWith("Example") && !(v.make === "Honda" && v.model === "S2000")
+      );
+      if (hasSample && hasReal) {
+        await fetch("/api/remove-sample-data", { method: "POST" }).catch(() => null);
+        const [freshLogs, freshVehicles] = await Promise.all([
+          fetch("/api/maintenance").then((r) => r.json()),
+          fetch("/api/vehicles").then((r) => r.json()),
+        ]);
+        setLogs(Array.isArray(freshLogs) ? freshLogs : []);
+        setVehicles(Array.isArray(freshVehicles) ? freshVehicles : []);
+      } else {
+        setLogs(Array.isArray(logsData) ? logsData : []);
+        setVehicles(allVehicles);
+      }
     } finally {
       setLoading(false);
     }

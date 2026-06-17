@@ -56,6 +56,7 @@ export function LubeLoggerSettings() {
   // Sync state
   const [syncing, setSyncing] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState<{ imported: number; skipped: number; errors: number } | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   // Saving
@@ -96,8 +97,8 @@ export function LubeLoggerSettings() {
       });
       const data = await res.json();
       if (res.ok && data.ok) {
-        // Save in background so subsequent syncs pick up the latest config
-        handleSave(true);
+        // Save first so loadVehicles can read the config from DB
+        await handleSave(true);
         setTestResult({ ok: true, msg: `Connected — ${data.vehicleCount} vehicle${data.vehicleCount !== 1 ? "s" : ""} found` });
         await loadVehicles();
       } else {
@@ -138,6 +139,8 @@ export function LubeLoggerSettings() {
           importTypes, syncInterval, vehicleMap,
         }),
       });
+      // Refresh cfg so the header shows the saved URL / vehicle count
+      await loadConfig();
       if (!silent) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
     } finally {
       setSaving(false);
@@ -148,6 +151,7 @@ export function LubeLoggerSettings() {
     await handleSave(true);
     setSyncing(true);
     setLastSyncResult(null);
+    setSyncError(null);
     try {
       const res = await fetch("/api/integrations/lubelogger/sync", { method: "POST" });
       const data = await res.json();
@@ -155,10 +159,10 @@ export function LubeLoggerSettings() {
         setLastSyncResult({ imported: data.imported, skipped: data.skipped, errors: data.errors });
         setLastSync(data.syncedAt);
       } else {
-        setLastSyncResult({ imported: 0, skipped: 0, errors: 1 });
+        setSyncError(data.error || "Sync failed");
       }
     } catch {
-      setLastSyncResult({ imported: 0, skipped: 0, errors: 1 });
+      setSyncError("Sync failed — check your connection");
     } finally {
       setSyncing(false);
     }
@@ -475,6 +479,12 @@ export function LubeLoggerSettings() {
               <p className="text-xs text-muted-foreground">
                 Last synced: {new Date(lastSync).toLocaleString()}
               </p>
+            )}
+            {syncError && (
+              <div className="text-xs px-3 py-2 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400 flex items-start gap-1.5">
+                <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                {syncError}
+              </div>
             )}
             {lastSyncResult && (
               <div className={cn(
