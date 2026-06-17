@@ -55,7 +55,7 @@ export function LubeLoggerSettings() {
 
   // Sync state
   const [syncing, setSyncing] = useState(false);
-  const [lastSyncResult, setLastSyncResult] = useState<{ imported: number; skipped: number; errors: number } | null>(null);
+  const [lastSyncResult, setLastSyncResult] = useState<{ imported: number; skipped: number; errors: number; errorDetails?: string[] } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
@@ -180,7 +180,7 @@ export function LubeLoggerSettings() {
       const res = await fetch("/api/integrations/lubelogger/sync", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        setLastSyncResult({ imported: data.imported, skipped: data.skipped, errors: data.errors });
+        setLastSyncResult({ imported: data.imported, skipped: data.skipped, errors: data.errors, errorDetails: data.errorDetails });
         setLastSync(data.syncedAt);
       } else {
         setSyncError(data.error || "Sync failed");
@@ -526,6 +526,9 @@ export function LubeLoggerSettings() {
                 Imported {lastSyncResult.imported} record{lastSyncResult.imported !== 1 ? "s" : ""},
                 {" "}{lastSyncResult.skipped} already up to date
                 {lastSyncResult.errors > 0 && `, ${lastSyncResult.errors} error${lastSyncResult.errors !== 1 ? "s" : ""}`}
+                {lastSyncResult.errorDetails && lastSyncResult.errorDetails.length > 0 && (
+                  <div className="mt-1 opacity-80">{lastSyncResult.errorDetails[0]}</div>
+                )}
               </div>
             )}
             <div className="flex items-center gap-2 flex-wrap">

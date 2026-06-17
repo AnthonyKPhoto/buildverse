@@ -18,14 +18,20 @@ export async function POST() {
   let imported = 0;
   let skipped = 0;
   let errors = 0;
+  const errorDetails: string[] = [];
 
   for (const [llIdStr, bvVehicleId] of entries) {
     const llVehicleId = parseInt(llIdStr);
 
     for (const recordType of types) {
       try {
-        const res = await llFetch(cfg, `/api/vehicles/${llVehicleId}${recordType.path}`);
-        if (!res.ok) { errors++; continue; }
+        const res = await llFetch(cfg, `/api/vehicle${recordType.path}?vehicleId=${llVehicleId}`);
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          errorDetails.push(`${recordType.label} (vehicle ${llVehicleId}): HTTP ${res.status}${body ? " — " + body.slice(0, 120) : ""}`);
+          errors++;
+          continue;
+        }
 
         const records: LLRecord[] = await res.json();
         if (!Array.isArray(records)) continue;
@@ -44,7 +50,8 @@ export async function POST() {
           await prisma.maintenanceLog.create({ data });
           imported++;
         }
-      } catch {
+      } catch (err) {
+        errorDetails.push(`${recordType.label} (vehicle ${llVehicleId}): ${err instanceof Error ? err.message : String(err)}`);
         errors++;
       }
     }
@@ -52,5 +59,5 @@ export async function POST() {
 
   await saveConfig({ lastSync: new Date().toISOString() });
 
-  return NextResponse.json({ imported, skipped, errors, syncedAt: new Date().toISOString() });
+  return NextResponse.json({ imported, skipped, errors, errorDetails, syncedAt: new Date().toISOString() });
 }
