@@ -71,7 +71,8 @@ export async function getAuthHeaders(cfg: LubeLoggerConfig): Promise<Record<stri
     });
     // Accept any 2xx or 3xx redirect after successful login
     const cookie = res.headers.get("set-cookie");
-    if (!res.ok && res.status !== 302) {
+    // Accept any 2xx or 3xx — LubeLogger redirects (302/303) after successful login
+    if (res.status >= 400) {
       throw new Error(`LubeLogger login failed (${res.status})`);
     }
     return cookie ? { Cookie: cookie } : {};
