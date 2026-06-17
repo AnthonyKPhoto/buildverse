@@ -159,8 +159,12 @@ export function LubeLoggerSettings() {
         }));
         if (!silent) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
       } else {
-        const data = await res.json().catch(() => ({ error: "Save failed" }));
-        setSaveError(data.error || "Save failed — check the app logs");
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const data = await res.json();
+          if (data.error) errMsg = `${data.error} (HTTP ${res.status})`;
+        } catch {}
+        setSaveError(errMsg);
       }
     } finally {
       setSaving(false);

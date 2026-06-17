@@ -1,4 +1,6 @@
 import { prisma } from "./prisma";
+import * as fs from "fs";
+import * as path from "path";
 
 export interface LubeLoggerConfig {
   url: string;
@@ -26,7 +28,25 @@ const DEFAULT_CONFIG: LubeLoggerConfig = {
 
 const SETTING_KEY = "lubelogger_config";
 
+// In the packaged Electron app, BUILDVERSE_DATA_DIR is the user's AppData folder.
+// Write settings to a JSON file there — avoids any Prisma ORM issues in production.
+function settingsFilePath(): string | null {
+  const dir = process.env.BUILDVERSE_DATA_DIR;
+  if (!dir) return null;
+  return path.join(dir, "lubelogger-config.json");
+}
+
 export async function loadConfig(): Promise<LubeLoggerConfig> {
+  // File-based storage (packaged app)
+  const filePath = settingsFilePath();
+  if (filePath) {
+    try {
+      if (fs.existsSync(filePath)) {
+        return { ...DEFAULT_CONFIG, ...JSON.parse(fs.readFileSync(filePath, "utf-8")) };
+      }
+    } catch {}
+  }
+  // DB fallback (dev mode / migration from older versions)
   const row = await prisma.setting.findUnique({ where: { key: SETTING_KEY } }).catch(() => null);
   if (!row) return { ...DEFAULT_CONFIG };
   try {
@@ -39,6 +59,14 @@ export async function loadConfig(): Promise<LubeLoggerConfig> {
 export async function saveConfig(partial: Partial<LubeLoggerConfig>): Promise<LubeLoggerConfig> {
   const current = await loadConfig();
   const next = { ...current, ...partial };
+  // File-based storage (packaged app)
+  const filePath = settingsFilePath();
+  if (filePath) {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(next), "utf-8");
+    return next;
+  }
+  // DB fallback (dev mode)
   await prisma.setting.upsert({
     where: { key: SETTING_KEY },
     create: { key: SETTING_KEY, value: JSON.stringify(next) },

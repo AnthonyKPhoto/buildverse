@@ -556,8 +556,8 @@ async function startServer(dbPath) {
     NODE_ENV: "production",
     // BV_DATABASE_URL takes priority over the relative DATABASE_URL baked into
     // the standalone .env — always an absolute path so it resolves correctly.
-    BV_DATABASE_URL: `file:${dbPath}`,
-    DATABASE_URL: `file:${dbPath}`,
+    BV_DATABASE_URL: `file:${dbPath.replace(/\\/g, "/")}`,
+    DATABASE_URL: `file:${dbPath.replace(/\\/g, "/")}`,
     BUILDVERSE_DATA_DIR: app.getPath("userData"),
   };
 
