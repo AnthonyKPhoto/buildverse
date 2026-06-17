@@ -1,30 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadConfig, llFetch, normaliseUrl, LubeLoggerConfig } from "@/lib/lubelogger";
 
+async function tryFetch(cfg: LubeLoggerConfig, path: string) {
+  return llFetch(cfg, path);
+}
+
+async function tryFetchNoAuth(url: string, path: string): Promise<Response> {
+  return fetch(`${normaliseUrl(url)}${path}`);
+}
+
 async function runTest(cfg: LubeLoggerConfig) {
   if (!cfg.url) return NextResponse.json({ error: "No URL configured" }, { status: 400 });
+
   try {
-    const res = await llFetch(cfg, "/api/vehicles");
+    const res = await tryFetch(cfg, "/api/vehicles");
     const contentType = res.headers.get("content-type") ?? "";
+
     if (!res.ok) {
       if (contentType.includes("text/html")) {
         return NextResponse.json(
-          { error: `Reverse proxy returned ${res.status} with an HTML page — Authelia/nginx is blocking the request. Use API Key auth and configure your proxy to forward the Authorization header.` },
+          { error: "Your reverse proxy (Authelia/nginx) is blocking the request. Use API Key auth and configure your proxy to forward the Authorization header to LubeLogger." },
           { status: 502 }
         );
       }
+
+      // 500 with API Key often means auth is disabled and Bearer token confused it — retry without auth
+      if (res.status === 500 && cfg.authType === "apikey") {
+        const retry = await tryFetchNoAuth(cfg.url, "/api/vehicles").catch(() => null);
+        if (retry?.ok) {
+          const retryType = retry.headers.get("content-type") ?? "";
+          if (!retryType.includes("text/html")) {
+            const vehicles = await retry.json().catch(() => []);
+            return NextResponse.json({
+              ok: true,
+              url: normaliseUrl(cfg.url),
+              vehicleCount: Array.isArray(vehicles) ? vehicles.length : 0,
+              note: "Connected without auth — LubeLogger appears to have authentication disabled",
+            });
+          }
+        }
+        return NextResponse.json(
+          { error: "LubeLogger returned 500. If your LubeLogger has no authentication, switch to Username + Password auth (leave fields blank). If auth is enabled, check your API key." },
+          { status: 502 }
+        );
+      }
+
       const text = await res.text().catch(() => "");
       return NextResponse.json(
         { error: `LubeLogger returned ${res.status}`, detail: text.slice(0, 200) },
         { status: 502 }
       );
     }
+
     if (contentType.includes("text/html")) {
       return NextResponse.json(
-        { error: "Your reverse proxy (Authelia/nginx) is blocking the request and returning its own login page. Switch to API Key auth and configure your proxy to forward the Authorization header to LubeLogger." },
+        { error: "Your reverse proxy (Authelia/nginx) is blocking the request. Use API Key auth and configure your proxy to forward the Authorization header to LubeLogger." },
         { status: 502 }
       );
     }
+
     const vehicles = await res.json();
     return NextResponse.json({
       ok: true,
@@ -33,21 +67,19 @@ async function runTest(cfg: LubeLoggerConfig) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    const friendly = msg.includes("fetch") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")
-      ? `Cannot reach ${normaliseUrl(cfg.url)} — check the URL and that LubeLogger is running`
-      : msg;
+    const friendly =
+      msg.includes("fetch") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")
+        ? `Cannot reach ${normaliseUrl(cfg.url)} — check the URL and that LubeLogger is running`
+        : msg;
     return NextResponse.json({ error: friendly }, { status: 502 });
   }
 }
 
-// GET: test using config saved in DB
 export async function GET() {
   const cfg = await loadConfig();
   return runTest(cfg);
 }
 
-// POST: test using values sent directly from the form (no DB save needed first).
-// Placeholder "••••••••" credentials are automatically replaced from DB.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const stored = await loadConfig();

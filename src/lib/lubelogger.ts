@@ -47,12 +47,17 @@ export async function saveConfig(partial: Partial<LubeLoggerConfig>): Promise<Lu
   return next;
 }
 
-// Normalise the base URL — strip trailing slash, default to http:// for bare hostnames/IPs
+// Normalise the base URL — keep only scheme+host+port, strip any path
 export function normaliseUrl(raw: string): string {
   let u = raw.trim();
   if (!u) return "";
   if (!/^https?:\/\//i.test(u)) u = "http://" + u;
-  return u.replace(/\/+$/, "");
+  try {
+    const parsed = new URL(u);
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return u.replace(/\/+$/, "");
+  }
 }
 
 // Build auth headers; for basic auth we POST to /api/user/login and reuse the session cookie
