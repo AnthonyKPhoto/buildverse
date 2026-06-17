@@ -67,27 +67,30 @@ export async function getAuthHeaders(cfg: LubeLoggerConfig): Promise<Record<stri
     return { Authorization: `Bearer ${cfg.apiKey}` };
   }
   if (cfg.authType === "basic" && cfg.username) {
-    const formBody = new URLSearchParams({ username: cfg.username, password: cfg.password });
     const res = await fetch(`${base}/api/user/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: formBody.toString(),
-      // don't follow redirects — Authelia might redirect on failure
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: cfg.username, password: cfg.password }),
       redirect: "manual",
     });
-    // Accept any 2xx or 3xx redirect after successful login
-    // 404 = LubeLogger has no built-in auth enabled — proceed without credentials
+    // 404 = no built-in auth on this LubeLogger — proceed without credentials
     if (res.status === 404) return {};
     // 401/403 = wrong credentials
     if (res.status === 401 || res.status === 403) {
-      throw new Error(`Incorrect username or password (${res.status}). Use your LubeLogger credentials — not your Home Assistant, Authelia, or proxy login.`);
+      throw new Error(`Incorrect username or password (${res.status}). Use your LubeLogger login credentials.`);
     }
     // Accept any 2xx or 3xx — LubeLogger redirects (302/303) after successful login
     if (res.status >= 400) {
       throw new Error(`LubeLogger login failed (${res.status})`);
     }
-    const cookie = res.headers.get("set-cookie");
-    return cookie ? { Cookie: cookie } : {};
+    // Extract only name=value from Set-Cookie — strip path/httponly/secure attributes
+    // so the Cookie request header is well-formed and ASP.NET Core can find the auth token
+    const rawCookies =
+      typeof (res.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie === "function"
+        ? (res.headers as unknown as { getSetCookie: () => string[] }).getSetCookie()
+        : [res.headers.get("set-cookie")].filter(Boolean) as string[];
+    const cookieString = rawCookies.map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
+    return cookieString ? { Cookie: cookieString } : {};
   }
   throw new Error("No credentials configured");
 }
