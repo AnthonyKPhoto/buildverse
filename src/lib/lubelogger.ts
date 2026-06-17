@@ -70,11 +70,13 @@ export async function getAuthHeaders(cfg: LubeLoggerConfig): Promise<Record<stri
       redirect: "manual",
     });
     // Accept any 2xx or 3xx redirect after successful login
-    const cookie = res.headers.get("set-cookie");
+    // 404 = LubeLogger has no built-in auth enabled — proceed without credentials
+    if (res.status === 404) return {};
     // Accept any 2xx or 3xx — LubeLogger redirects (302/303) after successful login
     if (res.status >= 400) {
       throw new Error(`LubeLogger login failed (${res.status})`);
     }
+    const cookie = res.headers.get("set-cookie");
     return cookie ? { Cookie: cookie } : {};
   }
   throw new Error("No credentials configured");

@@ -314,7 +314,7 @@ export function LubeLoggerSettings() {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground col-span-2">
-                  If you use Authelia or similar SSO, use API Key instead — basic auth must be able to reach LubeLogger&apos;s <code className="text-xs bg-secondary px-1 rounded">/api/user/login</code> directly.
+                  If LubeLogger is behind Authelia or a reverse proxy, use <strong>API Key</strong> auth and configure your proxy to forward the <code className="text-xs bg-secondary px-1 rounded">Authorization</code> header. Username + Password only works when accessing LubeLogger directly with no SSO in front.
                 </p>
               </div>
             )}

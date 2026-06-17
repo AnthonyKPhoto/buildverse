@@ -9,7 +9,7 @@ async function runTest(cfg: LubeLoggerConfig) {
     if (!res.ok) {
       if (contentType.includes("text/html")) {
         return NextResponse.json(
-          { error: `Server returned ${res.status} with an HTML page — check your reverse proxy or Authelia passthrough config` },
+          { error: `Reverse proxy returned ${res.status} with an HTML page — Authelia/nginx is blocking the request. Use API Key auth and configure your proxy to forward the Authorization header.` },
           { status: 502 }
         );
       }
@@ -21,7 +21,7 @@ async function runTest(cfg: LubeLoggerConfig) {
     }
     if (contentType.includes("text/html")) {
       return NextResponse.json(
-        { error: "Got an HTML login page instead of API data — your reverse proxy isn't forwarding the Authorization header to LubeLogger" },
+        { error: "Your reverse proxy (Authelia/nginx) is blocking the request and returning its own login page. Switch to API Key auth and configure your proxy to forward the Authorization header to LubeLogger." },
         { status: 502 }
       );
     }
