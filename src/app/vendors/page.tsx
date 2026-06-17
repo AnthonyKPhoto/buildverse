@@ -699,14 +699,20 @@ export default function VendorsPage() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Vendor Directory</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {VENDORS.length} trusted sources for performance parts, OEM replacements, and upgrades
-        </p>
+    <div className="animate-fade-in">
+      {/* Hero banner */}
+      <div className="-mx-6 -mt-8 mb-8 px-6 pt-8 pb-6 border-b border-border/60 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-72 h-36 bg-theme/8 rounded-full blur-3xl -translate-y-8 translate-x-8 pointer-events-none" />
+        <div className="relative">
+          <p className="text-xs font-medium text-muted-foreground/60 tracking-wider uppercase mb-1">Resources</p>
+          <h1 className="text-3xl font-bold tracking-tight">Vendor Directory</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {VENDORS.length} trusted sources for performance parts, OEM replacements, and upgrades
+          </p>
+        </div>
       </div>
+      <div className="space-y-6">
 
       {/* Search + filters */}
       <div className="space-y-3">
@@ -800,6 +806,7 @@ export default function VendorsPage() {
           <p>No vendors match your search</p>
         </div>
       )}
+      </div>
     </div>
   );
 }

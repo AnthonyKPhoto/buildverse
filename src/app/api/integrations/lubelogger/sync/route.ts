@@ -26,6 +26,10 @@ export async function POST() {
     for (const recordType of types) {
       try {
         const res = await llFetch(cfg, `/api/vehicle${recordType.path}?vehicleId=${llVehicleId}`);
+        if (res.status === 404) {
+          // LubeLogger returns 404 when a vehicle has no records of this type — treat as empty
+          continue;
+        }
         if (!res.ok) {
           const body = await res.text().catch(() => "");
           errorDetails.push(`${recordType.label} (vehicle ${llVehicleId}): HTTP ${res.status}${body ? " — " + body.slice(0, 120) : ""}`);

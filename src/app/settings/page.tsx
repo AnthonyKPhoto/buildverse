@@ -463,11 +463,18 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-2xl space-y-5 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Appearance, behavior, backups &amp; data</p>
+    <div className="animate-fade-in">
+      {/* Hero banner */}
+      <div className="-mx-6 -mt-8 mb-8 px-6 pt-8 pb-6 border-b border-border/60 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-72 h-36 bg-theme/8 rounded-full blur-3xl -translate-y-8 translate-x-8 pointer-events-none" />
+        <div className="relative">
+          <p className="text-xs font-medium text-muted-foreground/60 tracking-wider uppercase mb-1">BuildVerse</p>
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+          <p className="text-sm text-muted-foreground mt-1">Appearance, behavior, backups &amp; data</p>
+        </div>
       </div>
+    <div className="max-w-2xl space-y-5">
 
       {/* ── Appearance ──────────────────────────────────────────────────────── */}
       <Section title="Appearance" icon={Palette}>
@@ -899,6 +906,7 @@ export default function SettingsPage() {
           Save Settings
         </button>
       </div>
+    </div>
     </div>
   );
 }

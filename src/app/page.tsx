@@ -7,9 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
-  Car, DollarSign, Wrench, ClipboardList, FolderOpen, Bell,
+  Car, DollarSign, Wrench, FolderOpen, Bell,
   Plus, ArrowRight, ShoppingCart, Package, BarChart3, TrendingUp,
-  Zap, Settings2, Eye, EyeOff, Activity,
+  Zap, Settings2, Eye, EyeOff, Activity, ClipboardList,
 } from "lucide-react";
 import { formatCurrency, calcBuildCompletion } from "@/lib/utils";
 
@@ -35,11 +35,10 @@ const SECTION_LABELS: Record<SectionKey, string> = {
 };
 
 const QUICK_LINKS = [
-  { href: "/budget",      icon: BarChart3,    label: "Budget" },
-  { href: "/products",    icon: ShoppingCart, label: "Products" },
-  { href: "/maintenance", icon: ClipboardList, label: "Maintenance" },
-  { href: "/vendors",     icon: Package,       label: "Vendors" },
-  { href: "/garage",      icon: Car,           label: "Garage" },
+  { href: "/budget",   icon: BarChart3,    label: "Budget" },
+  { href: "/products", icon: ShoppingCart, label: "Products" },
+  { href: "/vendors",  icon: Package,      label: "Vendors" },
+  { href: "/garage",   icon: Car,          label: "Garage" },
 ];
 
 const ACTIVITY_ICONS: Record<ActivityType, React.ComponentType<{ className?: string }>> = {

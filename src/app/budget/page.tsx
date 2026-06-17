@@ -104,25 +104,31 @@ export default function BudgetPage() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Budget Planner</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Track planned vs actual spending across your builds</p>
+    <div className="animate-fade-in">
+      {/* Hero banner */}
+      <div className="-mx-6 -mt-8 mb-8 px-6 pt-8 pb-6 border-b border-border/60 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-72 h-36 bg-theme/8 rounded-full blur-3xl -translate-y-8 translate-x-8 pointer-events-none" />
+        <div className="relative flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground/60 tracking-wider uppercase mb-1">Budget</p>
+            <h1 className="text-3xl font-bold tracking-tight">Budget Planner</h1>
+            <p className="text-sm text-muted-foreground mt-1">Track planned vs actual spending across your builds</p>
+          </div>
+          <Select value={selectedVehicle} onValueChange={setSelectedVehicle}>
+            <SelectTrigger className="w-52 bg-card/80 backdrop-blur-sm shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Vehicles</SelectItem>
+              {vehicles.map((v) => (
+                <SelectItem key={v.id} value={v.id}>{v.name || `${v.year} ${v.make} ${v.model}`}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={selectedVehicle} onValueChange={setSelectedVehicle}>
-          <SelectTrigger className="w-52">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Vehicles</SelectItem>
-            {vehicles.map((v) => (
-              <SelectItem key={v.id} value={v.id}>{v.name || `${v.year} ${v.make} ${v.model}`}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
+      <div className="space-y-6">
 
       {vehicles.length === 0 ? (
         <Card className="border-dashed border-2">
@@ -315,6 +321,7 @@ export default function BudgetPage() {
           )}
         </>
       )}
+      </div>
     </div>
   );
 }

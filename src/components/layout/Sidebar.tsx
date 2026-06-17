@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Car, DollarSign,
-  ShoppingBag, Settings, ClipboardList, Store,
+  ShoppingBag, Settings, Store,
   ArrowUpCircle, Loader2, Search,
 } from "lucide-react";
 import Image from "next/image";
@@ -21,12 +21,11 @@ type UpdateStatus =
   | { status: "error" };
 
 const navItems = [
-  { href: "/",            label: "Dashboard",       icon: LayoutDashboard, countKey: null },
-  { href: "/garage",      label: "Garage",          icon: Car,             countKey: "vehicles" },
-  { href: "/budget",      label: "Budget",          icon: DollarSign,      countKey: null },
-  { href: "/products",    label: "Product Tracker", icon: ShoppingBag,     countKey: null },
-  { href: "/maintenance", label: "Maintenance",     icon: ClipboardList,   countKey: "maintenance" },
-  { href: "/vendors",     label: "Vendors",         icon: Store,           countKey: null },
+  { href: "/",         label: "Dashboard",       icon: LayoutDashboard, countKey: null },
+  { href: "/garage",   label: "Garage",          icon: Car,             countKey: "vehicles" },
+  { href: "/budget",   label: "Budget",          icon: DollarSign,      countKey: null },
+  { href: "/products", label: "Product Tracker", icon: ShoppingBag,     countKey: null },
+  { href: "/vendors",  label: "Vendors",         icon: Store,           countKey: null },
 ];
 
 export function Sidebar() {
@@ -50,15 +49,11 @@ export function Sidebar() {
   }, []);
 
   useEffect(() => {
-    Promise.allSettled([
-      fetch("/api/vehicles").then((r) => r.json()),
-      fetch("/api/maintenance").then((r) => r.json()),
-    ]).then(([vehicles, maintenance]) => {
+    fetch("/api/vehicles").then((r) => r.json()).then((vehicles) => {
       setCounts({
-        vehicles: vehicles.status === "fulfilled" && Array.isArray(vehicles.value) ? vehicles.value.length : 0,
-        maintenance: maintenance.status === "fulfilled" && Array.isArray(maintenance.value) ? maintenance.value.length : 0,
+        vehicles: Array.isArray(vehicles) ? vehicles.length : 0,
       });
-    });
+    }).catch(() => {});
   }, []);
 
   // Auto-sync LubeLogger silently if the configured interval has elapsed
