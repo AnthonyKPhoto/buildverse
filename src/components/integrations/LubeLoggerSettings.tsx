@@ -62,6 +62,7 @@ export function LubeLoggerSettings() {
   // Saving
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const loadConfig = useCallback(async () => {
     try {
@@ -97,10 +98,11 @@ export function LubeLoggerSettings() {
       });
       const data = await res.json();
       if (res.ok && data.ok) {
-        // Save first so loadVehicles can read the config from DB
+        // Save config to DB (best-effort — vehicles load via live creds even if save fails)
         await handleSave(true);
         setTestResult({ ok: true, msg: `Connected — ${data.vehicleCount} vehicle${data.vehicleCount !== 1 ? "s" : ""} found` });
-        await loadVehicles();
+        // Pass live credentials so vehicle mapping shows even if DB save failed
+        await loadVehicles({ url, authType, apiKey, username, password });
       } else {
         setTestResult({ ok: false, msg: data.error || "Connection failed" });
       }
@@ -111,10 +113,16 @@ export function LubeLoggerSettings() {
     }
   };
 
-  const loadVehicles = async () => {
+  const loadVehicles = async (liveCreds?: { url: string; authType: string; apiKey: string; username: string; password: string }) => {
     setLoadingVehicles(true);
     try {
-      const res = await fetch("/api/integrations/lubelogger/vehicles");
+      const res = liveCreds
+        ? await fetch("/api/integrations/lubelogger/vehicles", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(liveCreds),
+          })
+        : await fetch("/api/integrations/lubelogger/vehicles");
       if (res.ok) {
         const data = await res.json();
         setLlVehicles(Array.isArray(data.lubelogger) ? data.lubelogger : []);
@@ -127,6 +135,7 @@ export function LubeLoggerSettings() {
 
   const handleSave = async (silent = false) => {
     setSaving(true);
+    setSaveError(null);
     try {
       const res = await fetch("/api/integrations/lubelogger/config", {
         method: "PUT",
@@ -149,6 +158,9 @@ export function LubeLoggerSettings() {
           hasPassword: password !== "••••••••" ? !!password : (prev?.hasPassword ?? false),
         }));
         if (!silent) { setSaved(true); setTimeout(() => setSaved(false), 2500); }
+      } else {
+        const data = await res.json().catch(() => ({ error: "Save failed" }));
+        setSaveError(data.error || "Save failed — check the app logs");
       }
     } finally {
       setSaving(false);
@@ -487,6 +499,12 @@ export function LubeLoggerSettings() {
               <p className="text-xs text-muted-foreground">
                 Last synced: {new Date(lastSync).toLocaleString()}
               </p>
+            )}
+            {saveError && (
+              <div className="text-xs px-3 py-2 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400 flex items-start gap-1.5">
+                <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                Save failed: {saveError}
+              </div>
             )}
             {syncError && (
               <div className="text-xs px-3 py-2 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400 flex items-start gap-1.5">

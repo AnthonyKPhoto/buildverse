@@ -14,11 +14,16 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
-  const body = await req.json();
-  // If client sends the masked placeholder, don't overwrite the real value
-  const patch: Record<string, unknown> = { ...body };
-  if (patch.apiKey   === "••••••••") delete patch.apiKey;
-  if (patch.password === "••••••••") delete patch.password;
-  const updated = await saveConfig(patch);
-  return NextResponse.json({ ok: true, syncInterval: updated.syncInterval, lastSync: updated.lastSync });
+  try {
+    const body = await req.json();
+    // If client sends the masked placeholder, don't overwrite the real value
+    const patch: Record<string, unknown> = { ...body };
+    if (patch.apiKey   === "••••••••") delete patch.apiKey;
+    if (patch.password === "••••••••") delete patch.password;
+    const updated = await saveConfig(patch);
+    return NextResponse.json({ ok: true, syncInterval: updated.syncInterval, lastSync: updated.lastSync });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+  }
 }
