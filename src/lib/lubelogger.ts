@@ -68,6 +68,31 @@ function extractCookies(res: Response): string {
   return raw.map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
 }
 
+// Attempt form-based login at /Login/Index; returns cookie header value or null (no auth needed)
+async function tryFormLogin(base: string, username: string, password: string): Promise<string | null> {
+  const formRes = await fetch(`${base}/Login/Index`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ UserName: username, Password: password }).toString(),
+    redirect: "manual",
+  });
+
+  // 404 = no login form on this instance
+  if (formRes.status === 404) return null;
+  if (formRes.status >= 400) throw new Error(`LubeLogger login failed (${formRes.status})`);
+
+  // On wrong credentials ASP.NET Core redirects back to /Login — detect that
+  const location = (formRes.headers.get("location") ?? "").toLowerCase();
+  if (location.includes("/login")) {
+    throw new Error(
+      "Incorrect username or password. Enter your LubeLogger credentials (not Home Assistant or proxy credentials)."
+    );
+  }
+
+  const cookie = extractCookies(formRes);
+  return cookie || null;
+}
+
 // Build auth headers; for basic auth we POST to /api/user/login and reuse the session cookie
 export async function getAuthHeaders(cfg: LubeLoggerConfig): Promise<Record<string, string>> {
   const base = normaliseUrl(cfg.url);
@@ -83,24 +108,21 @@ export async function getAuthHeaders(cfg: LubeLoggerConfig): Promise<Record<stri
       redirect: "manual",
     });
 
-    // 404 = no built-in auth on this LubeLogger — proceed without credentials
-    if (res.status === 404) return {};
+    // 404 = JSON login endpoint doesn't exist (older LubeLogger) — try form login
+    if (res.status === 404) {
+      const cookie = await tryFormLogin(base, cfg.username, cfg.password).catch(() => null);
+      if (cookie) return { Cookie: cookie };
+      return {}; // auth truly disabled, proceed unauthenticated
+    }
 
-    // If JSON login returns 401, try form-encoded to /Login/Index (browser form path)
+    // If JSON login returns 401/403, try browser form path (/Login/Index)
     if (res.status === 401 || res.status === 403) {
-      const formRes = await fetch(`${base}/Login/Index`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ UserName: cfg.username, Password: cfg.password }).toString(),
-        redirect: "manual",
-      });
-      if (formRes.status === 401 || formRes.status === 403 || formRes.status === 404) {
-        throw new Error(`Incorrect username or password. Use your LubeLogger login credentials (not Home Assistant or proxy credentials).`);
-      }
-      if (formRes.status >= 400) throw new Error(`LubeLogger login failed (${formRes.status})`);
-      const formCookie = extractCookies(formRes);
-      if (formCookie) return { Cookie: formCookie };
-      throw new Error("Login succeeded but LubeLogger returned no session cookie — try API Key auth instead.");
+      const cookie = await tryFormLogin(base, cfg.username, cfg.password);
+      if (cookie) return { Cookie: cookie };
+      // tryFormLogin throws on wrong creds; null means form endpoint not found either
+      throw new Error(
+        "Incorrect username or password. Enter your LubeLogger credentials (not Home Assistant or proxy credentials)."
+      );
     }
 
     if (res.status >= 400) throw new Error(`LubeLogger login failed (${res.status})`);

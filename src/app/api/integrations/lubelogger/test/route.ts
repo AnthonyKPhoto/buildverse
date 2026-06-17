@@ -45,6 +45,13 @@ async function runTest(cfg: LubeLoggerConfig) {
         );
       }
 
+      // 401 after basic/cookie login = session cookie not accepted by the API
+      if (res.status === 401 && cfg.authType === "basic") {
+        return NextResponse.json(
+          { error: "Login succeeded but LubeLogger rejected the session on API calls. Switch to API Key auth — in LubeLogger go to ⚙ Settings → Root User API Key and paste that value here." },
+          { status: 502 }
+        );
+      }
       const text = await res.text().catch(() => "");
       return NextResponse.json(
         { error: `LubeLogger returned ${res.status}`, detail: text.slice(0, 200) },
