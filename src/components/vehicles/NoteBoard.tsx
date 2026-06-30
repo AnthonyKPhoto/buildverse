@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Pin, Star } from "lucide-react";
+import { Plus, Trash2, Pin, Star, Check, X } from "lucide-react";
 
 interface VehicleNote {
   id: string;
@@ -15,41 +15,67 @@ interface VehicleNote {
   updatedAt: string;
 }
 
-const NOTE_COLORS = {
-  yellow: { bg: "bg-yellow-500/8",  borderLeft: "border-l-yellow-400",  dot: "bg-yellow-400"  },
-  blue:   { bg: "bg-blue-500/8",    borderLeft: "border-l-blue-400",    dot: "bg-blue-400"    },
-  green:  { bg: "bg-green-500/8",   borderLeft: "border-l-green-400",   dot: "bg-green-400"   },
-  red:    { bg: "bg-red-500/8",     borderLeft: "border-l-red-400",     dot: "bg-red-400"     },
-  purple: { bg: "bg-purple-500/8",  borderLeft: "border-l-purple-400",  dot: "bg-purple-400"  },
-  orange: { bg: "bg-orange-500/8",  borderLeft: "border-l-orange-400",  dot: "bg-orange-400"  },
-} as const;
-type NoteColor = keyof typeof NOTE_COLORS;
-const COLOR_KEYS = Object.keys(NOTE_COLORS) as NoteColor[];
+// Inline styles avoid Tailwind purge issues with dynamic class names
+const NOTE_COLORS: Record<string, { hex: string; bg: string; dot: string }> = {
+  yellow: { hex: "#fbbf24", bg: "rgba(251,191,36,0.07)",  dot: "bg-yellow-400" },
+  blue:   { hex: "#60a5fa", bg: "rgba(96,165,250,0.07)",  dot: "bg-blue-400"   },
+  green:  { hex: "#4ade80", bg: "rgba(74,222,128,0.07)",  dot: "bg-green-400"  },
+  red:    { hex: "#f87171", bg: "rgba(248,113,113,0.07)", dot: "bg-red-400"    },
+  purple: { hex: "#c084fc", bg: "rgba(192,132,252,0.07)", dot: "bg-purple-400" },
+  orange: { hex: "#fb923c", bg: "rgba(251,146,60,0.07)",  dot: "bg-orange-400" },
+};
+const COLOR_KEYS = Object.keys(NOTE_COLORS);
 
 function NoteCard({
   note,
+  isNew,
   onUpdate,
   onDelete,
+  onSave,
 }: {
   note: VehicleNote;
+  isNew: boolean;
   onUpdate: (id: string, changes: Partial<VehicleNote>) => void;
   onDelete: (id: string) => void;
+  onSave: (id: string, title: string, content: string) => void;
 }) {
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState(note.content);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
-  const colors = NOTE_COLORS[note.color as NoteColor] ?? NOTE_COLORS.yellow;
+  const isDirty = title !== note.title || content !== note.content;
+  const showActions = isDirty || isNew;
+  const colors = NOTE_COLORS[note.color] ?? NOTE_COLORS.yellow;
 
-  const setImportance = (val: number) => {
-    // clicking the same star again clears importance
-    onUpdate(note.id, { importance: note.importance === val ? 0 : val });
+  const handleSave = () => {
+    onSave(note.id, title, content);
+    setConfirmDiscard(false);
+  };
+
+  const handleDiscardClick = () => {
+    if (isNew && !isDirty) {
+      onDelete(note.id);
+    } else {
+      setConfirmDiscard(true);
+    }
+  };
+
+  const handleConfirmDiscard = () => {
+    if (isNew) {
+      onDelete(note.id);
+    } else {
+      setTitle(note.title);
+      setContent(note.content);
+      setConfirmDiscard(false);
+    }
   };
 
   return (
     <div
-      className={`group relative flex flex-col gap-3 rounded-xl border border-border/60 border-l-[3px] ${colors.borderLeft} ${colors.bg} p-4 min-h-[180px]`}
+      className="group relative flex flex-col gap-3 rounded-xl border border-border/60 border-l-[3px] p-4 min-h-[200px] transition-colors"
+      style={{ borderLeftColor: colors.hex, backgroundColor: colors.bg }}
     >
-      {/* Top row: color picker + delete */}
+      {/* Color picker + delete */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           {COLOR_KEYS.map((c) => (
@@ -63,14 +89,16 @@ function NoteCard({
             />
           ))}
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive"
-          onClick={() => onDelete(note.id)}
-        >
-          <Trash2 className="w-3 h-3" />
-        </Button>
+        {!showActions && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive"
+            onClick={() => onDelete(note.id)}
+          >
+            <Trash2 className="w-3 h-3" />
+          </Button>
+        )}
       </div>
 
       {/* Title */}
@@ -78,8 +106,7 @@ function NoteCard({
         className="bg-transparent font-semibold text-sm placeholder:text-muted-foreground/40 focus:outline-none w-full"
         placeholder="Note title…"
         value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onBlur={() => { if (title !== note.title) onUpdate(note.id, { title }); }}
+        onChange={(e) => { setTitle(e.target.value); setConfirmDiscard(false); }}
       />
 
       {/* Content */}
@@ -87,17 +114,16 @@ function NoteCard({
         className="bg-transparent text-sm text-muted-foreground/80 placeholder:text-muted-foreground/40 focus:outline-none resize-none flex-1 min-h-[80px] leading-relaxed"
         placeholder="Write something…"
         value={content}
-        onChange={(e) => setContent(e.target.value)}
-        onBlur={() => { if (content !== note.content) onUpdate(note.id, { content }); }}
+        onChange={(e) => { setContent(e.target.value); setConfirmDiscard(false); }}
       />
 
-      {/* Bottom: importance stars */}
-      <div className="flex items-center gap-0.5 pt-1 border-t border-border/30">
+      {/* Priority stars */}
+      <div className="flex items-center gap-0.5 border-t border-border/30 pt-2">
         <span className="text-xs text-muted-foreground/50 mr-1.5">Priority</span>
         {[1, 2, 3].map((star) => (
           <button
             key={star}
-            onClick={() => setImportance(star)}
+            onClick={() => onUpdate(note.id, { importance: note.importance === star ? 0 : star })}
             className="p-0.5 rounded transition-transform hover:scale-110"
             title={star === 1 ? "Low" : star === 2 ? "Medium" : "High"}
           >
@@ -116,12 +142,42 @@ function NoteCard({
           </span>
         )}
       </div>
+
+      {/* Save / Discard */}
+      {showActions && !confirmDiscard && (
+        <div className="flex gap-2 border-t border-border/30 pt-2">
+          <Button size="sm" className="flex-1 h-7 bg-theme hover:brightness-90 text-xs gap-1" onClick={handleSave}>
+            <Check className="w-3 h-3" /> Save
+          </Button>
+          <Button size="sm" variant="outline" className="flex-1 h-7 text-xs gap-1" onClick={handleDiscardClick}>
+            <X className="w-3 h-3" /> {isNew ? "Delete" : "Discard"}
+          </Button>
+        </div>
+      )}
+
+      {/* Inline discard confirmation */}
+      {confirmDiscard && (
+        <div className="flex flex-col gap-2 border-t border-border/30 pt-2">
+          <p className="text-xs text-muted-foreground text-center">
+            {isNew ? "Delete this note?" : "Discard unsaved changes?"}
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" variant="destructive" className="flex-1 h-7 text-xs" onClick={handleConfirmDiscard}>
+              {isNew ? "Delete" : "Discard"}
+            </Button>
+            <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={() => setConfirmDiscard(false)}>
+              Keep editing
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export function NoteBoard({ vehicleId }: { vehicleId: string }) {
   const [notes, setNotes] = useState<VehicleNote[]>([]);
+  const [newNoteIds, setNewNoteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -140,6 +196,7 @@ export function NoteBoard({ vehicleId }: { vehicleId: string }) {
       });
       const note = await res.json();
       setNotes((prev) => [note, ...prev]);
+      setNewNoteIds((prev) => { const next = new Set(prev); next.add(note.id); return next; });
     } catch {}
   };
 
@@ -152,12 +209,22 @@ export function NoteBoard({ vehicleId }: { vehicleId: string }) {
     }).catch(() => {});
   };
 
+  const saveNote = async (noteId: string, title: string, content: string) => {
+    setNotes((prev) => prev.map((n) => (n.id === noteId ? { ...n, title, content } : n)));
+    setNewNoteIds((prev) => { const next = new Set(prev); next.delete(noteId); return next; });
+    await fetch(`/api/vehicles/${vehicleId}/notes/${noteId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, content }),
+    }).catch(() => {});
+  };
+
   const deleteNote = async (noteId: string) => {
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
+    setNewNoteIds((prev) => { const next = new Set(prev); next.delete(noteId); return next; });
     await fetch(`/api/vehicles/${vehicleId}/notes/${noteId}`, { method: "DELETE" }).catch(() => {});
   };
 
-  // Sort: higher importance first, then by creation order
   const sorted = [...notes].sort((a, b) => b.importance - a.importance);
 
   return (
@@ -194,7 +261,14 @@ export function NoteBoard({ vehicleId }: { vehicleId: string }) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {sorted.map((note) => (
-            <NoteCard key={note.id} note={note} onUpdate={updateNote} onDelete={deleteNote} />
+            <NoteCard
+              key={note.id}
+              note={note}
+              isNew={newNoteIds.has(note.id)}
+              onUpdate={updateNote}
+              onDelete={deleteNote}
+              onSave={saveNote}
+            />
           ))}
         </div>
       )}
