@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2, Pin, Star, Check, X } from "lucide-react";
 
@@ -42,6 +42,17 @@ function NoteCard({
   const [title, setTitle] = useState(note.title);
   const [content, setContent] = useState(note.content);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const prevId = useRef(note.id);
+
+  // Reset local state if React reuses this instance for a different note
+  useEffect(() => {
+    if (prevId.current !== note.id) {
+      prevId.current = note.id;
+      setTitle(note.title);
+      setContent(note.content);
+      setConfirmDiscard(false);
+    }
+  }, [note.id, note.title, note.content]);
 
   const isDirty = title !== note.title || content !== note.content;
   const showActions = isDirty || isNew;
@@ -105,6 +116,7 @@ function NoteCard({
       <input
         className="bg-transparent font-semibold text-sm placeholder:text-muted-foreground/40 focus:outline-none w-full"
         placeholder="Note title…"
+        autoComplete="off"
         value={title}
         onChange={(e) => { setTitle(e.target.value); setConfirmDiscard(false); }}
       />
@@ -195,6 +207,7 @@ export function NoteBoard({ vehicleId }: { vehicleId: string }) {
         body: JSON.stringify({ title: "", content: "", color: "yellow", importance: 0 }),
       });
       const note = await res.json();
+      if (!note?.id) return; // guard against error responses
       setNotes((prev) => [note, ...prev]);
       setNewNoteIds((prev) => { const next = new Set(prev); next.add(note.id); return next; });
     } catch {}
