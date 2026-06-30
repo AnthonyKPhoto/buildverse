@@ -15,13 +15,14 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { title, content, color } = await req.json();
+    const { title, content, color, importance } = await req.json();
     const note = await prisma.vehicleNote.create({
       data: {
         vehicleId: params.id,
         title: title ?? "",
         content: content ?? "",
         color: color ?? "yellow",
+        importance: importance ?? 0,
       },
     });
     return NextResponse.json(note);

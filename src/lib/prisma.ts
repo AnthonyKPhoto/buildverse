@@ -115,6 +115,21 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
     // MaintenanceLog.externalId — added in v1.3.1 for LubeLogger sync deduplication
     `ALTER TABLE "MaintenanceLog" ADD COLUMN "externalId" TEXT`,
     `CREATE INDEX IF NOT EXISTS "MaintenanceLog_externalId_idx" ON "MaintenanceLog"("externalId")`,
+    // VehicleNote table — added in v1.3.24 for sticky note board
+    `CREATE TABLE IF NOT EXISTS "VehicleNote" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "vehicleId" TEXT NOT NULL,
+      "title" TEXT NOT NULL DEFAULT '',
+      "content" TEXT NOT NULL DEFAULT '',
+      "color" TEXT NOT NULL DEFAULT 'yellow',
+      "importance" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("vehicleId") REFERENCES "Vehicle"("id") ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS "VehicleNote_vehicleId_idx" ON "VehicleNote"("vehicleId")`,
+    // VehicleNote.importance — added in v1.3.25 (column may be absent if table was created by v1.3.24)
+    `ALTER TABLE "VehicleNote" ADD COLUMN "importance" INTEGER NOT NULL DEFAULT 0`,
   ];
   for (const sql of stmts) {
     await prisma.$executeRawUnsafe(sql).catch(() => {});
