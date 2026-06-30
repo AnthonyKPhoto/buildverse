@@ -39,60 +39,60 @@ function VehicleCard({ vehicle, onEdit, onDelete }: { vehicle: Vehicle; onEdit: 
     .reduce((s, m) => s + (m.price ?? 0), 0);
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card hover:border-theme/30 transition-all duration-200">
-      {/* Photo area */}
-      <div className="relative h-48 bg-secondary overflow-hidden">
-        {vehicle.photoUrl && !imgErr ? (
-          vehicle.photoUrl.startsWith("data:") ? (
-            <img
-              src={vehicle.photoUrl}
-              alt={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              onError={() => setImgErr(true)}
-            />
+    <Link href={`/garage/${vehicle.id}`} className="block">
+      <div className="group relative overflow-hidden rounded-2xl border border-border/60 bg-card hover:border-theme/30 transition-all duration-200 cursor-pointer">
+        {/* Photo area */}
+        <div className="relative h-48 bg-secondary overflow-hidden">
+          {vehicle.photoUrl && !imgErr ? (
+            vehicle.photoUrl.startsWith("data:") ? (
+              <img
+                src={vehicle.photoUrl}
+                alt={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                onError={() => setImgErr(true)}
+              />
+            ) : (
+              <Image
+                src={vehicle.photoUrl}
+                alt={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+                fill
+                className="object-cover group-hover:scale-105 transition-transform duration-500"
+                onError={() => setImgErr(true)}
+              />
+            )
           ) : (
-            <Image
-              src={vehicle.photoUrl}
-              alt={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-500"
-              onError={() => setImgErr(true)}
-            />
-          )
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Car className="w-16 h-16 text-muted-foreground/15" />
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-card/80 via-transparent to-transparent" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Car className="w-16 h-16 text-muted-foreground/15" />
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-card/80 via-transparent to-transparent" />
 
-        {/* Action buttons */}
-        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button
-            size="sm" variant="secondary"
-            className="h-7 w-7 p-0 bg-card/90 hover:bg-card"
-            onClick={(e) => { e.preventDefault(); onEdit(); }}
-          >
-            <Edit2 className="w-3 h-3" />
-          </Button>
-          <Button
-            size="sm" variant="secondary"
-            className="h-7 w-7 p-0 bg-card/90 hover:bg-destructive hover:text-destructive-foreground"
-            onClick={(e) => { e.preventDefault(); onDelete(); }}
-          >
-            <Trash2 className="w-3 h-3" />
-          </Button>
+          {/* Action buttons */}
+          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button
+              size="sm" variant="secondary"
+              className="h-7 w-7 p-0 bg-card/90 hover:bg-card"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
+            >
+              <Edit2 className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm" variant="secondary"
+              className="h-7 w-7 p-0 bg-card/90 hover:bg-destructive hover:text-destructive-foreground"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(); }}
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
+          </div>
+
+          {vehicle.color && (
+            <div className="absolute bottom-2 left-2">
+              <Badge variant="secondary" className="text-xs bg-card/90">{vehicle.color}</Badge>
+            </div>
+          )}
         </div>
 
-        {vehicle.color && (
-          <div className="absolute bottom-2 left-2">
-            <Badge variant="secondary" className="text-xs bg-card/90">{vehicle.color}</Badge>
-          </div>
-        )}
-      </div>
-
-      {/* Content */}
-      <Link href={`/garage/${vehicle.id}`}>
+        {/* Content */}
         <div className="p-5">
           <div className="mb-4">
             <div className="flex items-start justify-between gap-2">
@@ -143,8 +143,8 @@ function VehicleCard({ vehicle, onEdit, onDelete }: { vehicle: Vehicle; onEdit: 
             View build <ArrowRight className="w-4 h-4" />
           </div>
         </div>
-      </Link>
-    </div>
+      </div>
+    </Link>
   );
 }
 

@@ -81,14 +81,25 @@ export default function DashboardPage() {
   useEffect(() => { setVisible(loadVis()); }, []);
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/vehicles").then(r => r.json()),
-      fetch("/api/activity").then(r => r.json()).catch(() => []),
-    ]).then(([v, a]) => {
-      setVehicles(Array.isArray(v) ? v : []);
-      setActivity(Array.isArray(a) ? a : []);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    const fetchAll = () =>
+      Promise.all([
+        fetch("/api/vehicles").then(r => r.json()),
+        fetch("/api/activity").then(r => r.json()).catch(() => []),
+      ]).then(([v, a]) => {
+        setVehicles(Array.isArray(v) ? v : []);
+        setActivity(Array.isArray(a) ? a : []);
+        setLoading(false);
+      }).catch(() => setLoading(false));
+
+    fetchAll();
+
+    const onFocus = () => fetchAll();
+    window.addEventListener("focus", onFocus);
+    const interval = setInterval(fetchAll, 30_000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      clearInterval(interval);
+    };
   }, []);
 
   const toggleSection = (key: SectionKey) => {

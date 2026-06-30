@@ -27,6 +27,7 @@ import { VehicleFilesTab } from "@/components/vehicles/VehicleFilesTab";
 import { DynoTab } from "@/components/vehicles/DynoTab";
 import { KanbanView } from "@/components/vehicles/KanbanView";
 import { TuneLogsTab } from "@/components/vehicles/TuneLogsTab";
+import { NoteBoard } from "@/components/vehicles/NoteBoard";
 import { LinksTab } from "@/components/vehicles/LinksTab";
 import { CSVImportDialog } from "@/components/modifications/CSVImportDialog";
 import {
@@ -113,8 +114,6 @@ export default function VehicleDetailPage() {
   const [buildCardOpen, setBuildCardOpen] = useState(false);
   const [bcImgError, setBcImgError] = useState(false);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
-  const [journalNotes, setJournalNotes] = useState("");
-  const [savingJournal, setSavingJournal] = useState(false);
   const [budgetForm, setBudgetForm] = useState({ category: "", planned: "", actual: "" });
   const [savingBudget, setSavingBudget] = useState(false);
   const imageFetchQueue = useRef<Set<string>>(new Set());
@@ -183,7 +182,7 @@ export default function VehicleDetailPage() {
       .then((r) => r.json())
       .then((d) => {
         setVehicle(d);
-        setJournalNotes(d.notes ?? "");
+
         setLoading(false);
         autoFetchModImages(d.modifications ?? []);
       })
@@ -220,20 +219,6 @@ export default function VehicleDetailPage() {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: next }),
     }).catch(() => {});
-  };
-
-  const saveJournal = async () => {
-    if (!vehicle) return;
-    setSavingJournal(true);
-    try {
-      await fetch(`/api/vehicles/${id}`, {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: journalNotes }),
-      });
-      setVehicle((v) => v ? { ...v, notes: journalNotes } : v);
-      toast({ title: "Journal saved" });
-    } catch { toast({ title: "Failed to save", variant: "destructive" }); }
-    finally { setSavingJournal(false); }
   };
 
   const saveBudget = async (e: React.FormEvent) => {
@@ -1011,25 +996,8 @@ export default function VehicleDetailPage() {
         </TabsContent>
 
         {/* ===== JOURNAL TAB ===== */}
-        <TabsContent value="journal" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Build Journal</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <textarea
-                className="w-full min-h-[320px] resize-y bg-secondary/30 rounded-lg border border-border p-3 text-sm focus:outline-none focus:ring-1 focus:ring-theme"
-                placeholder="Document your build journey — plans, decisions, notes, lessons learned…"
-                value={journalNotes}
-                onChange={(e) => setJournalNotes(e.target.value)}
-              />
-              <div className="flex justify-end">
-                <Button onClick={saveJournal} disabled={savingJournal} className="bg-theme hover:brightness-90">
-                  {savingJournal ? "Saving…" : "Save Journal"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="journal" className="mt-4">
+          <NoteBoard vehicleId={id} />
         </TabsContent>
 
         {/* ===== LINKS TAB ===== */}
