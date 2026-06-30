@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, Pin } from "lucide-react";
+import { Plus, Trash2, Pin, Star } from "lucide-react";
 
 interface VehicleNote {
   id: string;
@@ -10,6 +10,7 @@ interface VehicleNote {
   title: string;
   content: string;
   color: string;
+  importance: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,11 +40,16 @@ function NoteCard({
 
   const colors = NOTE_COLORS[note.color as NoteColor] ?? NOTE_COLORS.yellow;
 
+  const setImportance = (val: number) => {
+    // clicking the same star again clears importance
+    onUpdate(note.id, { importance: note.importance === val ? 0 : val });
+  };
+
   return (
     <div
       className={`group relative flex flex-col gap-3 rounded-xl border border-border/60 border-l-[3px] ${colors.borderLeft} ${colors.bg} p-4 min-h-[180px]`}
     >
-      {/* Color picker + delete */}
+      {/* Top row: color picker + delete */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           {COLOR_KEYS.map((c) => (
@@ -85,10 +91,31 @@ function NoteCard({
         onBlur={() => { if (content !== note.content) onUpdate(note.id, { content }); }}
       />
 
-      {/* Date */}
-      <p className="text-xs text-muted-foreground/40">
-        {new Date(note.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-      </p>
+      {/* Bottom: importance stars */}
+      <div className="flex items-center gap-0.5 pt-1 border-t border-border/30">
+        <span className="text-xs text-muted-foreground/50 mr-1.5">Priority</span>
+        {[1, 2, 3].map((star) => (
+          <button
+            key={star}
+            onClick={() => setImportance(star)}
+            className="p-0.5 rounded transition-transform hover:scale-110"
+            title={star === 1 ? "Low" : star === 2 ? "Medium" : "High"}
+          >
+            <Star
+              className={`w-3.5 h-3.5 transition-colors ${
+                star <= note.importance
+                  ? "fill-amber-400 text-amber-400"
+                  : "text-muted-foreground/30 hover:text-amber-400/60"
+              }`}
+            />
+          </button>
+        ))}
+        {note.importance > 0 && (
+          <span className="text-xs ml-1.5 text-amber-400/70">
+            {note.importance === 1 ? "Low" : note.importance === 2 ? "Medium" : "High"}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -109,7 +136,7 @@ export function NoteBoard({ vehicleId }: { vehicleId: string }) {
       const res = await fetch(`/api/vehicles/${vehicleId}/notes`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "", content: "", color: "yellow" }),
+        body: JSON.stringify({ title: "", content: "", color: "yellow", importance: 0 }),
       });
       const note = await res.json();
       setNotes((prev) => [note, ...prev]);
@@ -129,6 +156,9 @@ export function NoteBoard({ vehicleId }: { vehicleId: string }) {
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
     await fetch(`/api/vehicles/${vehicleId}/notes/${noteId}`, { method: "DELETE" }).catch(() => {});
   };
+
+  // Sort: higher importance first, then by creation order
+  const sorted = [...notes].sort((a, b) => b.importance - a.importance);
 
   return (
     <div className="space-y-4">
@@ -163,7 +193,7 @@ export function NoteBoard({ vehicleId }: { vehicleId: string }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {notes.map((note) => (
+          {sorted.map((note) => (
             <NoteCard key={note.id} note={note} onUpdate={updateNote} onDelete={deleteNote} />
           ))}
         </div>

@@ -3,13 +3,14 @@ import { prisma } from "@/lib/prisma";
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string; noteId: string } }) {
   try {
-    const { title, content, color } = await req.json();
+    const { title, content, color, importance } = await req.json();
     const note = await prisma.vehicleNote.update({
       where: { id: params.noteId },
       data: {
         ...(title !== undefined && { title }),
         ...(content !== undefined && { content }),
         ...(color !== undefined && { color }),
+        ...(importance !== undefined && { importance }),
       },
     });
     return NextResponse.json(note);

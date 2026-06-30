@@ -216,10 +216,11 @@ model Receipt {
 model VehicleNote {
   id        String   @id @default(cuid())
   vehicleId String
-  title     String   @default("")
-  content   String   @default("")
-  color     String   @default("yellow")
-  createdAt DateTime @default(now())
+  title      String   @default("")
+  content    String   @default("")
+  color      String   @default("yellow")
+  importance Int      @default(0)
+  createdAt  DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
