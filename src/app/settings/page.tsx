@@ -6,10 +6,9 @@ import {
   Zap, Monitor, Palette, Moon, Sun,
   Archive, RotateCcw, Trash2, ArrowUpCircle,
   CheckCircle2, AlertCircle, Loader2, X, Save, ShoppingBag,
-  Tag, Plus, GripVertical, Wifi, Globe, Lock, Eye, EyeOff,
-  Server, Shield, Copy, Smartphone, Plug, Key,
+  Tag, Plus, GripVertical, Globe, Lock, Eye, EyeOff,
+  Shield, Copy, Smartphone, Plug, Key,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import { MOD_CATEGORIES } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -290,30 +289,6 @@ export default function SettingsPage() {
       toast({ title: "Password removed", description: "Restart BuildVerse to apply." });
     } catch { toast({ title: "Failed to remove password", variant: "destructive" }); }
   };
-
-  const traefikYaml = useMemo(() => {
-    const machineIp = lanUrl ? lanUrl.replace(/^https?:\/\//, "").replace(/:\d+$/, "") : "YOUR_MACHINE_IP";
-    const domain = remoteDomain || "buildverse.yourdomain.com";
-    const port = remotePort || 3456;
-    return `# Place this file in your Traefik dynamic config directory
-# e.g. /etc/traefik/dynamic/buildverse.yml
-
-http:
-  routers:
-    buildverse:
-      rule: "Host(\`${domain}\`)"
-      service: buildverse
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-
-  services:
-    buildverse:
-      loadBalancer:
-        servers:
-          - url: "http://${machineIp}:${port}"`;
-  }, [lanUrl, remoteDomain, remotePort]);
 
   const externalUrl = useMemo(() => remoteDomain ? `https://${remoteDomain}` : null, [remoteDomain]);
 
@@ -760,101 +735,45 @@ http:
                     )}
                   </Section>
 
-                  <Section title="Access URLs" icon={Smartphone}>
-                    <div className="space-y-5">
-                      {lanUrl ? (
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">Local Network</p>
-                          <div className="p-4 rounded-xl bg-secondary space-y-3">
-                            <div className="flex items-center justify-between gap-3 flex-wrap">
-                              <p className="font-mono text-sm font-semibold break-all">{lanUrl}</p>
-                              <Btn size="xs" onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied" }); }}>
-                                <Copy className="w-3 h-3" /> Copy
-                              </Btn>
-                            </div>
-                            <div className="flex justify-center pt-1">
-                              <QRCodeSVG value={lanUrl} size={120} bgColor="transparent" fgColor="currentColor" className="rounded-lg opacity-90" />
-                            </div>
-                            <p className="text-xs text-center text-muted-foreground">Scan from your phone — must be on the same Wi-Fi</p>
-                          </div>
-                        </div>
-                      ) : remoteEnabled ? (
-                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
-                          <Wifi className="inline w-3.5 h-3.5 mr-1" />
-                          Restart BuildVerse after enabling remote access to see your LAN URL here.
-                        </div>
-                      ) : null}
-
-                      {externalUrl && (
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">External (via Traefik)</p>
-                          <div className="p-4 rounded-xl bg-secondary space-y-3">
-                            <div className="flex items-center justify-between gap-3 flex-wrap">
-                              <p className="font-mono text-sm font-semibold break-all">{externalUrl}</p>
-                              <Btn size="xs" onClick={() => { navigator.clipboard.writeText(externalUrl!); toast({ title: "Copied" }); }}>
-                                <Copy className="w-3 h-3" /> Copy
-                              </Btn>
-                            </div>
-                            <div className="flex justify-center pt-1">
-                              <QRCodeSVG value={externalUrl} size={120} bgColor="transparent" fgColor="currentColor" className="rounded-lg opacity-90" />
-                            </div>
-                            <p className="text-xs text-center text-muted-foreground">Accessible from anywhere — requires Traefik configured below</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {!lanUrl && !externalUrl && (
-                        <p className="text-sm text-muted-foreground py-1">Enable remote access and add a domain above to see your access URLs.</p>
-                      )}
-                    </div>
-                  </Section>
-
-                  <Section title="Traefik Configuration" icon={Server}>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Drop this file into your Traefik dynamic config directory to proxy{" "}
-                      <code className="text-xs bg-secondary px-1.5 py-0.5 rounded">{remoteDomain || "your domain"}</code> to BuildVerse.
-                    </p>
-                    <div className="relative">
-                      <pre className="text-xs bg-secondary/80 border border-border rounded-xl p-4 overflow-x-auto leading-relaxed text-muted-foreground whitespace-pre">
-                        {traefikYaml}
-                      </pre>
-                      <button
-                        onClick={() => { navigator.clipboard.writeText(traefikYaml); toast({ title: "Config copied" }); }}
-                        className="absolute top-3 right-3 p-1.5 rounded-lg bg-background/80 border border-border text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="mt-4 p-3 rounded-xl bg-secondary/60 border border-border/60 text-xs text-muted-foreground space-y-2">
-                      <p className="font-medium text-foreground">Windows Firewall — allow inbound port {remotePort || 3456}</p>
-                      <p className="font-mono bg-background px-2 py-1.5 rounded break-all">
-                        {`New-NetFirewallRule -DisplayName "BuildVerse" -Direction Inbound -Protocol TCP -LocalPort ${remotePort || 3456} -Action Allow`}
-                      </p>
-                    </div>
-                  </Section>
-
-                  <Section title="Android App" icon={Smartphone}>
+                  <Section title="Server URL" icon={Smartphone}>
                     <p className="text-sm text-muted-foreground mb-3">
-                      A Capacitor-based Android APK is included in the project. Use the URL below as the server endpoint.
+                      When you open the BuildVerse Android app for the first time, enter the URL below to connect it to this machine.
                     </p>
-                    <div className="p-3 rounded-xl bg-secondary border border-border">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">Server URL for Android</p>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 text-sm font-mono break-all">
-                          {externalUrl || lanUrl || `http://YOUR_IP:${remotePort || 3456}`}
-                        </code>
-                        {(externalUrl || lanUrl) && (
-                          <Btn size="xs" onClick={() => { navigator.clipboard.writeText((externalUrl || lanUrl)!); toast({ title: "Copied" }); }}>
-                            <Copy className="w-3 h-3" />
-                          </Btn>
-                        )}
-                      </div>
+                    <div className="space-y-2">
+                      {lanUrl && (
+                        <div className="p-3 rounded-xl bg-secondary border border-border">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">LAN (same Wi-Fi)</p>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 text-sm font-mono break-all">{lanUrl}</code>
+                            <Btn size="xs" onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied" }); }}>
+                              <Copy className="w-3 h-3" /> Copy
+                            </Btn>
+                          </div>
+                        </div>
+                      )}
+                      {externalUrl && (
+                        <div className="p-3 rounded-xl bg-secondary border border-border">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">External (anywhere)</p>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 text-sm font-mono break-all">{externalUrl}</code>
+                            <Btn size="xs" onClick={() => { navigator.clipboard.writeText(externalUrl!); toast({ title: "Copied" }); }}>
+                              <Copy className="w-3 h-3" /> Copy
+                            </Btn>
+                          </div>
+                        </div>
+                      )}
+                      {!lanUrl && !externalUrl && (
+                        <div className="p-3 rounded-xl bg-secondary/60 border border-border/60 font-mono text-sm text-muted-foreground">
+                          {`http://YOUR_IP:${remotePort || 3456}`}
+                        </div>
+                      )}
+                      {!remoteEnabled && (
+                        <p className="text-xs text-amber-400 flex items-center gap-1.5 pt-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          Enable Remote Access above so your phone can reach this machine.
+                        </p>
+                      )}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
-                      Run <code className="bg-secondary px-1 rounded">npx cap add android</code> then{" "}
-                      <code className="bg-secondary px-1 rounded">npx cap open android</code> to build the APK in Android Studio.
-                      Update the server URL in <code className="bg-secondary px-1 rounded">capacitor.config.ts</code>.
-                    </p>
                   </Section>
                 </>
               )}

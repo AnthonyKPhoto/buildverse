@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>BuildVerse</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #09090b;
+      --card: #18181b;
+      --border: #27272a;
+      --fg: #fafafa;
+      --muted: #71717a;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --error: #f87171;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .logo-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 40px;
+    }
+
+    .logo-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: -1px;
+    }
+
+    .logo-title {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .logo-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+
+    .field-input {
+      width: 100%;
+      padding: 13px 16px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--fg);
+      font-size: 14px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      outline: none;
+      transition: border-color 0.15s;
+      -webkit-appearance: none;
+    }
+
+    .field-input:focus {
+      border-color: var(--accent);
+    }
+
+    .field-input::placeholder {
+      color: var(--muted);
+      opacity: 0.7;
+    }
+
+    .connect-btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 12px;
+      transition: background 0.15s;
+    }
+
+    .connect-btn:active {
+      background: var(--accent-hover);
+    }
+
+    .connect-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .countdown {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 14px;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .countdown:hover {
+      color: var(--fg);
+    }
+
+    .error-msg {
+      font-size: 12px;
+      color: var(--error);
+      margin-top: 8px;
+      padding-left: 2px;
+    }
+
+    .hint {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 20px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo-wrap">
+    <div class="logo-icon">BV</div>
+    <div class="logo-title">BuildVerse</div>
+    <div class="logo-sub">Vehicle Modification Manager</div>
+  </div>
+
+  <div class="card">
+    <label class="field-label" for="server-url">Server Address</label>
+    <input
+      class="field-input"
+      type="url"
+      id="server-url"
+      placeholder="http://192.168.1.100:3456"
+      autocorrect="off"
+      autocapitalize="none"
+      spellcheck="false"
+      inputmode="url"
+    />
+    <div class="error-msg" id="error-msg" style="display:none"></div>
+    <button class="connect-btn" id="connect-btn">Connect</button>
+    <div class="countdown" id="countdown" style="display:none"></div>
+  </div>
+
+  <p class="hint">
+    Enter the address of the BuildVerse desktop app.<br>
+    Tap the countdown to cancel auto-connect.
+  </p>
+
+  <script>
+    const STORAGE_KEY = 'bv_server_url';
+    const input       = document.getElementById('server-url');
+    const btn         = document.getElementById('connect-btn');
+    const errorMsg    = document.getElementById('error-msg');
+    const countdown   = document.getElementById('countdown');
+    let autoTimer     = null;
+    let cancelled     = false;
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+    }
+
+    function clearError() {
+      errorMsg.style.display = 'none';
+    }
+
+    function normaliseUrl(raw) {
+      raw = raw.trim();
+      if (!raw) return null;
+      if (!/^https?:\/\//i.test(raw)) raw = 'http://' + raw;
+      try { return new URL(raw).href; } catch { return null; }
+    }
+
+    function connect(urlRaw) {
+      const url = normaliseUrl(urlRaw);
+      if (!url) { showError('Please enter a valid server address.'); return; }
+      localStorage.setItem(STORAGE_KEY, url);
+      window.location.replace(url);
+    }
+
+    function startCountdown(url) {
+      let secs = 2;
+      cancelled = false;
+      countdown.style.display = 'block';
+      countdown.textContent   = `Connecting in ${secs}s — tap to cancel`;
+
+      autoTimer = setInterval(() => {
+        if (cancelled) { clearInterval(autoTimer); return; }
+        secs--;
+        if (secs <= 0) {
+          clearInterval(autoTimer);
+          connect(url);
+        } else {
+          countdown.textContent = `Connecting in ${secs}s — tap to cancel`;
+        }
+      }, 1000);
+    }
+
+    countdown.addEventListener('click', () => {
+      cancelled = true;
+      clearInterval(autoTimer);
+      countdown.style.display = 'none';
+    });
+
+    input.addEventListener('focus', () => {
+      if (autoTimer) {
+        cancelled = true;
+        clearInterval(autoTimer);
+        countdown.style.display = 'none';
+      }
+      clearError();
+    });
+
+    btn.addEventListener('click', () => {
+      if (autoTimer) { clearInterval(autoTimer); cancelled = true; }
+      connect(input.value);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        if (autoTimer) { clearInterval(autoTimer); cancelled = true; }
+        connect(input.value);
+      }
+    });
+
+    // On load: if a URL is saved, pre-fill and start countdown
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      input.value = saved;
+      startCountdown(saved);
+    }
+  </script>
+</body>
+</html>

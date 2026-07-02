@@ -1,6 +1,6 @@
 {
   "name": "buildverse",
-  "version": "1.3.29",
+  "version": "1.3.30",
   "description": "BuildVerse — Intelligent Vehicle Modification Manager",
   "private": true,
   "main": "electron/main.js",
@@ -19,6 +19,8 @@
     "package:win": "npm run electron:build"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/utilities": "^3.2.2",
     "@prisma/client": "^5.22.0",
@@ -56,6 +58,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
     "@resvg/resvg-js": "^2.6.2",
     "@types/cheerio": "^0.22.35",
     "@types/node": "^20.16.11",

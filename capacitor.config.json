@@ -1,9 +1,15 @@
 {
   "appId": "net.kaiserhomelab.buildverse",
   "appName": "BuildVerse",
-  "server": {
-    "url": "http://YOUR_SERVER_IP:3456",
-    "cleartext": true
+  "webDir": "capacitor-app",
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
   },
-  "android": {}
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": false
+    }
+  }
 }
