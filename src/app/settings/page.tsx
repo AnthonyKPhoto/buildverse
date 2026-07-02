@@ -213,7 +213,7 @@ export default function SettingsPage() {
     finally { setLoadingBkp(false); }
   }, [isElectron]);
 
-  // Load sync config
+  // Load sync config + handle OAuth redirect-back params
   useEffect(() => {
     setSyncMethodState((localStorage.getItem("bv_sync_method") as SyncMethod) || "server");
     setWebdavUrl(localStorage.getItem("bv_sync_webdav_url") || "");
@@ -223,7 +223,28 @@ export default function SettingsPage() {
     setLastSyncedAt(localStorage.getItem("bv_sync_last_synced_at"));
     const expiry = parseInt(localStorage.getItem("bv_sync_gdrive_token_expiry") || "0");
     setGdriveAuthed(!!(localStorage.getItem("bv_sync_gdrive_token") && Date.now() < expiry - 60_000));
-  }, []);
+
+    // Handle OAuth redirect-back
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("section") === "sync") setSection("sync");
+    const pickupKey = params.get("gdrive_pickup");
+    const gdriveErr = params.get("gdrive_error");
+    if (pickupKey) {
+      fetch(`/api/oauth/google/token?key=${pickupKey}`)
+        .then(r => r.ok ? r.json() : Promise.reject(r))
+        .then((data: { accessToken: string; expiresAt: number }) => {
+          localStorage.setItem("bv_sync_gdrive_token",        data.accessToken);
+          localStorage.setItem("bv_sync_gdrive_token_expiry", String(data.expiresAt));
+          setGdriveAuthed(true);
+          toast({ title: "Google Drive authorized" });
+        })
+        .catch(() => toast({ title: "Failed to retrieve token", variant: "destructive" }));
+      window.history.replaceState({}, "", "/settings");
+    } else if (gdriveErr) {
+      toast({ title: `Google auth failed: ${gdriveErr}`, variant: "destructive" });
+      window.history.replaceState({}, "", "/settings");
+    }
+  }, [toast]);
 
   useEffect(() => {
     const stored = localStorage.getItem("bv_autoTrackProducts");
@@ -462,44 +483,13 @@ export default function SettingsPage() {
     toast({ title: "Sync settings saved" });
   };
 
-  const _loadGIS = (): Promise<void> => new Promise((resolve, reject) => {
-    if ((window as unknown as Record<string,unknown>).google) { resolve(); return; }
-    if (document.getElementById("gis-script")) { resolve(); return; }
-    const s = document.createElement("script");
-    s.id  = "gis-script";
-    s.src = "https://accounts.google.com/gsi/client";
-    s.onload  = () => resolve();
-    s.onerror = () => reject(new Error("Failed to load Google Identity Services"));
-    document.head.appendChild(s);
-  });
-
-  const authorizeGoogleDrive = async () => {
-    if (!gdriveClientId) { toast({ title: "Enter your Google Client ID first", variant: "destructive" }); return; }
-    try {
-      await _loadGIS();
-      localStorage.removeItem("bv_sync_gdrive_token");
-      localStorage.removeItem("bv_sync_gdrive_token_expiry");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await new Promise<void>((resolve, reject) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const g = (window as any).google;
-        const client = g.accounts.oauth2.initTokenClient({
-          client_id: gdriveClientId,
-          scope:     "https://www.googleapis.com/auth/drive.appdata",
-          callback:  (resp: Record<string,string>) => {
-            if (resp.error) { reject(new Error(resp.error)); return; }
-            localStorage.setItem("bv_sync_gdrive_token",        resp.access_token);
-            localStorage.setItem("bv_sync_gdrive_token_expiry", String(Date.now() + parseInt(resp.expires_in)*1000));
-            setGdriveAuthed(true);
-            resolve();
-          },
-        });
-        client.requestAccessToken();
-      });
-      toast({ title: "Google Drive authorized" });
-    } catch (e) {
-      toast({ title: `Authorization failed: ${e instanceof Error ? e.message : String(e)}`, variant: "destructive" });
+  const authorizeGoogleDrive = () => {
+    if (!gdriveClientId.trim()) {
+      toast({ title: "Enter your Google Client ID first", variant: "destructive" });
+      return;
     }
+    localStorage.setItem("bv_sync_gdrive_client_id", gdriveClientId.trim());
+    window.location.href = `/api/oauth/google/start?client_id=${encodeURIComponent(gdriveClientId.trim())}`;
   };
 
   const _driveHeaders = () => ({ Authorization: "Bearer " + localStorage.getItem("bv_sync_gdrive_token") });
@@ -529,7 +519,7 @@ export default function SettingsPage() {
 
       } else if (syncMethod === "gdrive") {
         const token    = localStorage.getItem("bv_sync_gdrive_token");
-        if (!token) { await authorizeGoogleDrive(); return; }
+        if (!token) { authorizeGoogleDrive(); return; }
         const existing = await _findDriveFile();
         const metadata = { name:"buildverse-sync.json", mimeType:"application/json", ...(!existing && { parents:["appDataFolder"] }) };
         const form = new FormData();
@@ -572,7 +562,7 @@ export default function SettingsPage() {
 
       } else if (syncMethod === "gdrive") {
         const token = localStorage.getItem("bv_sync_gdrive_token");
-        if (!token) { await authorizeGoogleDrive(); return; }
+        if (!token) { authorizeGoogleDrive(); return; }
         const fileId = await _findDriveFile();
         if (!fileId) throw new Error("No sync file on Drive. Push first.");
         const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { Authorization:"Bearer "+token } });
@@ -1072,8 +1062,8 @@ export default function SettingsPage() {
                           placeholder="1234567890-abc.apps.googleusercontent.com"
                           className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
                         <p className="text-xs text-muted-foreground mt-1.5">
-                          Create at <strong>console.cloud.google.com</strong> → APIs & Services → Credentials → OAuth 2.0 Client ID.
-                          Add <code className="text-xs bg-secondary px-1 rounded">http://localhost:3456</code> as an authorized origin.
+                          Create at <strong>console.cloud.google.com</strong> → APIs &amp; Services → Credentials → OAuth 2.0 Client ID.
+                          Choose <strong>Desktop app</strong> as the application type — no redirect URI registration needed.
                         </p>
                       </div>
                       <div className={cn("flex items-center justify-between p-3 rounded-xl border text-sm",
