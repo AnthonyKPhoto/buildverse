@@ -25,7 +25,7 @@ interface AppInfo { version: string; userDataPath: string; dbPath: string; isDev
 interface BackupEntry { name: string; filePath: string; size: number; createdAt: string; }
 interface RemoteConfig { enabled: boolean; domain: string; port: number; hasPassword: boolean; }
 type Section = "general" | "remote" | "integrations" | "data" | "sync";
-type SyncMethod = "server" | "webdav";
+type SyncMethod = "server" | "webdav" | "gdrive";
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
   | { status: "available"; version: string; downloadUrl?: string; manual?: boolean }
@@ -175,6 +175,8 @@ export default function SettingsPage() {
   const [webdavPassword,   setWebdavPassword]    = useState("");
   const [showWebdavPass,   setShowWebdavPass]    = useState(false);
   const [syncingDir,       setSyncingDir]        = useState<"upload"|"download"|null>(null);
+  const [gdriveEmail,      setGdriveEmail]       = useState<string | null>(null);
+  const [gdriveLastSync,   setGdriveLastSync]    = useState<string | null>(null);
   const [syncMsg,          setSyncMsg]           = useState<{text:string;type:"info"|"success"|"error"}|null>(null);
   const [lastSyncedAt,     setLastSyncedAt]      = useState<string|null>(null);
 
@@ -219,6 +221,26 @@ export default function SettingsPage() {
     setWebdavUsername(localStorage.getItem("bv_sync_webdav_username") || "");
     setWebdavPassword(localStorage.getItem("bv_sync_webdav_password") || "");
     setLastSyncedAt(localStorage.getItem("bv_sync_last_synced_at"));
+
+    // Handle gdrive OAuth redirect params
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("gdrive") === "connected") {
+      setSyncMethodState("gdrive");
+      localStorage.setItem("bv_sync_method", "gdrive");
+      window.history.replaceState({}, "", window.location.pathname + "?section=sync");
+    }
+    if (params.get("gdrive_error")) {
+      toast({ title: "Google Drive error", description: decodeURIComponent(params.get("gdrive_error") || ""), variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname + "?section=sync");
+    }
+
+    // Load gdrive connection status
+    fetch("/api/gdrive").then(r => r.json()).then((s: { connected: boolean; email?: string; lastSync?: string }) => {
+      if (s.connected) {
+        setGdriveEmail(s.email ?? null);
+        setGdriveLastSync(s.lastSync ?? null);
+      }
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -457,10 +479,33 @@ export default function SettingsPage() {
     toast({ title: "Sync settings saved" });
   };
 
+  const GDRIVE_CLIENT_ID = "874903401741-bkbf6fjgq04583agk60o1vgi0iv4j34v.apps.googleusercontent.com";
+
+  const handleGdriveConnect = () => {
+    window.location.href = `/api/oauth/google/start?client_id=${encodeURIComponent(GDRIVE_CLIENT_ID)}`;
+  };
+
+  const handleGdriveDisconnect = async () => {
+    await fetch("/api/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "disconnect" }) });
+    setGdriveEmail(null);
+    setGdriveLastSync(null);
+    toast({ title: "Google Drive disconnected" });
+  };
+
   const doSyncUpload = async () => {
     setSyncingDir("upload");
     setSyncMsg(null);
     try {
+      if (syncMethod === "gdrive") {
+        const res = await fetch("/api/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "upload" }) });
+        const result = await res.json() as { success?: boolean; syncedAt?: string; error?: string };
+        if (!res.ok) throw new Error(result.error || "Drive upload failed");
+        setGdriveLastSync(result.syncedAt ?? null);
+        setSyncMsg({ text: "All data backed up to Google Drive", type: "success" });
+        toast({ title: "Backed up to Google Drive" });
+        return;
+      }
+
       const snapshot = await fetch("/api/sync").then(r => r.json());
 
       if (syncMethod === "webdav") {
@@ -490,6 +535,21 @@ export default function SettingsPage() {
     setSyncingDir("download");
     setSyncMsg(null);
     try {
+      if (syncMethod === "gdrive") {
+        if (!confirm("This will replace all local data with the version saved in Google Drive. Continue?")) {
+          setSyncingDir(null);
+          return;
+        }
+        const res = await fetch("/api/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "download" }) });
+        const result = await res.json() as { success?: boolean; imported?: Record<string, number>; syncedAt?: string; error?: string };
+        if (!res.ok) throw new Error(result.error || "Drive download failed");
+        setGdriveLastSync(result.syncedAt ?? null);
+        const c = result.imported ?? {};
+        setSyncMsg({ text: `Restored from Drive: ${c.vehicles ?? 0} vehicles, ${c.modifications ?? 0} mods`, type: "success" });
+        toast({ title: "Restored from Google Drive" });
+        return;
+      }
+
       let snapshot: unknown;
 
       if (syncMethod === "webdav") {
@@ -937,6 +997,7 @@ export default function SettingsPage() {
           {/* ══════════════════════ MOBILE SYNC ═════════════════════════ */}
           {section === "sync" && (() => {
             const METHODS: { id: SyncMethod; label: string; desc: string }[] = [
+              { id:"gdrive", label:"Google Drive",      desc:"Sign in with Google to sync all your data automatically. Works across desktop, Android, and any browser." },
               { id:"server", label:"BuildVerse Server", desc:"Phone pulls directly from your PC via LAN or remote access URL. No third-party cloud needed." },
               { id:"webdav", label:"WebDAV",            desc:"Nextcloud, OneDrive, Synology NAS, or any WebDAV-compatible service. Each user provides their own credentials." },
             ];
@@ -997,6 +1058,33 @@ export default function SettingsPage() {
                     </div>
                   )}
 
+                  {syncMethod === "gdrive" && (
+                    <div className="space-y-3 mb-5">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Google Account</p>
+                      {gdriveEmail ? (
+                        <div className="p-3.5 rounded-xl border border-green-500/30 bg-green-500/5 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-green-400">Connected</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{gdriveEmail}</p>
+                            {gdriveLastSync && <p className="text-xs text-muted-foreground mt-0.5">Last sync: {new Date(gdriveLastSync).toLocaleString()}</p>}
+                          </div>
+                          <Btn size="xs" variant="outline" onClick={handleGdriveDisconnect}>Disconnect</Btn>
+                        </div>
+                      ) : (
+                        <div className="p-3.5 rounded-xl border border-border bg-secondary/40">
+                          <p className="text-sm text-muted-foreground mb-3">Connect your Google account to enable sync. Your data is stored in a private app folder in your Drive — not visible to other apps.</p>
+                          <button
+                            onClick={handleGdriveConnect}
+                            className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white text-gray-700 text-sm font-medium border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm"
+                          >
+                            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                            Sign in with Google
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {syncMethod === "webdav" && (
                     <div className="space-y-3 mb-5">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">WebDAV Config</p>
@@ -1042,22 +1130,33 @@ export default function SettingsPage() {
                   )}
 
                   {/* Actions */}
-                  <div className="flex gap-2">
-                    {syncMethod !== "server" && (
-                      <Btn variant="primary" onClick={doSyncUpload} disabled={!!syncingDir}>
-                        {syncingDir === "upload"
-                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          : <Upload className="w-3.5 h-3.5" />}
-                        Push to {METHODS.find(m => m.id === syncMethod)?.label}
-                      </Btn>
+                  <div className="flex gap-2 flex-wrap">
+                    {syncMethod === "gdrive" && gdriveEmail && (
+                      <>
+                        <Btn variant="primary" onClick={doSyncUpload} disabled={!!syncingDir}>
+                          {syncingDir === "upload" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                          Back up to Drive
+                        </Btn>
+                        <Btn variant="outline" onClick={doSyncDownload} disabled={!!syncingDir}>
+                          {syncingDir === "download" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          Restore from Drive
+                        </Btn>
+                      </>
                     )}
-                    {syncMethod !== "server" && (
-                      <Btn variant="outline" onClick={doSyncDownload} disabled={!!syncingDir}>
-                        {syncingDir === "download"
-                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          : <Download className="w-3.5 h-3.5" />}
-                        Pull changes from phone
-                      </Btn>
+                    {syncMethod === "gdrive" && !gdriveEmail && (
+                      <p className="text-xs text-muted-foreground">Connect your Google account above to enable sync.</p>
+                    )}
+                    {syncMethod === "webdav" && (
+                      <>
+                        <Btn variant="primary" onClick={doSyncUpload} disabled={!!syncingDir}>
+                          {syncingDir === "upload" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                          Push to WebDAV
+                        </Btn>
+                        <Btn variant="outline" onClick={doSyncDownload} disabled={!!syncingDir}>
+                          {syncingDir === "download" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          Pull changes from phone
+                        </Btn>
+                      </>
                     )}
                     {syncMethod === "server" && (
                       <p className="text-xs text-muted-foreground">Use the Android app to pull/push via your server URL above.</p>

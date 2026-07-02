@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomBytes } from "crypto";
-import { pkceStore, tokenPickupStore } from "@/lib/oauth-store";
+import { pkceStore } from "@/lib/oauth-store";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   const code  = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   const error = req.nextUrl.searchParams.get("error");
-  // Normalize base to localhost for internal redirects (callback arrives on 127.0.0.1)
-  const port = req.nextUrl.port || "3456";
-  const base = `http://localhost:${port}`;
+  const port  = req.nextUrl.port || "3456";
+  const base  = `http://localhost:${port}`;
 
   if (error) {
     return NextResponse.redirect(`${base}/settings?section=sync&gdrive_error=${encodeURIComponent(error)}`);
   }
-
   if (!code || !state) {
     return NextResponse.redirect(`${base}/settings?section=sync&gdrive_error=missing_params`);
   }
@@ -25,7 +23,6 @@ export async function GET(req: NextRequest) {
   }
   pkceStore.delete(state);
 
-  // Redirect URI must match exactly what was sent in the /start request (127.0.0.1)
   const redirectUri = `http://127.0.0.1:${port}/api/oauth/google/callback`;
   const tokenBody   = new URLSearchParams({
     code,
@@ -51,12 +48,29 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${base}/settings?section=sync&gdrive_error=network_error`);
   }
 
-  const pickupKey = randomBytes(16).toString("hex");
-  tokenPickupStore.set(pickupKey, {
-    accessToken: tokenData.access_token as string,
-    expiresAt:   Date.now() + ((tokenData.expires_in as number) ?? 3600) * 1000,
-  });
-  setTimeout(() => tokenPickupStore.delete(pickupKey), 5 * 60 * 1000);
+  // Fetch user email
+  let email = "";
+  try {
+    const infoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    if (infoRes.ok) {
+      const info = await infoRes.json() as { email?: string };
+      email = info.email ?? "";
+    }
+  } catch { /* non-fatal */ }
 
-  return NextResponse.redirect(`${base}/settings?section=sync&gdrive_pickup=${pickupKey}`);
+  // Persist tokens in DB
+  const expiry = Date.now() + ((tokenData.expires_in as number) ?? 3600) * 1000;
+  const saves: Promise<unknown>[] = [
+    prisma.setting.upsert({ where: { key: "gdrive_access_token" }, create: { key: "gdrive_access_token", value: tokenData.access_token as string }, update: { value: tokenData.access_token as string } }),
+    prisma.setting.upsert({ where: { key: "gdrive_token_expiry" }, create: { key: "gdrive_token_expiry", value: String(expiry) }, update: { value: String(expiry) } }),
+    prisma.setting.upsert({ where: { key: "gdrive_user_email" }, create: { key: "gdrive_user_email", value: email }, update: { value: email } }),
+  ];
+  if (tokenData.refresh_token) {
+    saves.push(prisma.setting.upsert({ where: { key: "gdrive_refresh_token" }, create: { key: "gdrive_refresh_token", value: tokenData.refresh_token as string }, update: { value: tokenData.refresh_token as string } }));
+  }
+  await Promise.all(saves);
+
+  return NextResponse.redirect(`${base}/settings?section=sync&gdrive=connected`);
 }
