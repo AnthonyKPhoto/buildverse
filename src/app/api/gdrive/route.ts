@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-const CLIENT_ID = "874903401741-bkbf6fjgq04583agk60o1vgi0iv4j34v.apps.googleusercontent.com";
-const DRIVE_API  = "https://www.googleapis.com/drive/v3";
+const CLIENT_ID     = "874903401741-bkbf6fjgq04583agk60o1vgi0iv4j34v.apps.googleusercontent.com";
+const CLIENT_SECRET = process.env.GDRIVE_CLIENT_SECRET ?? "";
+const DRIVE_API     = "https://www.googleapis.com/drive/v3";
 const DRIVE_UP   = "https://www.googleapis.com/upload/drive/v3";
 const FILE_NAME  = "buildverse-sync.json";
 
@@ -28,6 +29,7 @@ async function getValidToken(): Promise<string> {
     body: new URLSearchParams({
       grant_type:    "refresh_token",
       client_id:     CLIENT_ID,
+      client_secret: CLIENT_SECRET,
       refresh_token: refreshRow.value,
     }).toString(),
   });

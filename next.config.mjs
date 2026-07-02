@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env: {
+    GDRIVE_CLIENT_SECRET: process.env.GDRIVE_CLIENT_SECRET,
+  },
   output: "standalone",
   images: {
     // Restrict to https only — http would allow the image-optimization endpoint

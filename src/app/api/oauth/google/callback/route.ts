@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { consumePkce } from "@/lib/pkce-db";
 import { prisma } from "@/lib/prisma";
 
+const DRIVE_CLIENT_SECRET = process.env.GDRIVE_CLIENT_SECRET ?? "";
+
 function closePage(title: string, icon: string, heading: string, body: string, isError = false) {
   const iconBg  = isError ? "#dc262620" : "#16a34a20";
   const iconBdr = isError ? "#dc262640" : "#16a34a40";
@@ -39,6 +41,7 @@ export async function GET(req: NextRequest) {
   const tokenBody   = new URLSearchParams({
     code,
     client_id:     pkce.clientId,
+    client_secret: DRIVE_CLIENT_SECRET,
     redirect_uri:  redirectUri,
     grant_type:    "authorization_code",
     code_verifier: pkce.verifier,
