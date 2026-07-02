@@ -31,7 +31,9 @@ export async function GET(req: NextRequest) {
     code_challenge_method: "S256",
     state,
     access_type:           "offline",
-    prompt:                "consent",
+    // "consent" only needed on first auth to get a refresh_token;
+    // "select_account" on repeat visits avoids showing the full consent screen again
+    prompt:                req.nextUrl.searchParams.get("reauth") === "1" ? "consent" : "select_account",
   });
 
   return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);

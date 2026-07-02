@@ -1,13 +1,45 @@
 services:
   buildverse:
     image: ghcr.io/anthonykphoto/buildverse:latest
-    # build: .   # uncomment to build locally instead
+    # build: .   # uncomment to build locally instead of pulling from GHCR
     ports:
       - "3456:3000"
     volumes:
       - buildverse-data:/data
     environment:
       - DATABASE_URL=file:/data/buildverse.db
+
+      # ── Required: set to your public URL (used for OAuth redirect URIs) ────────
+      - BASE_URL=https://buildverse.kaiserhomelab.net
+
+      # ── Remote access ──────────────────────────────────────────────────────────
+      # Set BUILDVERSE_REMOTE_ENABLED=1 to require login from remote IPs.
+      # Local connections (127.0.0.1, ::1) are always allowed without login.
+      - BUILDVERSE_REMOTE_ENABLED=1
+      # Password hash: run  echo -n "yourpassword" | sha256sum  to generate.
+      # Leave blank to disable password login (use Google login instead).
+      - BUILDVERSE_REMOTE_PASSWORD_HASH=
+
+      # ── Google login (recommended — replaces password login) ──────────────────
+      # 1. Go to Google Cloud Console → APIs & Services → Credentials
+      # 2. Create credential: OAuth 2.0 Client ID → Web Application
+      # 3. Authorized redirect URI: https://your-domain/api/auth/google/callback
+      # 4. Paste the Client ID and Client Secret below.
+      - GOOGLE_AUTH_CLIENT_ID=
+      - GOOGLE_AUTH_CLIENT_SECRET=
+      # Optional: restrict access to a single Google account
+      - GOOGLE_ALLOWED_EMAIL=
+
+    restart: unless-stopped
+
+  # ── Watchtower: auto-update BuildVerse when a new image is published ──────────
+  # Checks GHCR once per hour and recreates the container if a new image exists.
+  # Remove this service if you prefer to update manually.
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: buildverse --interval 3600 --cleanup
     restart: unless-stopped
 
 volumes:

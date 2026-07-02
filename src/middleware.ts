@@ -16,20 +16,22 @@ function isLocalRequest(request: NextRequest): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-  const remoteEnabled = process.env.BUILDVERSE_REMOTE_ENABLED === "1";
-  const passwordHash = process.env.BUILDVERSE_REMOTE_PASSWORD_HASH;
+  const remoteEnabled  = process.env.BUILDVERSE_REMOTE_ENABLED === "1";
+  const passwordHash   = process.env.BUILDVERSE_REMOTE_PASSWORD_HASH;
+  const googleClientId = process.env.GOOGLE_AUTH_CLIENT_ID;
 
-  // Gate only activates when remote access is enabled AND a password is set
-  if (!remoteEnabled || !passwordHash) {
+  // Gate only activates when remote access is enabled AND some auth method is configured
+  if (!remoteEnabled || (!passwordHash && !googleClientId)) {
     return NextResponse.next();
   }
 
   const { pathname } = request.nextUrl;
 
-  // Always pass: Next.js internals, login page, auth API
+  // Always pass: Next.js internals, login page, auth APIs, OAuth callbacks
   if (
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/oauth/") ||
     pathname === "/login" ||
     pathname === "/favicon.ico"
   ) {
@@ -41,19 +43,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Validate session cookie
   const session = request.cookies.get(COOKIE_NAME)?.value;
-  const expectedSession = await sha256hex(passwordHash + "bv-ok");
 
-  if (session === expectedSession) {
-    return NextResponse.next();
+  // Password session
+  if (passwordHash) {
+    const expectedPassword = await sha256hex(passwordHash + "bv-ok");
+    if (session === expectedPassword) return NextResponse.next();
   }
 
-  // Redirect to login, preserving the original destination
+  // Google session
+  if (googleClientId) {
+    const expectedGoogle = await sha256hex(googleClientId + "bv-google-session");
+    if (session === expectedGoogle) return NextResponse.next();
+  }
+
+  // Save intended destination, redirect to login
   const url = request.nextUrl.clone();
   url.pathname = "/login";
   url.searchParams.set("from", pathname);
-  return NextResponse.redirect(url);
+  const response = NextResponse.redirect(url);
+  response.cookies.set("bv_login_from", pathname, { httpOnly: true, sameSite: "lax", maxAge: 300, path: "/" });
+  return response;
 }
 
 export const config = {

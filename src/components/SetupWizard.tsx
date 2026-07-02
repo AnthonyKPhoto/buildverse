@@ -28,7 +28,7 @@ export function SetupWizard() {
   // Poll for Google Drive connection when waiting
   useEffect(() => {
     if (!gdriveWaiting) return;
-    const iv = setInterval(async () => {
+    const iv = setInterval(async () => { // poll every 1s so token detection is near-instant
       try {
         const s = await fetch("/api/gdrive").then(r => r.json()) as { connected: boolean; email?: string };
         if (s.connected) {
@@ -37,7 +37,7 @@ export function SetupWizard() {
           clearInterval(iv);
         }
       } catch { /* ignore */ }
-    }, 2000);
+    }, 1000);
     const timeout = setTimeout(() => { clearInterval(iv); setGdriveWaiting(false); }, 5 * 60 * 1000);
     return () => { clearInterval(iv); clearTimeout(timeout); };
   }, [gdriveWaiting]);

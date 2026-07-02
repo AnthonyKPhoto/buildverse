@@ -500,7 +500,7 @@ export default function SettingsPage() {
             toast({ title: "Google Drive connected!" });
           }
         } catch { /* ignore */ }
-      }, 2000);
+      }, 1000);
       setTimeout(() => { clearInterval(interval); setGdriveWaiting(false); }, 5 * 60 * 1000);
     } else {
       window.location.href = path;
