@@ -1063,7 +1063,8 @@ export default function SettingsPage() {
                           className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
                         <p className="text-xs text-muted-foreground mt-1.5">
                           Create at <strong>console.cloud.google.com</strong> → APIs &amp; Services → Credentials → OAuth 2.0 Client ID.
-                          Choose <strong>Desktop app</strong> as the application type — no redirect URI registration needed.
+                          Choose <strong>Desktop app</strong> — loopback redirect URIs are allowed automatically, no registration needed.
+                          Make sure the Google Drive API is enabled in your project.
                         </p>
                       </div>
                       <div className={cn("flex items-center justify-between p-3 rounded-xl border text-sm",

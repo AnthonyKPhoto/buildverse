@@ -18,7 +18,10 @@ export async function GET(req: NextRequest) {
 
   pkceStore.set(state, { verifier, clientId, expiresAt: now + 10 * 60 * 1000 });
 
-  const redirectUri = `${req.nextUrl.origin}/api/oauth/google/callback`;
+  // Use 127.0.0.1 instead of localhost — Desktop app OAuth clients allow any loopback
+  // IP port/path without explicit redirect URI registration in Google Cloud Console.
+  const port = req.nextUrl.port || "3456";
+  const redirectUri = `http://127.0.0.1:${port}/api/oauth/google/callback`;
   const params = new URLSearchParams({
     client_id:             clientId,
     redirect_uri:          redirectUri,

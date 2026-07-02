@@ -6,7 +6,9 @@ export async function GET(req: NextRequest) {
   const code  = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   const error = req.nextUrl.searchParams.get("error");
-  const base  = req.nextUrl.origin;
+  // Normalize base to localhost for internal redirects (callback arrives on 127.0.0.1)
+  const port = req.nextUrl.port || "3456";
+  const base = `http://localhost:${port}`;
 
   if (error) {
     return NextResponse.redirect(`${base}/settings?section=sync&gdrive_error=${encodeURIComponent(error)}`);
@@ -23,8 +25,8 @@ export async function GET(req: NextRequest) {
   }
   pkceStore.delete(state);
 
-  // Exchange auth code for access token (Desktop app clients don't need client_secret)
-  const redirectUri = `${base}/api/oauth/google/callback`;
+  // Redirect URI must match exactly what was sent in the /start request (127.0.0.1)
+  const redirectUri = `http://127.0.0.1:${port}/api/oauth/google/callback`;
   const tokenBody   = new URLSearchParams({
     code,
     client_id:     pkce.clientId,
