@@ -45,5 +45,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # plain progress emits full build output to the Actions log
+          # so errors from prisma generate / next build are visible directly
+          outputs: type=registry
           cache-from: type=gha
           cache-to: type=gha,mode=max
+        env:
+          BUILDKIT_PROGRESS: plain
