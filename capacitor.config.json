@@ -1,0 +1,9 @@
+{
+  "appId": "net.kaiserhomelab.buildverse",
+  "appName": "BuildVerse",
+  "server": {
+    "url": "http://YOUR_SERVER_IP:3456",
+    "cleartext": true
+  },
+  "android": {}
+}
