@@ -9,15 +9,6 @@ const STORAGE_KEY = "bv_setup_complete";
 
 type Step = "welcome" | "appearance" | "sync" | "done";
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      isElectron?: boolean;
-      openExternal?: (url: string) => Promise<void>;
-    };
-  }
-}
-
 export function SetupWizard() {
   const [visible, setVisible] = useState(false);
   const [step,    setStep]    = useState<Step>("welcome");
