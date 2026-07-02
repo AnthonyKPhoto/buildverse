@@ -2,23 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { consumePkce } from "@/lib/pkce-db";
 import { prisma } from "@/lib/prisma";
 
+function closePage(title: string, icon: string, heading: string, body: string, isError = false) {
+  const iconBg  = isError ? "#dc262620" : "#16a34a20";
+  const iconBdr = isError ? "#dc262640" : "#16a34a40";
+  return new NextResponse(
+    `<!DOCTYPE html><html><head><title>BuildVerse — ${title}</title>
+    <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f0f0f;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:2rem}.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:1.5rem;padding:3rem;max-width:400px}.icon{width:56px;height:56px;background:${iconBg};border:1px solid ${iconBdr};border-radius:1rem;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:1.75rem}h1{font-size:1.375rem;font-weight:700;margin-bottom:.75rem}p{color:#888;font-size:.875rem;line-height:1.6}.btn{display:inline-block;margin-top:1.5rem;padding:.6rem 1.4rem;background:#222;border:1px solid #333;border-radius:.75rem;color:#ccc;font-size:.8rem;cursor:pointer;text-decoration:none}a.btn:hover{background:#2a2a2a}</style>
+    </head><body><div class="card"><div class="icon">${icon}</div>
+    <h1>${heading}</h1><p>${body}</p>
+    <a class="btn" href="javascript:window.close()">Close this tab</a>
+    </div></body></html>`,
+    { status: 200, headers: { "Content-Type": "text/html" } },
+  );
+}
+
 export async function GET(req: NextRequest) {
   const code  = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state");
   const error = req.nextUrl.searchParams.get("error");
   const port  = req.nextUrl.port || "3456";
-  const base  = `http://localhost:${port}`;
 
   if (error) {
-    return NextResponse.redirect(`${base}/settings?section=access&gdrive_error=${encodeURIComponent(error)}`);
+    const msg = error === "access_denied" ? "You declined the Google sign-in request." : `Google returned an error: ${error}`;
+    return closePage("Sign-in Cancelled", "✕", "Sign-in Cancelled", msg, true);
   }
   if (!code || !state) {
-    return NextResponse.redirect(`${base}/settings?section=access&gdrive_error=missing_params`);
+    return closePage("Sign-in Failed", "✕", "Sign-in Failed", "Missing required parameters. Please try connecting again from the app.", true);
   }
 
   const pkce = await consumePkce(state);
   if (!pkce) {
-    return NextResponse.redirect(`${base}/settings?section=access&gdrive_error=state_expired`);
+    return closePage("Session Expired", "⏱", "Session Expired", "The sign-in session timed out. Please go back to the app and try connecting again.", true);
   }
 
   const redirectUri = `http://127.0.0.1:${port}/api/oauth/google/callback`;
@@ -40,10 +54,10 @@ export async function GET(req: NextRequest) {
     tokenData = await tokenRes.json();
     if (!tokenRes.ok) {
       const msg = (tokenData.error_description as string) || (tokenData.error as string) || "token_exchange_failed";
-      return NextResponse.redirect(`${base}/settings?section=access&gdrive_error=${encodeURIComponent(msg)}`);
+      return closePage("Sign-in Failed", "✕", "Sign-in Failed", `Could not complete sign-in: ${msg}. Please try again from the app.`, true);
     }
   } catch {
-    return NextResponse.redirect(`${base}/settings?section=access&gdrive_error=network_error`);
+    return closePage("Network Error", "✕", "Network Error", "Could not reach Google's servers. Check your internet connection and try again.", true);
   }
 
   let email = "";
@@ -68,14 +82,10 @@ export async function GET(req: NextRequest) {
   }
   await Promise.all(saves);
 
-  return new NextResponse(
-    `<!DOCTYPE html><html><head><title>BuildVerse — Connected</title>
-    <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f0f0f;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:2rem}.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:1.5rem;padding:3rem;max-width:380px}.icon{width:56px;height:56px;background:#16a34a20;border:1px solid #16a34a40;border-radius:1rem;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:1.75rem}h1{font-size:1.375rem;font-weight:700;margin-bottom:.5rem}p{color:#888;font-size:.875rem;line-height:1.5;margin-bottom:1.5rem}.note{font-size:.75rem;color:#555}</style>
-    </head><body><div class="card"><div class="icon">✓</div>
-    <h1>Google Drive Connected</h1>
-    <p>Your account has been linked. You can close this tab and return to BuildVerse.</p>
-    <p class="note">This tab will close automatically…</p>
-    </div><script>setTimeout(()=>window.close(),2500)</script></body></html>`,
-    { status: 200, headers: { "Content-Type": "text/html" } },
+  return closePage(
+    "Connected",
+    "✓",
+    "Google Drive Connected",
+    email ? `Signed in as <strong style="color:#ccc">${email}</strong>.<br><br>You can close this tab — BuildVerse will update automatically.` : "Your account has been linked. You can close this tab — BuildVerse will update automatically.",
   );
 }
