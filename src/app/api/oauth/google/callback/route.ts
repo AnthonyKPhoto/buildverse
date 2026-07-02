@@ -72,5 +72,14 @@ export async function GET(req: NextRequest) {
   }
   await Promise.all(saves);
 
-  return NextResponse.redirect(`${base}/settings?section=sync&gdrive=connected`);
+  return new NextResponse(
+    `<!DOCTYPE html><html><head><title>BuildVerse — Connected</title>
+    <style>*{margin:0;padding:0;box-sizing:border-box}body{background:#0f0f0f;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:2rem}.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:1.5rem;padding:3rem;max-width:380px}.icon{width:56px;height:56px;background:#16a34a20;border:1px solid #16a34a40;border-radius:1rem;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:1.75rem}h1{font-size:1.375rem;font-weight:700;margin-bottom:.5rem}p{color:#888;font-size:.875rem;line-height:1.5;margin-bottom:1.5rem}.note{font-size:.75rem;color:#555}</style>
+    </head><body><div class="card"><div class="icon">✓</div>
+    <h1>Google Drive Connected</h1>
+    <p>Your account has been linked. You can close this tab and return to BuildVerse.</p>
+    <p class="note">This tab will close automatically…</p>
+    </div><script>setTimeout(()=>window.close(),2500)</script></body></html>`,
+    { status: 200, headers: { "Content-Type": "text/html" } },
+  );
 }

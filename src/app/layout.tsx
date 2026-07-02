@@ -3,6 +3,7 @@ import "./globals.css";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { SetupWizard } from "@/components/SetupWizard";
 
 export const metadata: Metadata = {
   title: "BuildVerse — Vehicle Modification Manager",
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
           </main>
         </div>
+        <SetupWizard />
         <Toaster />
       </body>
     </html>
