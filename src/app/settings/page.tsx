@@ -24,7 +24,7 @@ interface VehicleItem { _count: { modifications: number } }
 interface AppInfo { version: string; userDataPath: string; dbPath: string; isDev: boolean; }
 interface BackupEntry { name: string; filePath: string; size: number; createdAt: string; }
 interface RemoteConfig { enabled: boolean; domain: string; port: number; hasPassword: boolean; }
-type Section = "general" | "remote" | "integrations" | "data" | "sync";
+type Section = "general" | "access" | "integrations" | "data";
 type SyncMethod = "server" | "webdav" | "gdrive";
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
@@ -229,11 +229,11 @@ export default function SettingsPage() {
     if (params.get("gdrive") === "connected") {
       setSyncMethodState("gdrive");
       localStorage.setItem("bv_sync_method", "gdrive");
-      window.history.replaceState({}, "", window.location.pathname + "?section=sync");
+      window.history.replaceState({}, "", window.location.pathname + "?section=access");
     }
     if (params.get("gdrive_error")) {
       toast({ title: "Google Drive error", description: decodeURIComponent(params.get("gdrive_error") || ""), variant: "destructive" });
-      window.history.replaceState({}, "", window.location.pathname + "?section=sync");
+      window.history.replaceState({}, "", window.location.pathname + "?section=access");
     }
 
     // Load gdrive connection status
@@ -501,7 +501,15 @@ export default function SettingsPage() {
           }
         } catch { /* ignore */ }
       }, 1000);
-      setTimeout(() => { clearInterval(interval); setGdriveWaiting(false); }, 5 * 60 * 1000);
+      setTimeout(async () => {
+        clearInterval(interval);
+        // Final check before giving up
+        try {
+          const s = await fetch("/api/gdrive").then(r => r.json()) as { connected: boolean; email?: string; lastSync?: string };
+          if (s.connected) { setGdriveEmail(s.email ?? null); setGdriveLastSync(s.lastSync ?? null); toast({ title: "Google Drive connected!" }); }
+        } catch { /* ignore */ }
+        setGdriveWaiting(false);
+      }, 5 * 60 * 1000);
     } else {
       window.location.href = path;
     }
@@ -613,11 +621,10 @@ export default function SettingsPage() {
   };
 
   const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
-    { id: "general",      label: "General",       icon: Palette    },
-    { id: "remote",       label: "Remote Access", icon: Globe      },
-    { id: "sync",         label: "Mobile Sync",   icon: Cloud      },
-    { id: "integrations", label: "Integrations",  icon: Plug       },
-    { id: "data",         label: "Data & Backup", icon: HardDrive  },
+    { id: "general",      label: "General",       icon: Palette   },
+    { id: "access",       label: "Access & Sync", icon: Cloud     },
+    { id: "integrations", label: "Integrations",  icon: Plug      },
+    { id: "data",         label: "Data & Backup", icon: HardDrive },
   ];
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -795,9 +802,15 @@ export default function SettingsPage() {
                   }
                 </Row>
                 <Row label="Mode" last>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-1 rounded-lg">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> Local / Offline
-                  </span>
+                  {gdriveEmail ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-1 rounded-lg">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> Google Drive Sync
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-1 rounded-lg">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> Local / Offline
+                    </span>
+                  )}
                 </Row>
               </Section>
 
@@ -844,180 +857,9 @@ export default function SettingsPage() {
             </>
           )}
 
-          {/* ══════════════════════ REMOTE ACCESS ════════════════════════ */}
-          {section === "remote" && (
-            <>
-              {!isElectron && (
-                <div className="p-6 rounded-2xl border border-border bg-card text-center text-sm text-muted-foreground">
-                  Remote access settings are only available in the Electron desktop app.
-                </div>
-              )}
+          {/* ══════════════════════ ACCESS & SYNC ════════════════════════ */}
 
-              {isElectron && (
-                <>
-                  <Section title="Remote Access" icon={Globe}>
-                    <Row label="Enable Remote Access" desc="Bind the server to all interfaces so it can be reached from other devices or through Traefik">
-                      <Toggle on={remoteEnabled} onChange={setRemoteEnabled} />
-                    </Row>
-                    <div className="pt-4 space-y-4">
-                      <div>
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-2">External Domain</label>
-                        <input type="text" placeholder="buildverse.yourdomain.com" value={remoteDomain} onChange={e => setRemoteDomain(e.target.value)}
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-                        <p className="text-xs text-muted-foreground mt-1.5">Your Traefik subdomain pointing to this machine.</p>
-                      </div>
-                      <div>
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-2">Server Port</label>
-                        <input type="number" min={1024} max={65535} value={remotePort} onChange={e => setRemotePort(Number(e.target.value))}
-                          className="w-32 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-                        <p className="text-xs text-muted-foreground mt-1.5">Default: 3456.</p>
-                      </div>
-                    </div>
-                    <div className="mt-5 flex items-center justify-between">
-                      {window.electronAPI?.restart && restartNeeded ? (
-                        <button
-                          onClick={() => window.electronAPI!.restart!()}
-                          className="px-3 py-1.5 text-sm font-semibold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 rounded-lg transition-colors"
-                        >
-                          Restart Now
-                        </button>
-                      ) : <span />}
-                      <Btn variant="primary" onClick={saveRemoteConfig} disabled={savingRemote}>
-                        {savingRemote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                        Save
-                      </Btn>
-                    </div>
-                  </Section>
-
-                  <Section title="Password Protection" icon={Shield}>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      When enabled, external visitors must enter this password. Local connections (Electron window, same-machine browser) bypass the gate automatically.
-                    </p>
-                    {remoteConfig?.hasPassword ? (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3 p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-sm">
-                          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                          <span className="text-green-400 font-medium">Password is set</span>
-                        </div>
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block">Change Password</label>
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <input type={showPassword ? "text" : "password"} placeholder="New password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)}
-                              className="w-full px-3 py-2 pr-10 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-                            <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" tabIndex={-1}>
-                              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                          </div>
-                          <input type={showPassword ? "text" : "password"} placeholder="Confirm password" value={confirmPasswordInput} onChange={e => setConfirmPasswordInput(e.target.value)}
-                            className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-                          <div className="flex gap-2 justify-end">
-                            <Btn variant="danger" size="xs" onClick={clearRemotePassword}><X className="w-3 h-3" /> Remove Password</Btn>
-                            <Btn variant="primary" onClick={saveRemotePassword} disabled={settingPassword || !passwordInput}>
-                              {settingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Key className="w-3.5 h-3.5" />} Change
-                            </Btn>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-sm">
-                          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                          <span className="text-amber-400">No password — set one if enabling remote access</span>
-                        </div>
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <input type={showPassword ? "text" : "password"} placeholder="Set a password…" value={passwordInput} onChange={e => setPasswordInput(e.target.value)}
-                              className="w-full px-3 py-2 pr-10 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-                            <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" tabIndex={-1}>
-                              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
-                          </div>
-                          <input type={showPassword ? "text" : "password"} placeholder="Confirm password" value={confirmPasswordInput} onChange={e => setConfirmPasswordInput(e.target.value)}
-                            className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-                          <div className="flex justify-end">
-                            <Btn variant="primary" onClick={saveRemotePassword} disabled={settingPassword || !passwordInput}>
-                              {settingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />} Set Password
-                            </Btn>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </Section>
-
-                  <Section title="Server URL" icon={Smartphone}>
-                    <p className="text-sm text-muted-foreground mb-3">
-                      When you open the BuildVerse Android app for the first time, enter the URL below to connect it to this machine.
-                    </p>
-                    <div className="space-y-2">
-                      {lanUrl && (
-                        <div className="p-3 rounded-xl bg-secondary border border-border">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">LAN (same Wi-Fi)</p>
-                          <div className="flex items-center gap-2">
-                            <code className="flex-1 text-sm font-mono break-all">{lanUrl}</code>
-                            <Btn size="xs" onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied" }); }}>
-                              <Copy className="w-3 h-3" /> Copy
-                            </Btn>
-                          </div>
-                        </div>
-                      )}
-                      {externalUrl && (
-                        <div className="p-3 rounded-xl bg-secondary border border-border">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">External (anywhere)</p>
-                          <div className="flex items-center gap-2">
-                            <code className="flex-1 text-sm font-mono break-all">{externalUrl}</code>
-                            <Btn size="xs" onClick={() => { navigator.clipboard.writeText(externalUrl!); toast({ title: "Copied" }); }}>
-                              <Copy className="w-3 h-3" /> Copy
-                            </Btn>
-                          </div>
-                        </div>
-                      )}
-                      {!lanUrl && !externalUrl && (
-                        <div className="p-3 rounded-xl bg-secondary/60 border border-border/60 font-mono text-sm text-muted-foreground">
-                          {`http://YOUR_IP:${remotePort || 3456}`}
-                        </div>
-                      )}
-                      {!remoteEnabled && (
-                        <p className="text-xs text-amber-400 flex items-center gap-1.5 pt-1">
-                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                          Enable Remote Access above so your phone can reach this machine.
-                        </p>
-                      )}
-                    </div>
-                  </Section>
-
-                  <Section title="Self-host with Docker" icon={Database}>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Run BuildVerse as a headless server on any machine — a home server, NAS, or VPS. Your phone connects to it just like the desktop app.
-                    </p>
-                    <div className="space-y-3">
-                      <div className="p-3 rounded-xl bg-secondary/60 border border-border text-xs font-mono space-y-1 text-muted-foreground overflow-x-auto">
-                        <p className="text-foreground font-semibold text-xs mb-2 font-sans not-italic">docker-compose.yml</p>
-                        <p>services:</p>
-                        <p>&nbsp;&nbsp;buildverse:</p>
-                        <p>&nbsp;&nbsp;&nbsp;&nbsp;image: ghcr.io/anthonykphoto/buildverse:latest</p>
-                        <p>&nbsp;&nbsp;&nbsp;&nbsp;ports:</p>
-                        <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- &quot;3456:3000&quot;</p>
-                        <p>&nbsp;&nbsp;&nbsp;&nbsp;volumes:</p>
-                        <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- buildverse-data:/data</p>
-                        <p>&nbsp;&nbsp;&nbsp;&nbsp;restart: unless-stopped</p>
-                        <p>volumes:</p>
-                        <p>&nbsp;&nbsp;buildverse-data:</p>
-                      </div>
-                      <div className="p-3 rounded-xl bg-secondary/60 border border-border text-xs space-y-1.5 text-muted-foreground">
-                        <p>1. Copy the compose file above to your server.</p>
-                        <p>2. Run <code className="bg-secondary px-1 rounded">docker compose up -d</code></p>
-                        <p>3. Open the Android app → enter <code className="bg-secondary px-1 rounded">http://YOUR_SERVER_IP:3456</code></p>
-                        <p>4. Data is stored in the <code className="bg-secondary px-1 rounded">buildverse-data</code> Docker volume.</p>
-                      </div>
-                    </div>
-                  </Section>
-                </>
-              )}
-            </>
-          )}
-
-          {/* ══════════════════════ MOBILE SYNC ═════════════════════════ */}
-          {section === "sync" && (() => {
+          {section === "access" && (() => {
             const METHODS: { id: SyncMethod; label: string; desc: string }[] = [
               { id:"gdrive", label:"Google Drive",      desc:"Sign in with Google to sync all your data automatically. Works across desktop, Android, and any browser." },
               { id:"server", label:"BuildVerse Server", desc:"Phone pulls directly from your PC via LAN or remote access URL. No third-party cloud needed." },
@@ -1026,9 +868,25 @@ export default function SettingsPage() {
             const syncColor = { info:"text-muted-foreground", success:"text-green-400", error:"text-red-400" } as const;
             return (
               <>
-                <Section title="Mobile Sync" icon={Cloud}>
+                <Section title="Access & Sync" icon={Cloud}>
+                  {isElectron && (
+                    <div className="flex items-center justify-between pb-4 mb-4 border-b border-border/60">
+                      <div>
+                        <p className="text-sm font-medium">Phone &amp; Remote Access</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Allow other devices to reach this app over the network.</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Toggle on={remoteEnabled} onChange={v => { setRemoteEnabled(v); saveRemoteConfig(); }} />
+                        {lanUrl && remoteEnabled && (
+                          <Btn size="xs" onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied" }); }}>
+                            <Copy className="w-3 h-3" />{lanUrl.replace("http://", "").split(":")[0]}
+                          </Btn>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <p className="text-sm text-muted-foreground mb-4">
-                    Choose how your phone syncs BuildVerse data. Each user configures their own provider — nothing is shared.
+                    Choose how your phone and browser sync BuildVerse data.
                   </p>
 
                   {/* Method selector */}
@@ -1195,14 +1053,31 @@ export default function SettingsPage() {
                   </div>
                 </Section>
 
-                <Section title="Setup Guide" icon={Smartphone}>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    On your Android phone, open the BuildVerse app → tap the sync icon (↺) in the top-right → choose the same sync method above → tap <strong className="text-foreground">Pull</strong> to load your garage data for offline use.
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    When you add notes or log service offline, they queue automatically. Tap <strong className="text-foreground">Push</strong> to send them back when you have a connection.
-                  </p>
-                </Section>
+                {isElectron && (lanUrl || externalUrl) && (
+                  <Section title="Phone Connection URL" icon={Smartphone}>
+                    <div className="space-y-2">
+                      {lanUrl && (
+                        <div className="p-3 rounded-xl bg-secondary border border-border">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">LAN (same Wi-Fi)</p>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 text-sm font-mono break-all">{lanUrl}</code>
+                            <Btn size="xs" onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied" }); }}><Copy className="w-3 h-3" /> Copy</Btn>
+                          </div>
+                        </div>
+                      )}
+                      {externalUrl && (
+                        <div className="p-3 rounded-xl bg-secondary border border-border">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">External (anywhere)</p>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 text-sm font-mono break-all">{externalUrl}</code>
+                            <Btn size="xs" onClick={() => { navigator.clipboard.writeText(externalUrl!); toast({ title: "Copied" }); }}><Copy className="w-3 h-3" /> Copy</Btn>
+                          </div>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground pt-1">Open the BuildVerse Android app → Sync → enter this URL → tap <strong className="text-foreground">Pull</strong>.</p>
+                    </div>
+                  </Section>
+                )}
               </>
             );
           })()}

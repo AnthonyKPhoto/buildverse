@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pkceStore } from "@/lib/oauth-store";
+import { consumePkce } from "@/lib/pkce-db";
 
 const COOKIE_NAME = "bv_session";
 
@@ -29,12 +29,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/login?google_error=missing_params`);
   }
 
-  const pkce = pkceStore.get(state);
-  if (!pkce || pkce.expiresAt < Date.now()) {
-    pkceStore.delete(state);
+  const pkce = await consumePkce(state);
+  if (!pkce) {
     return NextResponse.redirect(`${origin}/login?google_error=state_expired`);
   }
-  pkceStore.delete(state);
 
   const clientSecret = process.env.GOOGLE_AUTH_CLIENT_SECRET;
   const redirectUri  = `${origin}/api/auth/google/callback`;
@@ -79,7 +77,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${origin}/login?google_error=unauthorized_email`);
   }
 
-  // Session value is deterministic from the client ID — ties the cookie to this installation
   const sessionValue = await sha256hex(pkce.clientId + "bv-google-session");
   const from = req.cookies.get("bv_login_from")?.value || "/";
 

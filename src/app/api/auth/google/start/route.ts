@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes, createHash } from "crypto";
-import { pkceStore } from "@/lib/oauth-store";
+import { storePkce } from "@/lib/pkce-db";
 
 function getOrigin(req: NextRequest): string {
   const base = process.env.BASE_URL;
@@ -22,8 +22,7 @@ export async function GET(req: NextRequest) {
   const state       = randomBytes(16).toString("hex");
 
   if (clientSecret) {
-    // Web Application flow (server-side, has client_secret)
-    pkceStore.set(state, { verifier: "", clientId, expiresAt: Date.now() + 10 * 60 * 1000 });
+    await storePkce(state, "", clientId);
     const params = new URLSearchParams({
       client_id:     clientId,
       redirect_uri:  redirectUri,
@@ -35,10 +34,9 @@ export async function GET(req: NextRequest) {
     });
     return NextResponse.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
   } else {
-    // PKCE flow (Desktop app client, no client_secret)
     const verifier  = randomBytes(32).toString("base64url");
     const challenge = createHash("sha256").update(verifier).digest("base64url");
-    pkceStore.set(state, { verifier, clientId, expiresAt: Date.now() + 10 * 60 * 1000 });
+    await storePkce(state, verifier, clientId);
     const params = new URLSearchParams({
       client_id:             clientId,
       redirect_uri:          redirectUri,

@@ -19,6 +19,8 @@ prisma/buildverse.db-journal
 dist-electron/
 electron-dist/
 build/
+!build/icon.ico
+!build/icon.png
 
 # Environment
 .env

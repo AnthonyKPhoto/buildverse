@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pkceStore } from "@/lib/oauth-store";
+import { consumePkce } from "@/lib/pkce-db";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
@@ -10,18 +10,16 @@ export async function GET(req: NextRequest) {
   const base  = `http://localhost:${port}`;
 
   if (error) {
-    return NextResponse.redirect(`${base}/settings?section=sync&gdrive_error=${encodeURIComponent(error)}`);
+    return NextResponse.redirect(`${base}/settings?section=access&gdrive_error=${encodeURIComponent(error)}`);
   }
   if (!code || !state) {
-    return NextResponse.redirect(`${base}/settings?section=sync&gdrive_error=missing_params`);
+    return NextResponse.redirect(`${base}/settings?section=access&gdrive_error=missing_params`);
   }
 
-  const pkce = pkceStore.get(state);
-  if (!pkce || pkce.expiresAt < Date.now()) {
-    pkceStore.delete(state);
-    return NextResponse.redirect(`${base}/settings?section=sync&gdrive_error=state_expired`);
+  const pkce = await consumePkce(state);
+  if (!pkce) {
+    return NextResponse.redirect(`${base}/settings?section=access&gdrive_error=state_expired`);
   }
-  pkceStore.delete(state);
 
   const redirectUri = `http://127.0.0.1:${port}/api/oauth/google/callback`;
   const tokenBody   = new URLSearchParams({
@@ -42,13 +40,12 @@ export async function GET(req: NextRequest) {
     tokenData = await tokenRes.json();
     if (!tokenRes.ok) {
       const msg = (tokenData.error_description as string) || (tokenData.error as string) || "token_exchange_failed";
-      return NextResponse.redirect(`${base}/settings?section=sync&gdrive_error=${encodeURIComponent(msg)}`);
+      return NextResponse.redirect(`${base}/settings?section=access&gdrive_error=${encodeURIComponent(msg)}`);
     }
   } catch {
-    return NextResponse.redirect(`${base}/settings?section=sync&gdrive_error=network_error`);
+    return NextResponse.redirect(`${base}/settings?section=access&gdrive_error=network_error`);
   }
 
-  // Fetch user email
   let email = "";
   try {
     const infoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
@@ -60,7 +57,6 @@ export async function GET(req: NextRequest) {
     }
   } catch { /* non-fatal */ }
 
-  // Persist tokens in DB
   const expiry = Date.now() + ((tokenData.expires_in as number) ?? 3600) * 1000;
   const saves: Promise<unknown>[] = [
     prisma.setting.upsert({ where: { key: "gdrive_access_token" }, create: { key: "gdrive_access_token", value: tokenData.access_token as string }, update: { value: tokenData.access_token as string } }),
