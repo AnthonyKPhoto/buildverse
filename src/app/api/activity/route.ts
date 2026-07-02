@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 const SAMPLE_CRITERIA = {
   OR: [
     { name: "Example S2000" },
