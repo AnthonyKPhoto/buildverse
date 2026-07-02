@@ -7,7 +7,7 @@ import {
   Archive, RotateCcw, Trash2, ArrowUpCircle,
   CheckCircle2, AlertCircle, Loader2, X, Save, ShoppingBag,
   Tag, Plus, GripVertical, Globe, Lock, Eye, EyeOff,
-  Shield, Copy, Smartphone, Plug, Key,
+  Shield, Copy, Smartphone, Plug, Key, Cloud,
 } from "lucide-react";
 import { MOD_CATEGORIES } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -24,7 +24,8 @@ interface VehicleItem { _count: { modifications: number } }
 interface AppInfo { version: string; userDataPath: string; dbPath: string; isDev: boolean; }
 interface BackupEntry { name: string; filePath: string; size: number; createdAt: string; }
 interface RemoteConfig { enabled: boolean; domain: string; port: number; hasPassword: boolean; }
-type Section = "general" | "remote" | "integrations" | "data";
+type Section = "general" | "remote" | "integrations" | "data" | "sync";
+type SyncMethod = "server" | "webdav" | "gdrive";
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
   | { status: "available"; version: string; downloadUrl?: string; manual?: boolean }
@@ -166,6 +167,18 @@ export default function SettingsPage() {
   const [settingPassword, setSettingPassword] = useState(false);
   const [restartNeeded, setRestartNeeded] = useState(false);
 
+  // Mobile Sync state
+  const [syncMethod,       setSyncMethodState]  = useState<SyncMethod>("server");
+  const [webdavUrl,        setWebdavUrl]         = useState("");
+  const [webdavUsername,   setWebdavUsername]    = useState("");
+  const [webdavPassword,   setWebdavPassword]    = useState("");
+  const [showWebdavPass,   setShowWebdavPass]    = useState(false);
+  const [gdriveClientId,   setGdriveClientId]   = useState("");
+  const [gdriveAuthed,     setGdriveAuthed]      = useState(false);
+  const [syncingDir,       setSyncingDir]        = useState<"upload"|"download"|null>(null);
+  const [syncMsg,          setSyncMsg]           = useState<{text:string;type:"info"|"success"|"error"}|null>(null);
+  const [lastSyncedAt,     setLastSyncedAt]      = useState<string|null>(null);
+
   // Data & Backup state
   const [stats, setStats] = useState<Stats | null>(null);
   const [backups, setBackups] = useState<BackupEntry[]>([]);
@@ -199,6 +212,18 @@ export default function SettingsPage() {
     try { setBackups(await window.electronAPI!.backup.list()); } catch {}
     finally { setLoadingBkp(false); }
   }, [isElectron]);
+
+  // Load sync config
+  useEffect(() => {
+    setSyncMethodState((localStorage.getItem("bv_sync_method") as SyncMethod) || "server");
+    setWebdavUrl(localStorage.getItem("bv_sync_webdav_url") || "");
+    setWebdavUsername(localStorage.getItem("bv_sync_webdav_username") || "");
+    setWebdavPassword(localStorage.getItem("bv_sync_webdav_password") || "");
+    setGdriveClientId(localStorage.getItem("bv_sync_gdrive_client_id") || "");
+    setLastSyncedAt(localStorage.getItem("bv_sync_last_synced_at"));
+    const expiry = parseInt(localStorage.getItem("bv_sync_gdrive_token_expiry") || "0");
+    setGdriveAuthed(!!(localStorage.getItem("bv_sync_gdrive_token") && Date.now() < expiry - 60_000));
+  }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem("bv_autoTrackProducts");
@@ -422,11 +447,173 @@ export default function SettingsPage() {
     } catch { toast({ title: "Delete failed", variant: "destructive" }); }
   };
 
+  // ── Mobile Sync handlers ──────────────────────────────────────────────────
+  const setSyncMethod = (m: SyncMethod) => {
+    setSyncMethodState(m);
+    localStorage.setItem("bv_sync_method", m);
+  };
+
+  const saveSyncConfig = () => {
+    localStorage.setItem("bv_sync_method",          syncMethod);
+    localStorage.setItem("bv_sync_webdav_url",      webdavUrl);
+    localStorage.setItem("bv_sync_webdav_username", webdavUsername);
+    localStorage.setItem("bv_sync_webdav_password", webdavPassword);
+    localStorage.setItem("bv_sync_gdrive_client_id",gdriveClientId);
+    toast({ title: "Sync settings saved" });
+  };
+
+  const _loadGIS = (): Promise<void> => new Promise((resolve, reject) => {
+    if ((window as unknown as Record<string,unknown>).google) { resolve(); return; }
+    if (document.getElementById("gis-script")) { resolve(); return; }
+    const s = document.createElement("script");
+    s.id  = "gis-script";
+    s.src = "https://accounts.google.com/gsi/client";
+    s.onload  = () => resolve();
+    s.onerror = () => reject(new Error("Failed to load Google Identity Services"));
+    document.head.appendChild(s);
+  });
+
+  const authorizeGoogleDrive = async () => {
+    if (!gdriveClientId) { toast({ title: "Enter your Google Client ID first", variant: "destructive" }); return; }
+    try {
+      await _loadGIS();
+      localStorage.removeItem("bv_sync_gdrive_token");
+      localStorage.removeItem("bv_sync_gdrive_token_expiry");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await new Promise<void>((resolve, reject) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const g = (window as any).google;
+        const client = g.accounts.oauth2.initTokenClient({
+          client_id: gdriveClientId,
+          scope:     "https://www.googleapis.com/auth/drive.appdata",
+          callback:  (resp: Record<string,string>) => {
+            if (resp.error) { reject(new Error(resp.error)); return; }
+            localStorage.setItem("bv_sync_gdrive_token",        resp.access_token);
+            localStorage.setItem("bv_sync_gdrive_token_expiry", String(Date.now() + parseInt(resp.expires_in)*1000));
+            setGdriveAuthed(true);
+            resolve();
+          },
+        });
+        client.requestAccessToken();
+      });
+      toast({ title: "Google Drive authorized" });
+    } catch (e) {
+      toast({ title: `Authorization failed: ${e instanceof Error ? e.message : String(e)}`, variant: "destructive" });
+    }
+  };
+
+  const _driveHeaders = () => ({ Authorization: "Bearer " + localStorage.getItem("bv_sync_gdrive_token") });
+
+  const _findDriveFile = async (): Promise<string|null> => {
+    const res = await fetch(
+      "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%27buildverse-sync.json%27&fields=files(id)",
+      { headers: _driveHeaders() }
+    );
+    const data = await res.json();
+    return data.files?.[0]?.id ?? null;
+  };
+
+  const doSyncUpload = async () => {
+    setSyncingDir("upload");
+    setSyncMsg(null);
+    try {
+      const snapshot = await fetch("/api/sync").then(r => r.json());
+
+      if (syncMethod === "webdav") {
+        const auth = "Basic " + btoa(`${webdavUsername}:${webdavPassword}`);
+        const res  = await fetch(webdavUrl.replace(/\/$/, "") + "/buildverse-sync.json", {
+          method: "PUT", headers: { Authorization: auth, "Content-Type": "application/json" },
+          body:   JSON.stringify(snapshot),
+        });
+        if (!res.ok) throw new Error("WebDAV error " + res.status);
+
+      } else if (syncMethod === "gdrive") {
+        const token    = localStorage.getItem("bv_sync_gdrive_token");
+        if (!token) { await authorizeGoogleDrive(); return; }
+        const existing = await _findDriveFile();
+        const metadata = { name:"buildverse-sync.json", mimeType:"application/json", ...(!existing && { parents:["appDataFolder"] }) };
+        const form = new FormData();
+        form.append("metadata", new Blob([JSON.stringify(metadata)], { type:"application/json" }));
+        form.append("file",     new Blob([JSON.stringify(snapshot)],  { type:"application/json" }));
+        const url    = existing ? `https://www.googleapis.com/upload/drive/v3/files/${existing}?uploadType=multipart` : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&spaces=appDataFolder";
+        const method = existing ? "PATCH" : "POST";
+        const res    = await fetch(url, { method, headers: { Authorization:"Bearer "+token }, body: form });
+        if (!res.ok) throw new Error("Drive upload error " + res.status);
+
+      } else {
+        throw new Error("Server is the source of truth — use Pull on your phone instead");
+      }
+
+      const now = new Date().toISOString();
+      localStorage.setItem("bv_sync_last_synced_at", now);
+      setLastSyncedAt(now);
+      setSyncMsg({ text: "Snapshot uploaded successfully", type: "success" });
+      toast({ title: "Snapshot uploaded" });
+    } catch (e) {
+      setSyncMsg({ text: e instanceof Error ? e.message : String(e), type: "error" });
+      toast({ title: "Upload failed", variant: "destructive" });
+    } finally { setSyncingDir(null); }
+  };
+
+  const doSyncDownload = async () => {
+    setSyncingDir("download");
+    setSyncMsg(null);
+    try {
+      let snapshot: unknown;
+
+      if (syncMethod === "webdav") {
+        const auth = "Basic " + btoa(`${webdavUsername}:${webdavPassword}`);
+        const res  = await fetch(webdavUrl.replace(/\/$/, "") + "/buildverse-sync.json", {
+          headers: { Authorization: auth },
+        });
+        if (res.status === 404) throw new Error("No sync file on WebDAV. Push first.");
+        if (!res.ok) throw new Error("WebDAV error " + res.status);
+        snapshot = await res.json();
+
+      } else if (syncMethod === "gdrive") {
+        const token = localStorage.getItem("bv_sync_gdrive_token");
+        if (!token) { await authorizeGoogleDrive(); return; }
+        const fileId = await _findDriveFile();
+        if (!fileId) throw new Error("No sync file on Drive. Push first.");
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { Authorization:"Bearer "+token } });
+        if (!res.ok) throw new Error("Drive download error " + res.status);
+        snapshot = await res.json();
+
+      } else {
+        throw new Error("Server method: pull changes from the phone using the app, not the desktop");
+      }
+
+      // Merge offline queue from snapshot into local DB
+      const body = snapshot as { offlineQueue?: unknown[] };
+      if (body.offlineQueue?.length) {
+        const res = await fetch("/api/sync", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ offlineQueue: body.offlineQueue }),
+        });
+        const result = await res.json();
+        setSyncMsg({ text: `Merged ${result.merged ?? 0} offline change(s) from phone`, type: "success" });
+        toast({ title: `Merged ${result.merged ?? 0} offline change(s)` });
+      } else {
+        setSyncMsg({ text: "No pending offline changes from phone", type: "info" });
+        toast({ title: "No pending phone changes" });
+      }
+
+      const now = new Date().toISOString();
+      localStorage.setItem("bv_sync_last_synced_at", now);
+      setLastSyncedAt(now);
+    } catch (e) {
+      setSyncMsg({ text: e instanceof Error ? e.message : String(e), type: "error" });
+      toast({ title: "Download failed", variant: "destructive" });
+    } finally { setSyncingDir(null); }
+  };
+
   const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
-    { id: "general",      label: "General",       icon: Palette   },
-    { id: "remote",       label: "Remote Access",  icon: Globe     },
-    { id: "integrations", label: "Integrations",   icon: Plug      },
-    { id: "data",         label: "Data & Backup",  icon: HardDrive },
+    { id: "general",      label: "General",       icon: Palette    },
+    { id: "remote",       label: "Remote Access", icon: Globe      },
+    { id: "sync",         label: "Mobile Sync",   icon: Cloud      },
+    { id: "integrations", label: "Integrations",  icon: Plug       },
+    { id: "data",         label: "Data & Backup", icon: HardDrive  },
   ];
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -779,6 +966,174 @@ export default function SettingsPage() {
               )}
             </>
           )}
+
+          {/* ══════════════════════ MOBILE SYNC ═════════════════════════ */}
+          {section === "sync" && (() => {
+            const METHODS: { id: SyncMethod; label: string; desc: string }[] = [
+              { id:"server", label:"BuildVerse Server", desc:"Phone pulls directly from your PC via LAN or remote access URL. No third-party cloud needed." },
+              { id:"webdav", label:"WebDAV",            desc:"Nextcloud, OneDrive, Synology NAS, or any WebDAV-compatible service. Each user provides their own credentials." },
+              { id:"gdrive", label:"Google Drive",      desc:"Your own Google account. Provide your Google Cloud Client ID — data goes to your Drive, not anyone else's." },
+            ];
+            const syncColor = { info:"text-muted-foreground", success:"text-green-400", error:"text-red-400" } as const;
+            return (
+              <>
+                <Section title="Mobile Sync" icon={Cloud}>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Choose how your phone syncs BuildVerse data. Each user configures their own provider — nothing is shared.
+                  </p>
+
+                  {/* Method selector */}
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Sync Method</p>
+                  <div className="space-y-2 mb-5">
+                    {METHODS.map(m => (
+                      <label key={m.id}
+                        onClick={() => setSyncMethod(m.id)}
+                        className={cn(
+                          "flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-colors",
+                          syncMethod === m.id ? "border-theme bg-theme/5" : "border-border bg-secondary/40 hover:border-border/80"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-4.5 h-4.5 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center",
+                          syncMethod === m.id ? "border-theme bg-theme" : "border-border/80"
+                        )}>
+                          {syncMethod === m.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold">{m.label}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">{m.desc}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Config fields */}
+                  {syncMethod === "server" && (
+                    <div className="space-y-3 mb-5">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">How it works</p>
+                      <div className="p-3 rounded-xl bg-secondary/60 border border-border text-sm space-y-1.5 text-muted-foreground">
+                        <p>1. Enable Remote Access in Settings → Remote Access.</p>
+                        <p>2. Open the Android app → Sync → enter your server URL.</p>
+                        <p>3. Tap <strong className="text-foreground">Pull</strong> on the phone to download your garage.</p>
+                        <p>4. When offline, changes queue locally. Tap <strong className="text-foreground">Push</strong> to sync back.</p>
+                      </div>
+                      {lanUrl && (
+                        <div className="p-3 rounded-xl bg-secondary border border-border">
+                          <p className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-widest">Your server URL (LAN)</p>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 text-sm font-mono break-all">{lanUrl}</code>
+                            <Btn size="xs" onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied" }); }}>
+                              <Copy className="w-3 h-3" /> Copy
+                            </Btn>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {syncMethod === "webdav" && (
+                    <div className="space-y-3 mb-5">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">WebDAV Config</p>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">WebDAV URL</label>
+                        <input type="url" value={webdavUrl} onChange={e => { setWebdavUrl(e.target.value); localStorage.setItem("bv_sync_webdav_url", e.target.value); }}
+                          placeholder="https://nextcloud.example.com/remote.php/dav/files/user/"
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Username</label>
+                          <input type="text" value={webdavUsername} onChange={e => { setWebdavUsername(e.target.value); localStorage.setItem("bv_sync_webdav_username", e.target.value); }}
+                            autoComplete="off"
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Password</label>
+                          <div className="relative">
+                            <input type={showWebdavPass ? "text" : "password"} value={webdavPassword} onChange={e => { setWebdavPassword(e.target.value); localStorage.setItem("bv_sync_webdav_password", e.target.value); }}
+                              autoComplete="off"
+                              className="w-full px-3 py-2 pr-9 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                            <button type="button" onClick={() => setShowWebdavPass(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" tabIndex={-1}>
+                              {showWebdavPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Enter the same credentials in the Android app → Sync → WebDAV.</p>
+                    </div>
+                  )}
+
+                  {syncMethod === "gdrive" && (
+                    <div className="space-y-3 mb-5">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Google Drive Config</p>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Google Client ID</label>
+                        <input type="text" value={gdriveClientId} onChange={e => { setGdriveClientId(e.target.value); localStorage.setItem("bv_sync_gdrive_client_id", e.target.value); }}
+                          placeholder="1234567890-abc.apps.googleusercontent.com"
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          Create at <strong>console.cloud.google.com</strong> → APIs & Services → Credentials → OAuth 2.0 Client ID.
+                          Add <code className="text-xs bg-secondary px-1 rounded">http://localhost:3456</code> as an authorized origin.
+                        </p>
+                      </div>
+                      <div className={cn("flex items-center justify-between p-3 rounded-xl border text-sm",
+                        gdriveAuthed ? "bg-green-500/8 border-green-500/20" : "bg-secondary/60 border-border")}>
+                        <span className={gdriveAuthed ? "text-green-400 font-medium" : "text-muted-foreground"}>
+                          {gdriveAuthed ? "✓ Authorized" : "Not authorized"}
+                        </span>
+                        <Btn size="xs" onClick={authorizeGoogleDrive}>
+                          {gdriveAuthed ? "Re-authorize" : "Sign in with Google"}
+                        </Btn>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Status */}
+                  {lastSyncedAt && (
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Last sync: {new Date(lastSyncedAt).toLocaleString()}
+                    </p>
+                  )}
+
+                  {syncMsg && (
+                    <p className={cn("text-xs mb-4", syncColor[syncMsg.type])}>{syncMsg.text}</p>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex gap-2">
+                    {syncMethod !== "server" && (
+                      <Btn variant="primary" onClick={doSyncUpload} disabled={!!syncingDir}>
+                        {syncingDir === "upload"
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Upload className="w-3.5 h-3.5" />}
+                        Push to {METHODS.find(m => m.id === syncMethod)?.label}
+                      </Btn>
+                    )}
+                    {syncMethod !== "server" && (
+                      <Btn variant="outline" onClick={doSyncDownload} disabled={!!syncingDir}>
+                        {syncingDir === "download"
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : <Download className="w-3.5 h-3.5" />}
+                        Pull changes from phone
+                      </Btn>
+                    )}
+                    {syncMethod === "server" && (
+                      <p className="text-xs text-muted-foreground">Use the Android app to pull/push via your server URL above.</p>
+                    )}
+                  </div>
+                </Section>
+
+                <Section title="Setup Guide" icon={Smartphone}>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    On your Android phone, open the BuildVerse app → tap the sync icon (↺) in the top-right → choose the same sync method above → tap <strong className="text-foreground">Pull</strong> to load your garage data for offline use.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    When you add notes or log service offline, they queue automatically. Tap <strong className="text-foreground">Push</strong> to send them back when you have a connection.
+                  </p>
+                </Section>
+              </>
+            );
+          })()}
 
           {/* ════════════════════════ INTEGRATIONS ═══════════════════════ */}
           {section === "integrations" && (

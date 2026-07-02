@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <title>BuildVerse</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:     #09090B; --surface: #18181B; --surface2: #1E1E21;
+      --border: #27272A; --border2: #3F3F46; --fg: #FAFAFA;
+      --muted:  #71717A; --muted2:  #A1A1AA;
+      --accent: #3B82F6; --accent-dim: rgba(59,130,246,.12);
+      --green:  #4ade80; --amber: #fbbf24; --red: #f87171;
+      --safe-top:    env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--fg); overscroll-behavior: none; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+    #app  { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+    #header { background: var(--surface); border-bottom: 1px solid var(--border); padding: calc(var(--safe-top) + 10px) 12px 10px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    #content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    h1.page-title { font-size: 17px; font-weight: 700; flex: 1; text-align: center; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+    .btn:active { opacity: .7; }
+    .btn-primary  { background: var(--accent); color: #fff; padding: 13px 20px; width: 100%; }
+    .btn-outline  { background: transparent; color: var(--fg); border: 1px solid var(--border2); padding: 11px 18px; width: 100%; }
+    .btn-ghost    { background: transparent; color: var(--muted2); padding: 6px; border-radius: 8px; }
+    .btn-danger   { background: transparent; color: var(--red); border: 1px solid rgba(248,113,113,.3); padding: 11px 18px; }
+    .btn:disabled { opacity: .4; pointer-events: none; }
+    .btn-sm       { padding: 8px 14px; font-size: 13px; }
+
+    /* Surface / Card */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+    .card-sm { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+
+    /* List rows */
+    .row { padding: 13px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+    .row:last-child { border-bottom: none; }
+    .row-label { font-size: 13px; color: var(--muted); flex-shrink: 0; min-width: 90px; }
+    .row-value { font-size: 14px; font-weight: 500; }
+
+    /* Tabs */
+    .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); overflow-x: auto; flex-shrink: 0; }
+    .tab  { padding: 12px 18px; font-size: 13px; font-weight: 600; white-space: nowrap; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; color: var(--muted); transition: color .15s, border-color .15s; }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Badges */
+    .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+    .badge-installed { background: rgba(74,222,128,.1); color: #4ade80; }
+    .badge-planned   { background: rgba(96,165,250,.1); color: #60a5fa; }
+    .badge-ordered   { background: rgba(251,191,36,.1);  color: #fbbf24; }
+    .badge-removed   { background: rgba(113,113,122,.1); color: var(--muted); }
+
+    /* Note colors */
+    .note-yellow { border-left: 3px solid #a16207; background: rgba(161,98,7,.1); }
+    .note-blue   { border-left: 3px solid #2563eb; background: rgba(37,99,235,.1); }
+    .note-green  { border-left: 3px solid #16a34a; background: rgba(22,163,74,.1); }
+    .note-red    { border-left: 3px solid #dc2626; background: rgba(220,38,38,.1); }
+    .note-purple { border-left: 3px solid #7c3aed; background: rgba(124,58,237,.1); }
+
+    /* Form fields */
+    .field-label { display: block; font-size: 12px; font-weight: 600; color: var(--muted2); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .field-input { display: block; width: 100%; padding: 11px 14px; background: var(--bg); border: 1px solid var(--border2); border-radius: 10px; color: var(--fg); font-size: 15px; font-family: inherit; outline: none; -webkit-appearance: none; appearance: none; transition: border-color .15s; }
+    .field-input:focus { border-color: var(--accent); }
+    .field-input::placeholder { color: var(--muted); }
+    textarea.field-input { resize: vertical; min-height: 100px; }
+
+    /* Color picker */
+    .color-dot { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: transform .15s, border-color .15s; }
+    .color-dot.selected { border-color: #fff; transform: scale(1.2); }
+
+    /* Sync method cards */
+    .method-card { padding: 14px; background: var(--surface); border: 1.5px solid var(--border); border-radius: 14px; cursor: pointer; transition: border-color .15s; display: flex; align-items: flex-start; gap: 12px; }
+    .method-card.selected { border-color: var(--accent); }
+    .method-radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border2); flex-shrink: 0; margin-top: 2px; display: flex; align-items: center; justify-content: center; transition: border-color .15s; }
+    .method-card.selected .method-radio { border-color: var(--accent); background: var(--accent); }
+    .method-radio::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #fff; display: none; }
+    .method-card.selected .method-radio::after { display: block; }
+
+    /* Empty state */
+    .empty { padding: 48px 24px; text-align: center; color: var(--muted); }
+    .empty svg { margin: 0 auto 16px; display: block; }
+    .empty h3 { font-size: 16px; font-weight: 600; color: var(--muted2); margin-bottom: 6px; }
+    .empty p  { font-size: 13px; line-height: 1.5; margin-bottom: 20px; }
+
+    /* Spinner */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin .8s linear infinite; }
+
+    /* Status messages */
+    .status-info    { color: var(--muted); }
+    .status-success { color: var(--green); }
+    .status-error   { color: var(--red); }
+    .status-loading { color: #60a5fa; }
+
+    /* Pending badge */
+    .pending-bar { margin: 0 16px 12px; padding: 10px 14px; background: rgba(37,99,235,.1); border: 1px solid rgba(37,99,235,.25); border-radius: 10px; font-size: 13px; color: #60a5fa; display: flex; align-items: center; gap: 8px; }
+
+    /* Vehicle hero photo */
+    .vehicle-photo { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; background: var(--border); }
+    .vehicle-photo-placeholder { width: 100%; aspect-ratio: 16/9; background: var(--surface2); display: flex; align-items: center; justify-content: center; }
+
+    /* Mod link */
+    .mod-link { display: inline-block; font-size: 12px; color: var(--accent); margin-top: 4px; text-decoration: none; }
+    .mod-link:active { opacity: .7; }
+
+    /* Section label */
+    .section-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <button id="back-btn" class="btn btn-ghost" onclick="Nav.back()" style="display:none">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
+    <h1 class="page-title" id="page-title">BuildVerse</h1>
+    <button class="btn btn-ghost" onclick="Nav.go('sync')" title="Sync">
+      <svg id="sync-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+    </button>
+  </div>
+  <div id="content"></div>
+</div>
+
+<script src="db.js"></script>
+<script src="sync.js"></script>
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+const S = {
+  page: "loading",
+  vehicleId: null,
+  tab: "overview",
+  vehicles: [],
+  mods: [], logs: [], notes: [],
+  queue: [],
+  lastSync: localStorage.getItem("bv_last_sync") || null,
+};
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 9); }
+function fmtDate(d) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
+}
+function fmtMoney(v) {
+  if (v == null) return null;
+  return "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits:0, maximumFractionDigits:2 });
+}
+function esc(str) {
+  if (!str) return "";
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+function svgIcon(path, size=20, extra="") {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ${extra}>${path}</svg>`;
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+const Nav = {
+  stack: [],
+
+  async go(page, params = {}) {
+    if (S.page !== "loading") Nav.stack.push({ page: S.page, vehicleId: S.vehicleId, tab: S.tab });
+    S.page = page;
+    if (params.vehicleId !== undefined) S.vehicleId = params.vehicleId;
+    if (params.tab       !== undefined) S.tab       = params.tab;
+    await Nav._render();
+  },
+
+  async back() {
+    const prev = Nav.stack.pop();
+    if (prev) { S.page = prev.page; S.vehicleId = prev.vehicleId; S.tab = prev.tab || "overview"; }
+    else       { S.page = "home"; S.vehicleId = null; }
+    await Nav._render();
+  },
+
+  async reload() { await Nav._render(); },
+
+  async _render() {
+    const title   = document.getElementById("page-title");
+    const backBtn = document.getElementById("back-btn");
+    const content = document.getElementById("content");
+
+    const hasBack = Nav.stack.length > 0 || ["vehicle","sync","add-note","add-log"].includes(S.page);
+    backBtn.style.display = hasBack ? "block" : "none";
+
+    switch (S.page) {
+      case "loading":
+        title.textContent = "BuildVerse";
+        content.innerHTML = Views.loading();
+        break;
+
+      case "home":
+        title.textContent = "Garage";
+        content.innerHTML = Views.home();
+        break;
+
+      case "vehicle": {
+        const v = S.vehicles.find(x => x.id === S.vehicleId);
+        title.textContent = v ? `${v.year} ${v.make}` : "Vehicle";
+        [S.mods, S.logs, S.notes] = await Promise.all([
+          BvDB.getByIndex("modifications",   "vehicleId", S.vehicleId),
+          BvDB.getByIndex("maintenanceLogs", "vehicleId", S.vehicleId),
+          BvDB.getByIndex("vehicleNotes",    "vehicleId", S.vehicleId),
+        ]);
+        S.mods.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+        S.logs.sort((a,b) => new Date(b.date)      - new Date(a.date));
+        S.notes.sort((a,b) => (b.importance||0)    - (a.importance||0));
+        content.innerHTML = Views.vehicle(v);
+        break;
+      }
+
+      case "add-note":
+        title.textContent = "Add Note";
+        content.innerHTML = Views.addNote();
+        break;
+
+      case "add-log":
+        title.textContent = "Log Service";
+        content.innerHTML = Views.addLog();
+        break;
+
+      case "sync":
+        title.textContent = "Mobile Sync";
+        content.innerHTML = Views.sync();
+        break;
+    }
+  },
+};
+
+// ── Views ─────────────────────────────────────────────────────────────────────
+const Views = {
+
+  loading() {
+    return `<div class="empty" style="padding-top:80px">
+      ${svgIcon('<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>', 36, 'class="spinner" style="color:var(--muted)"')}
+    </div>`;
+  },
+
+  home() {
+    if (!S.vehicles.length) {
+      return `<div class="empty">
+        ${svgIcon('<path d="M19 17H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2z"/><path d="M3 11h18"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/>', 48)}
+        <h3>No vehicles loaded</h3>
+        <p>Sync with your BuildVerse server or cloud provider to load your garage data.</p>
+        <button class="btn btn-primary" style="width:auto;padding:12px 28px" onclick="Nav.go('sync')">Open Sync Settings</button>
+      </div>`;
+    }
+
+    const pendingBar = S.queue.length
+      ? `<div class="pending-bar">
+          ${svgIcon('<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>', 14)}
+          ${S.queue.length} offline change${S.queue.length !== 1 ? "s" : ""} waiting to sync
+         </div>`
+      : "";
+
+    const cards = S.vehicles.map(v => {
+      const photo = v.photoUrl
+        ? `<img class="vehicle-photo" src="${esc(v.photoUrl)}" alt="${esc(v.make)}" onerror="this.style.display='none'">`
+        : `<div class="vehicle-photo-placeholder">${svgIcon('<path d="M19 17H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2z"/><path d="M3 11h18"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/>', 36, 'style="color:var(--border2)"')}</div>`;
+      const meta = [v.color, v.engine, v.mileage ? v.mileage.toLocaleString()+" mi" : null].filter(Boolean);
+      return `<div class="card" onclick="Nav.go('vehicle',{vehicleId:'${v.id}'})" style="cursor:pointer;margin-bottom:12px">
+        ${photo}
+        <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <p style="font-weight:700;font-size:15px">${esc(v.year)} ${esc(v.make)} ${esc(v.model)}${v.trim?" "+esc(v.trim):""}</p>
+            ${v.name ? `<p style="font-size:12px;color:var(--muted2);margin-top:2px">${esc(v.name)}</p>` : ""}
+            ${meta.length ? `<p style="font-size:12px;color:var(--muted);margin-top:5px">${meta.map(esc).join(" · ")}</p>` : ""}
+          </div>
+          ${svgIcon('<path d="m9 18 6-6-6-6"/>', 18, 'style="color:var(--muted);flex-shrink:0"')}
+        </div>
+      </div>`;
+    }).join("");
+
+    return `<div style="padding:16px 16px 32px">${pendingBar}${cards}</div>`;
+  },
+
+  vehicle(v) {
+    if (!v) return `<div class="empty"><p>Vehicle not found.</p></div>`;
+    const photo = v.photoUrl
+      ? `<img class="vehicle-photo" src="${esc(v.photoUrl)}" alt="" onerror="this.parentNode.removeChild(this)">`
+      : "";
+
+    const tabs = [
+      { id:"overview", label:"Overview"                       },
+      { id:"mods",     label:`Mods (${S.mods.length})`        },
+      { id:"service",  label:`Service (${S.logs.length})`     },
+      { id:"notes",    label:`Notes (${S.notes.length})`      },
+    ];
+
+    const tabsHtml = `<div class="tabs">${tabs.map(t =>
+      `<button class="tab${S.tab===t.id?" active":""}" onclick="switchTab('${t.id}')">${t.label}</button>`
+    ).join("")}</div>`;
+
+    return `${photo}${tabsHtml}<div id="tab-body">${this._tabContent()}</div>`;
+  },
+
+  _tabContent() {
+    switch (S.tab) {
+      case "overview": return this._overview();
+      case "mods":     return this._mods();
+      case "service":  return this._service();
+      case "notes":    return this._notes();
+      default:         return "";
+    }
+  },
+
+  _overview() {
+    const v = S.vehicles.find(x => x.id === S.vehicleId);
+    if (!v) return "";
+    const fields = [
+      ["Year",         v.year],
+      ["Make",         v.make],
+      ["Model",        v.model],
+      ["Trim",         v.trim],
+      ["Engine",       v.engine],
+      ["Transmission", v.transmission],
+      ["Drivetrain",   v.drivetrain],
+      ["Color",        v.color],
+      ["Mileage",      v.mileage ? v.mileage.toLocaleString()+" mi" : null],
+      ["VIN",          v.vin],
+      ["Platform",     v.platform],
+    ].filter(([,val]) => val != null && val !== "");
+
+    return `<div style="padding:16px">
+      <div class="card-sm">${fields.map(([label,val],i) =>
+        `<div class="row"><span class="row-label">${esc(label)}</span><span class="row-value">${esc(String(val))}</span></div>`
+      ).join("")}</div>
+      ${v.notes ? `<div class="card-sm" style="margin-top:12px;padding:14px"><p style="font-size:13px;color:var(--muted2);line-height:1.6">${esc(v.notes)}</p></div>` : ""}
+    </div>`;
+  },
+
+  _mods() {
+    if (!S.mods.length) return `<div class="empty"><h3>No modifications</h3><p>Add mods from the desktop app — they'll appear here after syncing.</p></div>`;
+
+    const groups = {};
+    S.mods.forEach(m => { (groups[m.category] = groups[m.category] || []).push(m); });
+
+    const html = Object.entries(groups).map(([cat, mods]) => {
+      const rows = mods.map((m,i) => {
+        const badgeCls = { INSTALLED:"badge-installed", PLANNED:"badge-planned", ORDERED:"badge-ordered", REMOVED:"badge-removed" };
+        const cost = fmtMoney(m.actualPrice ?? m.price);
+        return `<div class="row" style="align-items:flex-start">
+          <div style="flex:1;min-width:0">
+            <p style="font-weight:600;font-size:14px">${esc(m.name)}</p>
+            ${(m.brand||m.vendor) ? `<p style="font-size:12px;color:var(--muted2);margin-top:2px">${esc([m.brand,m.vendor].filter(Boolean).join(" · "))}</p>` : ""}
+            ${m.notes ? `<p style="font-size:12px;color:var(--muted);margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(m.notes)}</p>` : ""}
+            ${m.link ? `<a href="${esc(m.link)}" target="_blank" rel="noopener" class="mod-link">View product →</a>` : ""}
+          </div>
+          <div style="text-align:right;flex-shrink:0;padding-left:8px">
+            <span class="badge ${badgeCls[m.status]||"badge-planned"}">${esc(m.status)}</span>
+            ${cost ? `<p style="font-size:12px;color:var(--muted2);margin-top:5px">${cost}</p>` : ""}
+          </div>
+        </div>`;
+      }).join("");
+      return `<p class="section-label" style="margin:16px 16px 6px">${esc(cat)}</p>
+              <div class="card-sm" style="margin:0 16px">${rows}</div>`;
+    }).join("");
+
+    return `<div style="padding-bottom:24px">${html}</div>`;
+  },
+
+  _service() {
+    const addBtn = `<div style="padding:16px 16px 0">
+      <button class="btn btn-outline btn-sm" onclick="Nav.go('add-log',{vehicleId:'${S.vehicleId}'})">+ Log Service</button>
+    </div>`;
+    if (!S.logs.length) return `${addBtn}<div class="empty" style="padding-top:24px"><h3>No service history</h3><p>Log your first service entry.</p></div>`;
+
+    const rows = S.logs.map(log => `
+      <div class="row" style="align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <p style="font-weight:600;font-size:14px">${esc(log.service)}</p>
+          <p style="font-size:12px;color:var(--muted);margin-top:3px">
+            ${fmtDate(log.date)}${log.mileage?" · "+log.mileage.toLocaleString()+" mi":""}${log.shop?" · "+esc(log.shop):log.diy?" · DIY":""}
+          </p>
+          ${log.notes ? `<p style="font-size:12px;color:var(--muted2);margin-top:4px">${esc(log.notes)}</p>` : ""}
+        </div>
+        ${log.cost!=null ? `<span style="font-size:14px;font-weight:700;color:var(--accent);flex-shrink:0;padding-left:8px">${fmtMoney(log.cost)}</span>` : ""}
+      </div>`).join("");
+
+    return `${addBtn}<div style="padding:12px 16px 32px"><div class="card-sm">${rows}</div></div>`;
+  },
+
+  _notes() {
+    const addBtn = `<div style="padding:16px 16px 0">
+      <button class="btn btn-outline btn-sm" onclick="Nav.go('add-note',{vehicleId:'${S.vehicleId}'})">+ Add Note</button>
+    </div>`;
+    if (!S.notes.length) return `${addBtn}<div class="empty" style="padding-top:24px"><h3>No notes</h3><p>Add your first note.</p></div>`;
+
+    const clsMap = { yellow:"note-yellow", blue:"note-blue", green:"note-green", red:"note-red", purple:"note-purple" };
+    const noteCards = S.notes.map(n =>
+      `<div class="card-sm ${clsMap[n.color]||"note-yellow"}" style="padding:14px">
+        ${n.title ? `<p style="font-weight:700;font-size:14px;margin-bottom:6px">${esc(n.title)}</p>` : ""}
+        <p style="font-size:13px;color:var(--muted2);line-height:1.6;white-space:pre-wrap">${esc(n.content)}</p>
+      </div>`
+    ).join("");
+
+    return `${addBtn}<div style="padding:12px 16px 32px;display:flex;flex-direction:column;gap:10px">${noteCards}</div>`;
+  },
+
+  addNote() {
+    return `<form id="note-form" style="padding:16px 16px 32px" onsubmit="submitNote(event)">
+      <div style="margin-bottom:16px">
+        <label class="field-label">Title <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+        <input class="field-input" type="text" id="note-title" placeholder="e.g. Suspension notes">
+      </div>
+      <div style="margin-bottom:16px">
+        <label class="field-label">Content *</label>
+        <textarea class="field-input" id="note-content" placeholder="Write your note…"></textarea>
+      </div>
+      <div style="margin-bottom:24px">
+        <label class="field-label" style="margin-bottom:10px">Color</label>
+        <div style="display:flex;gap:12px;align-items:center">
+          ${[["yellow","#a16207"],["blue","#2563eb"],["green","#16a34a"],["red","#dc2626"],["purple","#7c3aed"]].map(([c,hex]) =>
+            `<div class="color-dot${c==="yellow"?" selected":""}" data-color="${c}" style="background:${hex}" onclick="pickColor(this,'${c}')"></div>`
+          ).join("")}
+        </div>
+      </div>
+      <input type="hidden" id="note-color" value="yellow">
+      <button type="submit" class="btn btn-primary">Save Note</button>
+    </form>`;
+  },
+
+  addLog() {
+    const today = new Date().toISOString().slice(0,10);
+    return `<form id="log-form" style="padding:16px 16px 32px" onsubmit="submitLog(event)">
+      <div style="margin-bottom:16px">
+        <label class="field-label">Service *</label>
+        <input class="field-input" type="text" id="log-service" placeholder="e.g. Oil change, Brake pads" required>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div>
+          <label class="field-label">Date *</label>
+          <input class="field-input" type="date" id="log-date" value="${today}" required>
+        </div>
+        <div>
+          <label class="field-label">Mileage</label>
+          <input class="field-input" type="number" id="log-mileage" placeholder="Miles" min="0">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div>
+          <label class="field-label">Cost ($)</label>
+          <input class="field-input" type="number" id="log-cost" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div>
+          <label class="field-label">Shop / Performed by</label>
+          <input class="field-input" type="text" id="log-shop" placeholder="Shop name">
+        </div>
+      </div>
+      <div style="margin-bottom:16px">
+        <label class="field-label">Notes</label>
+        <textarea class="field-input" id="log-notes" placeholder="Additional details…" style="min-height:80px"></textarea>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;margin-bottom:24px;cursor:pointer;font-size:14px">
+        <input type="checkbox" id="log-diy" style="width:18px;height:18px;accent-color:var(--accent)">
+        DIY / Self-performed
+      </label>
+      <button type="submit" class="btn btn-primary">Save Service Log</button>
+    </form>`;
+  },
+
+  sync() {
+    const cfg = BvSync.getConfig();
+    const qCount   = S.queue.length;
+    const lastSync = S.lastSync ? new Date(S.lastSync).toLocaleString() : "Never";
+
+    const methods = [
+      { id:"server", label:"BuildVerse Server", desc:"Connect directly via LAN or your remote access URL." },
+      { id:"webdav", label:"WebDAV",            desc:"Nextcloud, OneDrive, Synology, or any WebDAV service." },
+      { id:"gdrive", label:"Google Drive",      desc:"Your own Google account — requires a Client ID." },
+    ];
+
+    const methodCards = methods.map(m => `
+      <div class="method-card${cfg.method===m.id?" selected":""}" onclick="selectMethod('${m.id}')">
+        <div class="method-radio"></div>
+        <div>
+          <p style="font-weight:600;font-size:14px">${m.label}</p>
+          <p style="font-size:12px;color:var(--muted);margin-top:3px">${m.desc}</p>
+        </div>
+      </div>`).join("");
+
+    const isTokenValid = cfg.gdriveToken && parseInt(cfg.gdriveTokenExpiry) > Date.now();
+
+    const configFields = {
+      server: `<div>
+        <label class="field-label">Server URL</label>
+        <input class="field-input" type="url" id="cfg-url" value="${esc(cfg.serverUrl)}" placeholder="http://192.168.1.100:3456" oninput="saveCfgField('bv_server_url',this.value)">
+        <p style="font-size:12px;color:var(--muted);margin-top:6px">Find this in Settings → Remote Access on your desktop.</p>
+      </div>`,
+      webdav: `<div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label class="field-label">WebDAV URL</label>
+          <input class="field-input" type="url" id="cfg-wurl" value="${esc(cfg.webdavUrl)}" placeholder="https://nextcloud.example.com/remote.php/dav/files/user/" oninput="saveCfgField('bv_sync_webdav_url',this.value)">
+        </div>
+        <div>
+          <label class="field-label">Username</label>
+          <input class="field-input" type="text" id="cfg-wuser" value="${esc(cfg.webdavUsername)}" autocomplete="off" oninput="saveCfgField('bv_sync_webdav_username',this.value)">
+        </div>
+        <div>
+          <label class="field-label">Password</label>
+          <input class="field-input" type="password" id="cfg-wpass" value="${esc(cfg.webdavPassword)}" autocomplete="off" oninput="saveCfgField('bv_sync_webdav_password',this.value)">
+        </div>
+      </div>`,
+      gdrive: `<div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label class="field-label">Google Client ID</label>
+          <input class="field-input" type="text" id="cfg-gcid" value="${esc(cfg.gdriveClientId)}" placeholder="1234567890-abc.apps.googleusercontent.com" oninput="saveCfgField('bv_sync_gdrive_client_id',this.value)">
+          <p style="font-size:12px;color:var(--muted);margin-top:6px">Create at console.cloud.google.com → APIs &amp; Services → Credentials</p>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:${isTokenValid?"rgba(74,222,128,.08)":"var(--surface2)"};border-radius:10px;gap:12px">
+          <span style="font-size:13px;color:${isTokenValid?"var(--green)":"var(--muted2)"}">${isTokenValid?"✓ Authorized":"Not authorized"}</span>
+          <button type="button" class="btn btn-outline btn-sm" style="width:auto" onclick="doGdriveAuth()">${isTokenValid?"Re-authorize":"Sign in with Google"}</button>
+        </div>
+      </div>`,
+    };
+
+    const methodLabel = methods.find(m => m.id === cfg.method)?.label || "Provider";
+
+    return `<div style="padding:16px 16px 32px">
+
+      <div class="card-sm" style="padding:14px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div>
+          <p style="font-weight:600;font-size:14px">Sync Status</p>
+          <p style="font-size:12px;color:var(--muted);margin-top:3px">Last sync: ${esc(lastSync)}</p>
+        </div>
+        ${qCount ? `<span style="background:var(--accent-dim);color:#60a5fa;font-size:12px;font-weight:600;padding:5px 10px;border-radius:8px;flex-shrink:0">${qCount} pending</span>` : ""}
+      </div>
+
+      <p class="section-label" style="margin-bottom:8px">Sync Method</p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">${methodCards}</div>
+
+      <div id="cfg-fields" style="margin-bottom:16px">${configFields[cfg.method] || ""}</div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button id="btn-download" class="btn btn-primary" onclick="doSync('download')">
+          ${svgIcon('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>', 16)}
+          Pull from ${methodLabel}
+        </button>
+        <button id="btn-upload" class="btn btn-outline" onclick="doSync('upload')">
+          ${svgIcon('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>', 16)}
+          Push to ${methodLabel}
+        </button>
+      </div>
+
+      <p id="sync-msg" style="margin-top:14px;font-size:13px;text-align:center;min-height:18px" class="status-info"></p>
+    </div>`;
+  },
+};
+
+// ── Event Handlers ─────────────────────────────────────────────────────────────
+
+function switchTab(tab) {
+  S.tab = tab;
+  // Update tab button styles
+  document.querySelectorAll(".tab").forEach(btn => {
+    const active = btn.textContent.toLowerCase().startsWith(tab) ||
+      (tab === "overview" && btn.textContent === "Overview") ||
+      (tab === "mods"    && btn.textContent.startsWith("Mods")) ||
+      (tab === "service" && btn.textContent.startsWith("Service")) ||
+      (tab === "notes"   && btn.textContent.startsWith("Notes"));
+    btn.classList.toggle("active", btn.onclick?.toString().includes(`'${tab}'`));
+  });
+  // Re-render tab body only
+  const body = document.getElementById("tab-body");
+  if (body) body.innerHTML = Views._tabContent();
+  else Nav.reload();
+}
+
+function selectMethod(method) {
+  localStorage.setItem("bv_sync_method", method);
+  document.getElementById("content").innerHTML = Views.sync();
+}
+
+function saveCfgField(key, value) {
+  localStorage.setItem(key, value);
+}
+
+function pickColor(el, color) {
+  document.querySelectorAll(".color-dot").forEach(d => d.classList.remove("selected"));
+  el.classList.add("selected");
+  document.getElementById("note-color").value = color;
+}
+
+async function doGdriveAuth() {
+  const cidEl = document.getElementById("cfg-gcid");
+  const cid   = cidEl ? cidEl.value.trim() : BvSync.getConfig().gdriveClientId;
+  if (!cid) { setSyncMsg("Enter your Google Client ID first.", "error"); return; }
+  try {
+    setSyncMsg("Opening Google sign-in…", "loading");
+    await BvSync.authorizeGoogle(cid);
+    setSyncMsg("Google Drive authorized!", "success");
+    document.getElementById("cfg-fields").innerHTML =
+      Views.sync().match(/id="cfg-fields"[^>]*>([\s\S]*?)<\/div>\s*\n\s*<div style="display:flex;flex-direction:column;gap:10px/)?.[1] || "";
+    // Easier: re-render whole sync page
+    document.getElementById("content").innerHTML = Views.sync();
+    setSyncMsg("Google Drive authorized!", "success");
+  } catch(e) {
+    setSyncMsg("Auth failed: " + e.message, "error");
+  }
+}
+
+function setSyncMsg(msg, type = "info") {
+  const el = document.getElementById("sync-msg");
+  if (!el) return;
+  el.className = "status-" + type;
+  el.textContent = msg;
+}
+
+async function doSync(direction) {
+  const dlBtn = document.getElementById("btn-download");
+  const ulBtn = document.getElementById("btn-upload");
+  if (dlBtn) dlBtn.disabled = true;
+  if (ulBtn) ulBtn.disabled = true;
+
+  setSyncMsg(direction === "download" ? "Downloading data…" : "Uploading changes…", "loading");
+
+  try {
+    if (direction === "download") {
+      const snapshot = await BvSync.download();
+      await BvDB.importSnapshot(snapshot);
+      S.vehicles = await BvDB.getAll("vehicles");
+      S.queue    = await BvDB.getQueue();
+      const now = new Date().toISOString();
+      localStorage.setItem("bv_last_sync", now);
+      S.lastSync = now;
+      setSyncMsg(`Loaded ${S.vehicles.length} vehicle${S.vehicles.length!==1?"s":""}. Tap ← to view your garage.`, "success");
+    } else {
+      const queue  = await BvDB.getQueue();
+      const result = await BvSync.upload(queue);
+      // For server sync: also refresh local data
+      if (BvSync.getConfig().method === "server" && queue.length > 0) {
+        try {
+          const snapshot = await BvSync.download();
+          await BvDB.importSnapshot(snapshot);
+          S.vehicles = await BvDB.getAll("vehicles");
+        } catch {}
+      }
+      await BvDB.removeFromQueue(queue.map(q => q.id));
+      S.queue = await BvDB.getQueue();
+      const now = new Date().toISOString();
+      localStorage.setItem("bv_last_sync", now);
+      S.lastSync = now;
+      setSyncMsg(`Pushed ${result.merged ?? queue.length} change${(result.merged ?? queue.length)!==1?"s":""}`, "success");
+    }
+  } catch (e) {
+    setSyncMsg("Error: " + e.message, "error");
+  } finally {
+    if (dlBtn) dlBtn.disabled = false;
+    if (ulBtn) ulBtn.disabled = false;
+  }
+}
+
+async function submitNote(e) {
+  e.preventDefault();
+  const title   = document.getElementById("note-title").value.trim();
+  const content = document.getElementById("note-content").value.trim();
+  const color   = document.getElementById("note-color").value || "yellow";
+  if (!content) { alert("Please enter note content."); return; }
+
+  const note = {
+    id: uid(), vehicleId: S.vehicleId, title, content, color,
+    importance: 0,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+  await BvDB.put("vehicleNotes", note);
+  await BvDB.addToQueue({ id: uid(), op:"create", table:"vehicleNote", vehicleId:S.vehicleId, data:note, timestamp: new Date().toISOString() });
+  S.queue = await BvDB.getQueue();
+  await Nav.go("vehicle", { vehicleId: S.vehicleId, tab:"notes" });
+}
+
+async function submitLog(e) {
+  e.preventDefault();
+  const service = document.getElementById("log-service").value.trim();
+  const date    = document.getElementById("log-date").value;
+  const mileage = document.getElementById("log-mileage").value;
+  const cost    = document.getElementById("log-cost").value;
+  const shop    = document.getElementById("log-shop").value.trim();
+  const notes   = document.getElementById("log-notes").value.trim();
+  const diy     = document.getElementById("log-diy").checked;
+  if (!service || !date) { alert("Service and date are required."); return; }
+
+  const log = {
+    id: uid(), vehicleId: S.vehicleId, service,
+    date:    new Date(date).toISOString(),
+    mileage: mileage ? Number(mileage) : null,
+    cost:    cost    ? Number(cost)    : null,
+    shop:    shop    || null,
+    notes:   notes   || null,
+    diy,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+  await BvDB.put("maintenanceLogs", log);
+  await BvDB.addToQueue({ id: uid(), op:"create", table:"maintenanceLog", vehicleId:S.vehicleId, data:log, timestamp: new Date().toISOString() });
+  S.queue = await BvDB.getQueue();
+  await Nav.go("vehicle", { vehicleId: S.vehicleId, tab:"service" });
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await BvDB.openDB();
+  S.vehicles = await BvDB.getAll("vehicles");
+  S.queue    = await BvDB.getQueue();
+  await Nav.go(S.vehicles.length ? "home" : "sync");
+  // Pre-load GIS if configured
+  try {
+    const cfg = BvSync.getConfig();
+    if (cfg.method === "gdrive" && cfg.gdriveClientId) BvSync._loadGIS();
+  } catch {}
+}
+
+init();
+</script>
+</body>
+</html>
