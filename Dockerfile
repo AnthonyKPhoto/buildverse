@@ -6,12 +6,12 @@ RUN npm ci
 
 FROM node:20-slim AS builder
 WORKDIR /app
+RUN apt-get update && apt-get install -y openssl --no-install-recommends && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV DATABASE_URL=file:/tmp/build.db
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS=--max-old-space-size=4096
-# Split so the failing step is clearly identified in build logs
 RUN node_modules/.bin/prisma generate
 RUN node_modules/.bin/next build
 
@@ -20,7 +20,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV DATABASE_URL=file:/data/buildverse.db
 ENV NEXT_TELEMETRY_DISABLED=1
-
+RUN apt-get update && apt-get install -y openssl --no-install-recommends && rm -rf /var/lib/apt/lists/*
 RUN groupadd -r buildverse && useradd -r -g buildverse buildverse
 
 COPY --from=builder --chown=buildverse:buildverse /app/.next/standalone ./
