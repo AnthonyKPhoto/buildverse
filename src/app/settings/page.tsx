@@ -240,8 +240,10 @@ export default function SettingsPage() {
     // Load gdrive connection status
     fetch("/api/gdrive").then(r => r.json()).then((s: { connected: boolean; email?: string; lastSync?: string }) => {
       if (s.connected) {
-        setGdriveEmail(s.email ?? null);
+        setGdriveEmail(s.email || null);
         setGdriveLastSync(s.lastSync ?? null);
+        setSyncMethodState("gdrive");
+        localStorage.setItem("bv_sync_method", "gdrive");
       }
     }).catch(() => {});
   }, []);
@@ -253,9 +255,11 @@ export default function SettingsPage() {
       if (document.visibilityState === "visible") {
         fetch("/api/gdrive").then(r => r.json()).then((s: { connected: boolean; email?: string; lastSync?: string }) => {
           if (s.connected) {
-            setGdriveEmail(s.email ?? null);
+            setGdriveEmail(s.email || null);
             setGdriveLastSync(s.lastSync ?? null);
             setGdriveWaiting(false);
+            setSyncMethodState("gdrive");
+            localStorage.setItem("bv_sync_method", "gdrive");
             if (gdriveInterval.current) { clearInterval(gdriveInterval.current); gdriveInterval.current = null; }
           }
         }).catch(() => {});
