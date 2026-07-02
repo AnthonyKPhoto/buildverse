@@ -507,9 +507,11 @@ export default function SettingsPage() {
     try {
       const s = await fetch("/api/gdrive").then(r => r.json()) as { connected: boolean; email?: string; lastSync?: string };
       if (s.connected) {
-        setGdriveEmail(s.email ?? null);
+        setGdriveEmail(s.email || null);
         setGdriveLastSync(s.lastSync ?? null);
         setGdriveWaiting(false);
+        setSyncMethodState("gdrive");
+        localStorage.setItem("bv_sync_method", "gdrive");
         if (gdriveInterval.current) { clearInterval(gdriveInterval.current); gdriveInterval.current = null; }
         return true;
       }
