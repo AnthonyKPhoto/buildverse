@@ -31,8 +31,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
 
   network: {
-    getLanUrl:     ()          => ipcRenderer.invoke("network:getLanUrl"),
-    setLanAccess:  (enabled)   => ipcRenderer.invoke("network:setLanAccess", enabled),
+    getLanUrl:          ()          => ipcRenderer.invoke("network:getLanUrl"),
+    setLanAccess:       (enabled)   => ipcRenderer.invoke("network:setLanAccess", enabled),
+    getRemoteConfig:    ()          => ipcRenderer.invoke("network:getRemoteConfig"),
+    setRemoteConfig:    (cfg)       => ipcRenderer.invoke("network:setRemoteConfig", cfg),
+    setRemotePassword:  (password)  => ipcRenderer.invoke("network:setRemotePassword", password),
+    clearRemotePassword: ()         => ipcRenderer.invoke("network:clearRemotePassword"),
   },
 
   transfer: {

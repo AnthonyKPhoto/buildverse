@@ -16,6 +16,7 @@ const http = require("http");
 const https = require("https");
 const os = require("os");
 const fs = require("fs");
+const crypto = require("crypto");
 
 // ──────────────────────────────────────────────────────────
 // Configuration
@@ -265,6 +266,41 @@ ipcMain.handle("capture:build-card", async (event, rect) => {
 
 ipcMain.handle("network:setLanAccess", (_, enabled) => {
   savePrefs({ lanAccess: !!enabled });
+  return { success: true, requiresRestart: true };
+});
+
+ipcMain.handle("network:getRemoteConfig", () => {
+  const p = loadPrefs();
+  return {
+    enabled: !!(p.remoteEnabled || p.lanAccess),
+    domain: p.remoteDomain || "",
+    port: p.remotePort || PORT,
+    hasPassword: !!p.remotePasswordHash,
+  };
+});
+
+ipcMain.handle("network:setRemoteConfig", (_, { enabled, domain, port }) => {
+  savePrefs({
+    remoteEnabled: !!enabled,
+    lanAccess: !!enabled,
+    remoteDomain: domain || "",
+    remotePort: port || PORT,
+  });
+  return { success: true, requiresRestart: true };
+});
+
+ipcMain.handle("network:setRemotePassword", (_, password) => {
+  if (!password) {
+    savePrefs({ remotePasswordHash: "" });
+  } else {
+    const hash = crypto.createHash("sha256").update(String(password)).digest("hex");
+    savePrefs({ remotePasswordHash: hash });
+  }
+  return { success: true, requiresRestart: true };
+});
+
+ipcMain.handle("network:clearRemotePassword", () => {
+  savePrefs({ remotePasswordHash: "" });
   return { success: true, requiresRestart: true };
 });
 
@@ -549,16 +585,20 @@ async function startServer(dbPath) {
   }
   console.log(`[buildverse] Using Node.js at: ${nodeExe}`);
 
+  const prefs = loadPrefs();
+  const remoteEnabled = !!(prefs.remoteEnabled || prefs.lanAccess);
   const env = {
     ...process.env,
     PORT: String(PORT),
-    HOSTNAME: loadPrefs().lanAccess ? "0.0.0.0" : "127.0.0.1",
+    HOSTNAME: remoteEnabled ? "0.0.0.0" : "127.0.0.1",
     NODE_ENV: "production",
     // BV_DATABASE_URL takes priority over the relative DATABASE_URL baked into
     // the standalone .env — always an absolute path so it resolves correctly.
     BV_DATABASE_URL: `file:${dbPath.replace(/\\/g, "/")}`,
     DATABASE_URL: `file:${dbPath.replace(/\\/g, "/")}`,
     BUILDVERSE_DATA_DIR: app.getPath("userData"),
+    BUILDVERSE_REMOTE_ENABLED: remoteEnabled ? "1" : "",
+    BUILDVERSE_REMOTE_PASSWORD_HASH: prefs.remotePasswordHash || "",
   };
 
   serverProcess = spawn(nodeExe, [serverScript], {

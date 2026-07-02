@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Database, HardDrive, RefreshCw, Download, Upload,
-  Info, Zap, Monitor, Palette, Moon, Sun,
+  Zap, Monitor, Palette, Moon, Sun,
   Archive, RotateCcw, Trash2, ArrowUpCircle,
-  CheckCircle2, AlertCircle, Loader2, X, Power, Save, ShoppingBag,
-  Tag, Plus, GripVertical, Wifi, Smartphone,
+  CheckCircle2, AlertCircle, Loader2, X, Save, ShoppingBag,
+  Tag, Plus, GripVertical, Wifi, Globe, Lock, Eye, EyeOff,
+  Server, Shield, Copy, Smartphone, Plug, Key,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { MOD_CATEGORIES } from "@/lib/utils";
@@ -23,6 +24,8 @@ interface Stats { vehicleCount: number; modCount: number; productCount: number; 
 interface VehicleItem { _count: { modifications: number } }
 interface AppInfo { version: string; userDataPath: string; dbPath: string; isDev: boolean; }
 interface BackupEntry { name: string; filePath: string; size: number; createdAt: string; }
+interface RemoteConfig { enabled: boolean; domain: string; port: number; hasPassword: boolean; }
+type Section = "general" | "remote" | "integrations" | "data";
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
   | { status: "available"; version: string; downloadUrl?: string; manual?: boolean }
@@ -35,12 +38,16 @@ declare global {
     electronAPI?: {
       isElectron: boolean; platform: string;
       getAppInfo: () => Promise<AppInfo>;
-      prefs: { get: () => Promise<Record<string,unknown>>; set: (o: Record<string,unknown>) => Promise<void>; };
-      backup: { create: () => Promise<{success:boolean;filePath:string}>; list: () => Promise<BackupEntry[]>; restore: (f:string) => Promise<{success:boolean}>; delete: (f:string) => Promise<{success:boolean}>; };
-      update:  { check: () => Promise<void>; install: () => Promise<void>; onStatus: (cb: (s:UpdateStatus) => void) => () => void; };
+      prefs: { get: () => Promise<Record<string, unknown>>; set: (o: Record<string, unknown>) => Promise<void>; };
+      backup: { create: () => Promise<{ success: boolean; filePath: string }>; list: () => Promise<BackupEntry[]>; restore: (f: string) => Promise<{ success: boolean }>; delete: (f: string) => Promise<{ success: boolean }>; };
+      update: { check: () => Promise<void>; install: () => Promise<void>; onStatus: (cb: (s: UpdateStatus) => void) => () => void; };
       network?: {
         getLanUrl: () => Promise<string | null>;
         setLanAccess: (enabled: boolean) => Promise<{ success: boolean; requiresRestart: boolean }>;
+        getRemoteConfig: () => Promise<RemoteConfig>;
+        setRemoteConfig: (cfg: { enabled: boolean; domain: string; port: number }) => Promise<{ success: boolean; requiresRestart: boolean }>;
+        setRemotePassword: (password: string) => Promise<{ success: boolean; requiresRestart: boolean }>;
+        clearRemotePassword: () => Promise<{ success: boolean; requiresRestart: boolean }>;
       };
       transfer?: {
         exportZip: () => Promise<{ canceled?: boolean; success?: boolean; filePath?: string; error?: string }>;
@@ -50,13 +57,14 @@ declare global {
   }
 }
 
-function fmtBytes(b: number) { return b < 1048576 ? `${(b/1024).toFixed(0)} KB` : `${(b/1048576).toFixed(1)} MB`; }
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function fmtBytes(b: number) { return b < 1048576 ? `${(b / 1024).toFixed(0)} KB` : `${(b / 1048576).toFixed(1)} MB`; }
 function fmtBackupDate(name: string) {
   const m = name.match(/buildverse-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/);
   return m ? `${m[1]} at ${m[2]}:${m[3]}` : name.replace(/\.db$/, "");
 }
 
-// ── Section wrapper ───────────────────────────────────────────────────────────
+// ── Shared UI primitives ──────────────────────────────────────────────────────
 function Section({ title, icon: Icon, children, action }: {
   title: string; icon: React.ElementType; children: React.ReactNode; action?: React.ReactNode;
 }) {
@@ -76,7 +84,6 @@ function Section({ title, icon: Icon, children, action }: {
   );
 }
 
-// ── Row ───────────────────────────────────────────────────────────────────────
 function Row({ label, desc, children, last }: {
   label: string; desc?: string; children?: React.ReactNode; last?: boolean;
 }) {
@@ -91,7 +98,6 @@ function Row({ label, desc, children, last }: {
   );
 }
 
-// ── Toggle ────────────────────────────────────────────────────────────────────
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -109,7 +115,6 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   );
 }
 
-// ── Btn ───────────────────────────────────────────────────────────────────────
 function Btn({ children, onClick, disabled, variant = "outline", size = "sm", className }: {
   children: React.ReactNode; onClick?: () => void; disabled?: boolean;
   variant?: "outline" | "ghost" | "primary" | "danger"; size?: "sm" | "xs"; className?: string;
@@ -122,9 +127,9 @@ function Btn({ children, onClick, disabled, variant = "outline", size = "sm", cl
         "inline-flex items-center gap-1.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none",
         size === "sm" ? "px-3 py-1.5 text-sm" : "px-2 py-1 text-xs",
         variant === "outline" && "border border-border bg-secondary hover:bg-accent text-foreground",
-        variant === "ghost"   && "text-muted-foreground hover:text-foreground hover:bg-secondary",
+        variant === "ghost" && "text-muted-foreground hover:text-foreground hover:bg-secondary",
         variant === "primary" && "bg-theme text-white hover:brightness-110",
-        variant === "danger"  && "text-red-400 hover:text-red-300 hover:bg-red-500/10",
+        variant === "danger" && "text-red-400 hover:text-red-300 hover:bg-red-500/10",
         className
       )}
     >
@@ -136,23 +141,41 @@ function Btn({ children, onClick, disabled, variant = "outline", size = "sm", cl
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const { toast } = useToast();
-  const [stats, setStats]       = useState<Stats | null>(null);
-  const [appInfo, setAppInfo]   = useState<AppInfo | null>(null);
-  const [backups, setBackups]   = useState<BackupEntry[]>([]);
-  const [loadingBkp, setLoadingBkp] = useState(false);
+
+  // Navigation
+  const [section, setSection] = useState<Section>("general");
+
+  // General state
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: "idle" });
-  const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
   const [closeMode, setCloseModeState] = useState<"background" | "quit">("background");
   const [autoTrackProducts, setAutoTrackProducts] = useState(true);
-  const [importing, setImporting] = useState(false);
-  const importRef = useRef<HTMLInputElement>(null);
   const [customCats, setCustomCats] = useState<string[]>([...MOD_CATEGORIES]);
   const [catInput, setCatInput] = useState("");
   const [savingCats, setSavingCats] = useState(false);
-  const [lanEnabled, setLanEnabled] = useState(false);
+
+  // Remote Access state
+  const [remoteConfig, setRemoteConfig] = useState<RemoteConfig | null>(null);
+  const [remoteEnabled, setRemoteEnabled] = useState(false);
+  const [remoteDomain, setRemoteDomain] = useState("");
+  const [remotePort, setRemotePort] = useState(3456);
   const [lanUrl, setLanUrl] = useState<string | null>(null);
+  const [savingRemote, setSavingRemote] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [settingPassword, setSettingPassword] = useState(false);
+  const [restartNeeded, setRestartNeeded] = useState(false);
+
+  // Data & Backup state
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [backups, setBackups] = useState<BackupEntry[]>([]);
+  const [loadingBkp, setLoadingBkp] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const [zipExporting, setZipExporting] = useState(false);
   const [zipImporting, setZipImporting] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const isElectron = typeof window !== "undefined" && !!window.electronAPI?.isElectron;
   const { accent, setAccent } = useCurrentAccent();
@@ -167,11 +190,7 @@ export default function SettingsPage() {
     ]).then(([vehicles, products]) => {
       const v = Array.isArray(vehicles) ? vehicles as VehicleItem[] : [];
       const p = Array.isArray(products) ? products : [];
-      setStats({
-        vehicleCount: v.length,
-        modCount: v.reduce((s, vh) => s + (vh._count?.modifications ?? 0), 0),
-        productCount: p.length,
-      });
+      setStats({ vehicleCount: v.length, modCount: v.reduce((s, vh) => s + (vh._count?.modifications ?? 0), 0), productCount: p.length });
     });
   }, []);
 
@@ -183,46 +202,126 @@ export default function SettingsPage() {
   }, [isElectron]);
 
   useEffect(() => {
-    // Load auto-track setting from localStorage
     const stored = localStorage.getItem("bv_autoTrackProducts");
     setAutoTrackProducts(stored === null ? true : stored === "true");
-
-    // Compute stats from /api/vehicles
     loadStats();
     if (isElectron) {
       window.electronAPI!.getAppInfo().then(setAppInfo).catch(() => {});
       loadBackups();
       window.electronAPI!.prefs.get().then(p => {
         setCloseModeState((p.closeMode as "background" | "quit") ?? "quit");
-        setLanEnabled(!!p.lanAccess);
       }).catch(() => {});
       window.electronAPI!.network?.getLanUrl().then(url => setLanUrl(url)).catch(() => {});
+      window.electronAPI!.network?.getRemoteConfig?.().then(cfg => {
+        if (cfg) {
+          setRemoteConfig(cfg);
+          setRemoteEnabled(cfg.enabled);
+          setRemoteDomain(cfg.domain || "");
+          setRemotePort(cfg.port || 3456);
+        }
+      }).catch(() => {});
       const unsub = window.electronAPI!.update.onStatus(setUpdateStatus);
       return unsub;
     }
-  }, [isElectron, loadBackups]);
+  }, [isElectron, loadBackups, loadStats]);
 
-  const saveSettings = async () => {
-    // Persist close mode
-    if (isElectron) await window.electronAPI!.prefs.set({ closeMode }).catch(() => {});
-    // Persist auto-track
-    localStorage.setItem("bv_autoTrackProducts", String(autoTrackProducts));
-    toast({ title: "Settings saved" });
-  };
+  useEffect(() => {
+    fetch("/api/settings/categories")
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d.categories)) setCustomCats(d.categories); })
+      .catch(() => {});
+  }, []);
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
   const setCloseMode = async (mode: "background" | "quit") => {
     setCloseModeState(mode);
     if (isElectron) await window.electronAPI!.prefs.set({ closeMode: mode });
   };
 
+  const saveCats = async () => {
+    setSavingCats(true);
+    try {
+      await fetch("/api/settings/categories", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ categories: customCats }) });
+      toast({ title: "Categories saved" });
+    } catch { toast({ title: "Failed to save categories", variant: "destructive" }); }
+    finally { setSavingCats(false); }
+  };
+
+  const resetCats = async () => {
+    await fetch("/api/settings/categories", { method: "DELETE" }).catch(() => {});
+    setCustomCats([...MOD_CATEGORIES]);
+    toast({ title: "Categories reset to defaults" });
+  };
+
+  const saveRemoteConfig = async () => {
+    if (!isElectron) return;
+    setSavingRemote(true);
+    try {
+      await window.electronAPI!.network?.setRemoteConfig?.({ enabled: remoteEnabled, domain: remoteDomain, port: remotePort || 3456 });
+      setRestartNeeded(true);
+      toast({ title: "Remote access saved", description: "Restart BuildVerse to apply." });
+    } catch { toast({ title: "Failed to save settings", variant: "destructive" }); }
+    finally { setSavingRemote(false); }
+  };
+
+  const saveRemotePassword = async () => {
+    if (!isElectron || !passwordInput) return;
+    if (passwordInput !== confirmPasswordInput) { toast({ title: "Passwords don't match", variant: "destructive" }); return; }
+    setSettingPassword(true);
+    try {
+      await window.electronAPI!.network?.setRemotePassword?.(passwordInput);
+      setRemoteConfig(c => c ? { ...c, hasPassword: true } : c);
+      setPasswordInput("");
+      setConfirmPasswordInput("");
+      setRestartNeeded(true);
+      toast({ title: "Password set", description: "Restart BuildVerse to apply." });
+    } catch { toast({ title: "Failed to set password", variant: "destructive" }); }
+    finally { setSettingPassword(false); }
+  };
+
+  const clearRemotePassword = async () => {
+    if (!isElectron) return;
+    if (!confirm("Remove the remote access password? Anyone with network access will be able to view your data.")) return;
+    try {
+      await window.electronAPI!.network?.clearRemotePassword?.();
+      setRemoteConfig(c => c ? { ...c, hasPassword: false } : c);
+      setRestartNeeded(true);
+      toast({ title: "Password removed", description: "Restart BuildVerse to apply." });
+    } catch { toast({ title: "Failed to remove password", variant: "destructive" }); }
+  };
+
+  const traefikYaml = useMemo(() => {
+    const machineIp = lanUrl ? lanUrl.replace(/^https?:\/\//, "").replace(/:\d+$/, "") : "YOUR_MACHINE_IP";
+    const domain = remoteDomain || "buildverse.yourdomain.com";
+    const port = remotePort || 3456;
+    return `# Place this file in your Traefik dynamic config directory
+# e.g. /etc/traefik/dynamic/buildverse.yml
+
+http:
+  routers:
+    buildverse:
+      rule: "Host(\`${domain}\`)"
+      service: buildverse
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    buildverse:
+      loadBalancer:
+        servers:
+          - url: "http://${machineIp}:${port}"`;
+  }, [lanUrl, remoteDomain, remotePort]);
+
+  const externalUrl = useMemo(() => remoteDomain ? `https://${remoteDomain}` : null, [remoteDomain]);
+
   const handleExport = async () => {
     try {
-      const [vehicles, products] = await Promise.all([
-        fetch("/api/vehicles").then(r => r.json()),
-        fetch("/api/products").then(r => r.json()),
-      ]);
+      const [vehicles, products] = await Promise.all([fetch("/api/vehicles").then(r => r.json()), fetch("/api/products").then(r => r.json())]);
       const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), version: "1.0", vehicles, products }, null, 2)], { type: "application/json" });
-      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `buildverse-export-${new Date().toISOString().slice(0,10)}.json` });
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `buildverse-export-${new Date().toISOString().slice(0, 10)}.json` });
       a.click(); URL.revokeObjectURL(a.href);
       toast({ title: "Exported successfully" });
     } catch { toast({ title: "Export failed", variant: "destructive" }); }
@@ -244,39 +343,9 @@ export default function SettingsPage() {
       const res = await fetch("/api/remove-sample-data", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      if (data.removed === 0) {
-        toast({ title: "No sample data found", description: "Nothing was removed." });
-      } else {
-        toast({ title: "Sample data removed" });
-        loadStats();
-      }
+      if (data.removed === 0) toast({ title: "No sample data found", description: "Nothing was removed." });
+      else { toast({ title: "Sample data removed" }); loadStats(); }
     } catch { toast({ title: "Failed to remove sample data", variant: "destructive" }); }
-  };
-
-  useEffect(() => {
-    fetch("/api/settings/categories")
-      .then((r) => r.json())
-      .then((d) => { if (Array.isArray(d.categories)) setCustomCats(d.categories); })
-      .catch(() => {});
-  }, []);
-
-  const saveCats = async () => {
-    setSavingCats(true);
-    try {
-      await fetch("/api/settings/categories", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categories: customCats }),
-      });
-      toast({ title: "Categories saved" });
-    } catch { toast({ title: "Failed to save categories", variant: "destructive" }); }
-    finally { setSavingCats(false); }
-  };
-
-  const resetCats = async () => {
-    await fetch("/api/settings/categories", { method: "DELETE" }).catch(() => {});
-    setCustomCats([...MOD_CATEGORIES]);
-    toast({ title: "Categories reset to defaults" });
   };
 
   const wipeAllData = async () => {
@@ -290,30 +359,16 @@ export default function SettingsPage() {
     } catch { toast({ title: "Wipe failed", variant: "destructive" }); }
   };
 
-  const handleLanToggle = async (enabled: boolean) => {
-    setLanEnabled(enabled);
-    if (isElectron) {
-      await window.electronAPI!.network?.setLanAccess(enabled).catch(() => {});
-      toast({ title: enabled ? "LAN access enabled" : "LAN access disabled", description: "Restart BuildVerse to apply." });
-    }
-  };
-
   const handleExportZip = async () => {
     if (!isElectron) return;
     setZipExporting(true);
     try {
       const result = await window.electronAPI!.transfer?.exportZip();
       if (!result || result.canceled) return;
-      if (result.success) {
-        toast({ title: "Transfer pack exported!", description: result.filePath });
-      } else {
-        toast({ title: "Export failed", description: result.error, variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Export failed", variant: "destructive" });
-    } finally {
-      setZipExporting(false);
-    }
+      if (result.success) toast({ title: "Transfer pack exported!", description: result.filePath });
+      else toast({ title: "Export failed", description: result.error, variant: "destructive" });
+    } catch { toast({ title: "Export failed", variant: "destructive" }); }
+    finally { setZipExporting(false); }
   };
 
   const handleImportZip = async () => {
@@ -323,14 +378,8 @@ export default function SettingsPage() {
     try {
       const result = await window.electronAPI!.transfer?.importZip();
       if (!result || result.canceled) { setZipImporting(false); return; }
-      if (!result.success) {
-        toast({ title: "Import failed", description: result.error, variant: "destructive" });
-        setZipImporting(false);
-      }
-    } catch {
-      toast({ title: "Import failed", variant: "destructive" });
-      setZipImporting(false);
-    }
+      if (!result.success) { toast({ title: "Import failed", description: result.error, variant: "destructive" }); setZipImporting(false); }
+    } catch { toast({ title: "Import failed", variant: "destructive" }); setZipImporting(false); }
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -341,97 +390,33 @@ export default function SettingsPage() {
       const text = await file.text();
       const data = JSON.parse(text);
       if (!data.vehicles && !data.products) throw new Error("Invalid export file");
-
       let vehiclesImported = 0, modsImported = 0, logsImported = 0, productsImported = 0;
-
-      // Import vehicles + their nested data
       for (const v of (data.vehicles ?? [])) {
-        const { modifications, maintenanceLogs, budgets, _count, ...vehicleData } = v;
-        const res = await fetch("/api/vehicles", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: vehicleData.name,
-            year: vehicleData.year,
-            make: vehicleData.make,
-            model: vehicleData.model,
-            trim: vehicleData.trim,
-            engine: vehicleData.engine,
-            transmission: vehicleData.transmission,
-            drivetrain: vehicleData.drivetrain,
-            vin: vehicleData.vin,
-            mileage: vehicleData.mileage,
-            platform: vehicleData.platform,
-            color: vehicleData.color,
-            photoUrl: vehicleData.photoUrl,
-            notes: vehicleData.notes,
-          }),
-        });
+        const { modifications, maintenanceLogs, budgets, _count: _c, ...vehicleData } = v;
+        const res = await fetch("/api/vehicles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: vehicleData.name, year: vehicleData.year, make: vehicleData.make, model: vehicleData.model, trim: vehicleData.trim, engine: vehicleData.engine, transmission: vehicleData.transmission, drivetrain: vehicleData.drivetrain, vin: vehicleData.vin, mileage: vehicleData.mileage, platform: vehicleData.platform, color: vehicleData.color, photoUrl: vehicleData.photoUrl, notes: vehicleData.notes }) });
         if (!res.ok) continue;
         const newVehicle = await res.json();
         vehiclesImported++;
-
-        // Modifications
         for (const m of (modifications ?? [])) {
-          const modRes = await fetch(`/api/vehicles/${newVehicle.id}/modifications`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: m.name, category: m.category, brand: m.brand, vendor: m.vendor,
-              price: m.price, actualPrice: m.actualPrice, status: m.status,
-              priority: m.priority, difficulty: m.difficulty, link: m.link,
-              imageUrl: m.imageUrl, notes: m.notes, partNumber: m.partNumber,
-              orderNumber: m.orderNumber, installDate: m.installDate,
-              installMileage: m.installMileage, laborCost: m.laborCost,
-              diyInstall: m.diyInstall,
-            }),
-          });
-          if (modRes.ok) modsImported++;
+          const mr = await fetch(`/api/vehicles/${newVehicle.id}/modifications`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: m.name, category: m.category, brand: m.brand, vendor: m.vendor, price: m.price, actualPrice: m.actualPrice, status: m.status, priority: m.priority, difficulty: m.difficulty, link: m.link, imageUrl: m.imageUrl, notes: m.notes, partNumber: m.partNumber, orderNumber: m.orderNumber, installDate: m.installDate, installMileage: m.installMileage, laborCost: m.laborCost, diyInstall: m.diyInstall }) });
+          if (mr.ok) modsImported++;
         }
-
-        // Maintenance logs
         for (const log of (maintenanceLogs ?? [])) {
-          const logRes = await fetch(`/api/vehicles/${newVehicle.id}/maintenance`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              service: log.service, mileage: log.mileage, date: log.date,
-              cost: log.cost, notes: log.notes, shop: log.shop,
-              diy: log.diy, nextDue: log.nextDue, nextMiles: log.nextMiles,
-            }),
-          });
-          if (logRes.ok) logsImported++;
+          const lr = await fetch(`/api/vehicles/${newVehicle.id}/maintenance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ service: log.service, mileage: log.mileage, date: log.date, cost: log.cost, notes: log.notes, shop: log.shop, diy: log.diy, nextDue: log.nextDue, nextMiles: log.nextMiles }) });
+          if (lr.ok) logsImported++;
         }
-
-        // Budgets
         for (const b of (budgets ?? [])) {
-          await fetch(`/api/vehicles/${newVehicle.id}/budget`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ category: b.category, planned: b.planned, actual: b.actual }),
-          });
+          await fetch(`/api/vehicles/${newVehicle.id}/budget`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: b.category, planned: b.planned, actual: b.actual }) });
         }
       }
-
-      // Import products
       for (const p of (data.products ?? [])) {
-        const prodRes = await fetch("/api/products", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: p.url }),
-        });
-        if (prodRes.ok) productsImported++;
+        const pr = await fetch("/api/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: p.url }) });
+        if (pr.ok) productsImported++;
       }
-
-      // Refresh stats
-      const [newVehicles, newProducts] = await Promise.all([
-        fetch("/api/vehicles").then(r => r.json()).catch(() => []),
-        fetch("/api/products").then(r => r.json()).catch(() => []),
-      ]);
-      const vList = Array.isArray(newVehicles) ? newVehicles as VehicleItem[] : [];
-      const pList = Array.isArray(newProducts) ? newProducts : [];
-      setStats({ vehicleCount: vList.length, modCount: vList.reduce((s, vh) => s + (vh._count?.modifications ?? 0), 0), productCount: pList.length });
-
+      const [nv, np] = await Promise.all([fetch("/api/vehicles").then(r => r.json()).catch(() => []), fetch("/api/products").then(r => r.json()).catch(() => [])]);
+      const vl = Array.isArray(nv) ? nv as VehicleItem[] : [];
+      const pl = Array.isArray(np) ? np : [];
+      setStats({ vehicleCount: vl.length, modCount: vl.reduce((s, vh) => s + (vh._count?.modifications ?? 0), 0), productCount: pl.length });
       toast({ title: `Import complete — ${vehiclesImported} vehicles, ${modsImported} mods, ${logsImported} logs, ${productsImported} products` });
     } catch (err) {
       toast({ title: `Import failed: ${err instanceof Error ? err.message : "Unknown error"}`, variant: "destructive" });
@@ -462,6 +447,14 @@ export default function SettingsPage() {
     } catch { toast({ title: "Delete failed", variant: "destructive" }); }
   };
 
+  const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
+    { id: "general",      label: "General",       icon: Palette   },
+    { id: "remote",       label: "Remote Access",  icon: Globe     },
+    { id: "integrations", label: "Integrations",   icon: Plug      },
+    { id: "data",         label: "Data & Backup",  icon: HardDrive },
+  ];
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="animate-fade-in">
       {/* Hero banner */}
@@ -471,442 +464,532 @@ export default function SettingsPage() {
         <div className="relative">
           <p className="text-xs font-medium text-muted-foreground/60 tracking-wider uppercase mb-1">BuildVerse</p>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground mt-1">Appearance, behavior, backups &amp; data</p>
+          <p className="text-sm text-muted-foreground mt-1">Appearance, remote access, integrations &amp; data</p>
         </div>
       </div>
-    <div className="max-w-2xl space-y-5">
 
-      {/* ── Appearance ──────────────────────────────────────────────────────── */}
-      <Section title="Appearance" icon={Palette}>
-        {/* Dark / Light mode */}
-        <div className="mb-5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Color Mode</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setScheme("dark")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium border rounded-xl transition-all duration-150",
-                scheme === "dark"
-                  ? "border-theme bg-theme/10 text-theme"
-                  : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:border-border/80"
-              )}
-            >
-              <Moon className="w-4 h-4" /> Dark
-            </button>
-            <button
-              onClick={() => setScheme("light")}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium border rounded-xl transition-all duration-150",
-                scheme === "light"
-                  ? "border-theme bg-theme/10 text-theme"
-                  : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:border-border/80"
-              )}
-            >
-              <Sun className="w-4 h-4" /> Light
-            </button>
-          </div>
+      {/* Restart banner */}
+      {restartNeeded && (
+        <div className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-sm text-amber-400">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>Restart BuildVerse to apply remote access changes.</span>
+          <button onClick={() => setRestartNeeded(false)} className="ml-auto text-amber-400/60 hover:text-amber-400"><X className="w-4 h-4" /></button>
         </div>
-
-        {/* Accent color */}
-        <div className="mb-5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Accent color</p>
-          <div className="flex flex-wrap gap-2">
-            {ACCENT_PRESETS.map(p => (
-              <button
-                key={p.id}
-                title={p.label}
-                onClick={() => setAccent(p.id)}
-                className={cn(
-                  "w-8 h-8 rounded-full border-2 transition-all duration-150 relative",
-                  accent === p.id
-                    ? "border-white scale-110 shadow-lg"
-                    : "border-transparent hover:scale-105 hover:border-white/40"
-                )}
-                style={{ backgroundColor: p.hex }}
-              >
-                {accent === p.id && (
-                  <CheckCircle2 className="absolute inset-0 m-auto w-4 h-4 text-white drop-shadow" />
-                )}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground mt-2 capitalize">{ACCENT_PRESETS.find(p => p.id === accent)?.label ?? accent}</p>
-        </div>
-
-        {/* Font */}
-        <div className="mb-5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Font</p>
-          <div className="grid grid-cols-2 gap-2">
-            {FONT_PRESETS.map(p => (
-              <button
-                key={p.id}
-                onClick={() => setFont(p.id)}
-                className={cn(
-                  "py-2 text-sm font-medium border rounded-xl transition-all duration-150",
-                  font === p.id
-                    ? "border-theme bg-theme/10 text-theme"
-                    : "border-border bg-secondary text-muted-foreground hover:border-border/80 hover:text-foreground"
-                )}
-                style={{ fontFamily: p.value }}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Border radius */}
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Corner radius</p>
-          <div className="flex gap-2">
-            {RADIUS_PRESETS.map(p => (
-              <button
-                key={p.id}
-                onClick={() => setRadius(p.id)}
-                className={cn(
-                  "flex-1 py-2 text-xs font-medium border transition-all duration-150",
-                  p.id === "sharp"   && "rounded-sm",
-                  p.id === "default" && "rounded-lg",
-                  p.id === "rounded" && "rounded-xl",
-                  p.id === "pill"    && "rounded-full",
-                  radius === p.id
-                    ? "border-theme bg-theme/10 text-theme"
-                    : "border-border bg-secondary text-muted-foreground hover:border-border/80 hover:text-foreground"
-                )}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </Section>
-
-      {/* ── Custom Mod Categories ───────────────────────────────────────────── */}
-      <Section
-        title="Mod Categories"
-        icon={Tag}
-        action={
-          <div className="flex gap-2">
-            <Btn size="xs" onClick={resetCats}>Reset to defaults</Btn>
-            <Btn size="xs" variant="primary" onClick={saveCats} disabled={savingCats}>
-              {savingCats ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-              Save
-            </Btn>
-          </div>
-        }
-      >
-        <p className="text-xs text-muted-foreground mb-3">Add, remove, or reorder mod categories. Changes apply to the add-mod form and filters.</p>
-        <div className="space-y-1.5 mb-3 max-h-64 overflow-y-auto pr-1">
-          {customCats.map((cat, i) => (
-            <div key={i} className="flex items-center gap-2 group px-2 py-1 rounded-lg hover:bg-secondary/50">
-              <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
-              <span className="flex-1 text-sm">{cat}</span>
-              <button
-                onClick={() => setCustomCats((cs) => cs.filter((_, j) => j !== i))}
-                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="New category name…"
-            value={catInput}
-            onChange={(e) => setCatInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && catInput.trim()) {
-                setCustomCats((cs) => [...cs, catInput.trim()]);
-                setCatInput("");
-              }
-            }}
-            className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <Btn
-            size="sm"
-            onClick={() => {
-              if (catInput.trim()) { setCustomCats((cs) => [...cs, catInput.trim()]); setCatInput(""); }
-            }}
-            disabled={!catInput.trim()}
-          >
-            <Plus className="w-3.5 h-3.5" /> Add
-          </Btn>
-        </div>
-      </Section>
-
-      {/* ── Window behavior (Electron only) ─────────────────────────────────── */}
-      {isElectron && (
-        <Section title="Window Behavior" icon={Monitor}>
-          <Row
-            label="Run in background when closed"
-            desc='When you click ✕ the app stays running in the system tray. Turn off to fully quit.'
-            last
-          >
-            <Toggle on={closeMode === "background"} onChange={v => setCloseMode(v ? "background" : "quit")} />
-          </Row>
-        </Section>
       )}
 
-      {/* ── About ───────────────────────────────────────────────────────────── */}
-      <Section title="About BuildVerse" icon={Zap}>
-        <Row label="Version">
-          <span className="text-xs font-mono bg-secondary border border-border px-2 py-1 rounded-md">
-            v{appInfo?.version ?? "1.0.9"}
-          </span>
-        </Row>
-        <Row label="Stack">
-          <span className="text-sm text-muted-foreground">Next.js 14 · Prisma · SQLite</span>
-        </Row>
-        <Row label="Running in">
-          {isElectron
-            ? <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-theme/10 text-theme border border-theme/20 px-2 py-1 rounded-lg"><Monitor className="w-3 h-3" /> Electron</span>
-            : <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-1 rounded-lg">Browser</span>
-          }
-        </Row>
-        <Row label="Mode" last>
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-1 rounded-lg">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            Local / Offline
-          </span>
-        </Row>
-      </Section>
+      {/* Two-column layout */}
+      <div className="flex gap-6 items-start">
 
-      {/* ── Updates ─────────────────────────────────────────────────────────── */}
-      {isElectron && (
-        <Section
-          title="Updates"
-          icon={ArrowUpCircle}
-          action={
-            updateStatus.status === "downloaded" ? (
-              <Btn variant="primary" onClick={() => window.electronAPI!.update.install()}>
-                <ArrowUpCircle className="w-3.5 h-3.5" /> Restart &amp; Install
-              </Btn>
-            ) : updateStatus.status === "available" && (updateStatus as {status:"available";manual?:boolean}).manual ? (
-              <a href={(updateStatus as {status:"available";downloadUrl?:string}).downloadUrl ?? "#"} target="_blank" rel="noopener noreferrer">
-                <Btn variant="primary"><ArrowUpCircle className="w-3.5 h-3.5" /> Download</Btn>
-              </a>
-            ) : updateStatus.status !== "downloading" ? (
-              <Btn onClick={() => { setUpdateStatus({ status: "checking" }); window.electronAPI!.update.check(); }} disabled={updateStatus.status === "checking"}>
-                <RefreshCw className={cn("w-3.5 h-3.5", updateStatus.status === "checking" && "animate-spin")} />
-                Check
-              </Btn>
-            ) : null
-          }
-        >
-          <div className="flex items-center gap-2.5 text-sm">
-            {(updateStatus.status === "idle" || updateStatus.status === "current") && <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />}
-            {(updateStatus.status === "checking" || updateStatus.status === "downloading") && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />}
-            {(updateStatus.status === "available" || updateStatus.status === "downloaded") && <ArrowUpCircle className="w-4 h-4 text-theme shrink-0" />}
-            {updateStatus.status === "error" && <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />}
-            <span className="text-muted-foreground">
-              {updateStatus.status === "idle"        && "Click 'Check' to look for updates"}
-              {updateStatus.status === "checking"    && "Checking for updates…"}
-              {updateStatus.status === "current"     && "BuildVerse is up to date"}
-              {updateStatus.status === "available"   && (() => {
-                const s = updateStatus as { status: "available"; version: string; manual?: boolean };
-                return s.manual ? `v${s.version} available` : `v${s.version} available — downloading…`;
-              })()}
-              {updateStatus.status === "downloading" && `Downloading… ${(updateStatus as {status:"downloading";percent:number}).percent}%`}
-              {updateStatus.status === "downloaded"  && `v${(updateStatus as {status:"downloaded";version:string}).version} ready — restart to install`}
-              {updateStatus.status === "error"       && "Update check failed"}
-            </span>
-          </div>
-          {updateStatus.status === "downloading" && (
-            <div className="mt-3 h-1.5 rounded-full bg-secondary overflow-hidden">
-              <div className="h-full bg-theme rounded-full transition-all duration-300"
-                style={{ width: `${(updateStatus as {status:"downloading";percent:number}).percent}%` }} />
-            </div>
-          )}
-        </Section>
-      )}
-
-      {/* ── Database Overview ────────────────────────────────────────────────── */}
-      {stats && (
-        <Section title="Database" icon={Database}>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { label: "Vehicles",      value: stats.vehicleCount },
-              { label: "Modifications", value: stats.modCount },
-              { label: "Products",      value: stats.productCount },
-            ].map(({ label, value }) => (
-              <div key={label} className="surface-inset p-4 text-center">
-                <p className="text-2xl font-bold">{value}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
-              </div>
+        {/* ── Sidebar ────────────────────────────────────────────────────── */}
+        <nav className="w-52 shrink-0 sticky top-0">
+          <div className="space-y-0.5">
+            {NAV_ITEMS.map(item => (
+              <button
+                key={item.id}
+                onClick={() => setSection(item.id)}
+                className={cn(
+                  "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-left",
+                  section === item.id ? "bg-theme/10 text-theme" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                )}
+              >
+                <item.icon className="w-4 h-4 shrink-0" />
+                {item.label}
+              </button>
             ))}
           </div>
-        </Section>
-      )}
+        </nav>
 
-      {/* ── Product Tracking ─────────────────────────────────────────────────── */}
-      <Section title="Product Tracking" icon={ShoppingBag}>
-        <Row
-          label="Auto-track mod product links"
-          desc="When you add or edit a mod with a product URL, automatically add it to Product Tracker."
-          last
-        >
-          <Toggle on={autoTrackProducts} onChange={setAutoTrackProducts} />
-        </Row>
-      </Section>
+        {/* ── Content ────────────────────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 space-y-5">
 
-      {/* ── Integrations ─────────────────────────────────────────────────────── */}
-      <div>
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3 px-1">Integrations</p>
-        <LubeLoggerSettings />
-      </div>
-
-      {/* ── Access from Phone ────────────────────────────────────────────────── */}
-      {isElectron && (
-        <Section title="Access from Phone" icon={Smartphone}>
-          <p className="text-sm text-muted-foreground mb-4">
-            Open BuildVerse from your phone or any device on the same Wi-Fi network.
-            <strong className="text-foreground"> Restart required</strong> after toggling.
-          </p>
-          <Row label="Enable LAN Access" desc="Binds the server to all network interfaces" last>
-            <Toggle on={lanEnabled} onChange={handleLanToggle} />
-          </Row>
-          {lanEnabled && (
-            <div className="mt-4 space-y-3">
-              {lanUrl ? (
-                <div className="p-4 rounded-xl bg-secondary space-y-3">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <p className="font-mono text-sm font-semibold break-all">{lanUrl}</p>
-                    <Btn onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied to clipboard" }); }}>
-                      Copy URL
-                    </Btn>
+          {/* ══════════════════════════ GENERAL ══════════════════════════ */}
+          {section === "general" && (
+            <>
+              <Section title="Appearance" icon={Palette}>
+                {/* Color mode */}
+                <div className="mb-5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Color Mode</p>
+                  <div className="flex gap-2">
+                    {(["dark", "light"] as const).map(s => (
+                      <button key={s} onClick={() => setScheme(s)}
+                        className={cn("flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium border rounded-xl transition-all duration-150",
+                          scheme === s ? "border-theme bg-theme/10 text-theme" : "border-border bg-secondary text-muted-foreground hover:text-foreground hover:border-border/80"
+                        )}>
+                        {s === "dark" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                        {s === "dark" ? "Dark" : "Light"}
+                      </button>
+                    ))}
                   </div>
-                  <div className="flex justify-center pt-2">
-                    <QRCodeSVG value={lanUrl} size={140} bgColor="transparent" fgColor="currentColor" className="rounded-lg opacity-90" />
+                </div>
+                {/* Accent */}
+                <div className="mb-5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Accent color</p>
+                  <div className="flex flex-wrap gap-2">
+                    {ACCENT_PRESETS.map(p => (
+                      <button key={p.id} title={p.label} onClick={() => setAccent(p.id)}
+                        className={cn("w-8 h-8 rounded-full border-2 transition-all duration-150 relative",
+                          accent === p.id ? "border-white scale-110 shadow-lg" : "border-transparent hover:scale-105 hover:border-white/40"
+                        )} style={{ backgroundColor: p.hex }}>
+                        {accent === p.id && <CheckCircle2 className="absolute inset-0 m-auto w-4 h-4 text-white drop-shadow" />}
+                      </button>
+                    ))}
                   </div>
-                  <p className="text-xs text-center text-muted-foreground">Scan with your phone — both devices must be on the same Wi-Fi</p>
+                  <p className="text-xs text-muted-foreground mt-2 capitalize">{ACCENT_PRESETS.find(p => p.id === accent)?.label ?? accent}</p>
                 </div>
-              ) : (
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
-                  <Wifi className="inline w-3.5 h-3.5 mr-1" />
-                  Could not detect local IP — restart BuildVerse after enabling LAN access to see your URL here.
+                {/* Font */}
+                <div className="mb-5">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Font</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {FONT_PRESETS.map(p => (
+                      <button key={p.id} onClick={() => setFont(p.id)}
+                        className={cn("py-2 text-sm font-medium border rounded-xl transition-all duration-150",
+                          font === p.id ? "border-theme bg-theme/10 text-theme" : "border-border bg-secondary text-muted-foreground hover:border-border/80 hover:text-foreground"
+                        )} style={{ fontFamily: p.value }}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                {/* Radius */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Corner radius</p>
+                  <div className="flex gap-2">
+                    {RADIUS_PRESETS.map(p => (
+                      <button key={p.id} onClick={() => setRadius(p.id)}
+                        className={cn("flex-1 py-2 text-xs font-medium border transition-all duration-150",
+                          p.id === "sharp" && "rounded-sm", p.id === "default" && "rounded-lg",
+                          p.id === "rounded" && "rounded-xl", p.id === "pill" && "rounded-full",
+                          radius === p.id ? "border-theme bg-theme/10 text-theme" : "border-border bg-secondary text-muted-foreground hover:border-border/80 hover:text-foreground"
+                        )}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </Section>
+
+              <Section title="Mod Categories" icon={Tag}
+                action={<div className="flex gap-2">
+                  <Btn size="xs" onClick={resetCats}>Reset</Btn>
+                  <Btn size="xs" variant="primary" onClick={saveCats} disabled={savingCats}>
+                    {savingCats ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save
+                  </Btn>
+                </div>}
+              >
+                <p className="text-xs text-muted-foreground mb-3">Add, remove, or reorder categories used on the add-mod form.</p>
+                <div className="space-y-1.5 mb-3 max-h-64 overflow-y-auto pr-1">
+                  {customCats.map((cat, i) => (
+                    <div key={i} className="flex items-center gap-2 group px-2 py-1 rounded-lg hover:bg-secondary/50">
+                      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+                      <span className="flex-1 text-sm">{cat}</span>
+                      <button onClick={() => setCustomCats(cs => cs.filter((_, j) => j !== i))} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" placeholder="New category…" value={catInput} onChange={e => setCatInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && catInput.trim()) { setCustomCats(cs => [...cs, catInput.trim()]); setCatInput(""); } }}
+                    className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <Btn size="sm" onClick={() => { if (catInput.trim()) { setCustomCats(cs => [...cs, catInput.trim()]); setCatInput(""); } }} disabled={!catInput.trim()}>
+                    <Plus className="w-3.5 h-3.5" /> Add
+                  </Btn>
+                </div>
+              </Section>
+
+              {isElectron && (
+                <Section title="Window Behavior" icon={Monitor}>
+                  <Row label="Run in background when closed" desc="Click ✕ keeps the app in the system tray. Turn off to fully quit." last>
+                    <Toggle on={closeMode === "background"} onChange={v => setCloseMode(v ? "background" : "quit")} />
+                  </Row>
+                </Section>
               )}
-              <div className="p-3 rounded-xl bg-secondary/60 border border-border/60 text-xs text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">If the page shows blank on your phone:</p>
-                <p>1. <strong>Restart BuildVerse</strong> after enabling — the server only rebinds on launch.</p>
-                <p>2. <strong>Allow in Windows Firewall</strong> — open Windows Security → Firewall &amp; network protection → Allow an app, add BuildVerse or allow port {lanUrl?.split(":")[2] ?? "3456"} for private networks.</p>
-                <p>3. Both devices must be on the <strong>same Wi-Fi network</strong>.</p>
-              </div>
-            </div>
-          )}
-        </Section>
-      )}
 
-      {/* ── Data Management ──────────────────────────────────────────────────── */}
-      <Section title="Data Management" icon={HardDrive}>
-        <Row label="Export Data" desc="Download all vehicles, mods & products as JSON">
-          <Btn onClick={handleExport}><Download className="w-3.5 h-3.5" /> Export JSON</Btn>
-        </Row>
-        <Row label="Import Data" desc="Restore from a BuildVerse JSON export file">
-          <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
-          <Btn onClick={() => importRef.current?.click()} disabled={importing}>
-            {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-            {importing ? "Importing…" : "Import JSON"}
-          </Btn>
-        </Row>
-        {isElectron && (
-          <>
-            <Row label="Export Transfer Pack" desc="Full ZIP archive with database + all uploaded files — use to move BuildVerse to another computer">
-              <Btn onClick={handleExportZip} disabled={zipExporting}>
-                {zipExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
-                {zipExporting ? "Exporting…" : "Export Pack"}
-              </Btn>
-            </Row>
-            <Row label="Import Transfer Pack" desc="Restore from a .zip transfer pack — replaces all data and restarts">
-              <Btn onClick={handleImportZip} disabled={zipImporting}>
-                {zipImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                {zipImporting ? "Importing…" : "Import Pack"}
-              </Btn>
-            </Row>
-          </>
-        )}
-        <Row label="Refresh Product Prices" desc="Re-scrape all tracked product URLs">
-          <Btn onClick={refreshAll}><RefreshCw className="w-3.5 h-3.5" /> Refresh All</Btn>
-        </Row>
-        <Row label="Remove Example Data" desc="Delete the Example S2000 sample vehicle and all its mods/maintenance. Your own data is untouched.">
-          <Btn onClick={removeSampleData}><Trash2 className="w-3.5 h-3.5" /> Remove</Btn>
-        </Row>
-        <Row label="Wipe All Data" desc="Delete every vehicle, mod, maintenance log and product. Cannot be undone." last>
-          <Btn variant="danger" onClick={wipeAllData}><Trash2 className="w-3.5 h-3.5" /> Wipe Everything</Btn>
-        </Row>
-      </Section>
+              <Section title="About BuildVerse" icon={Zap}>
+                <Row label="Version">
+                  <span className="text-xs font-mono bg-secondary border border-border px-2 py-1 rounded-md">v{appInfo?.version ?? "1.0.9"}</span>
+                </Row>
+                <Row label="Stack"><span className="text-sm text-muted-foreground">Next.js 14 · Prisma · SQLite</span></Row>
+                <Row label="Running in">
+                  {isElectron
+                    ? <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-theme/10 text-theme border border-theme/20 px-2 py-1 rounded-lg"><Monitor className="w-3 h-3" /> Electron</span>
+                    : <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-1 rounded-lg">Browser</span>
+                  }
+                </Row>
+                <Row label="Mode" last>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-1 rounded-lg">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> Local / Offline
+                  </span>
+                </Row>
+              </Section>
 
-      {/* ── Backups ──────────────────────────────────────────────────────────── */}
-      {isElectron && (
-        <Section
-          title="Backups"
-          icon={Archive}
-          action={
-            <Btn onClick={createBackup} disabled={loadingBkp}>
-              {loadingBkp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
-              New Backup
-            </Btn>
-          }
-        >
-          <p className="text-xs text-muted-foreground mb-3">
-            Auto-backup on startup · 10 most recent kept
-            {appInfo && <span className="font-mono ml-2 opacity-60">{appInfo.userDataPath}/backups</span>}
-          </p>
-
-          {loadingBkp ? (
-            <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading…
-            </div>
-          ) : backups.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-1">No backups yet — one will be created on next launch.</p>
-          ) : (
-            <div className="space-y-1">
-              {backups.map(b => (
-                <div key={b.filePath} className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-secondary transition-colors">
-                  {confirmRestore === b.filePath ? (
-                    <>
-                      <p className="text-sm font-medium text-theme">Restore this? App will restart.</p>
-                      <div className="flex gap-2">
-                        <Btn size="xs" onClick={() => setConfirmRestore(null)}>Cancel</Btn>
-                        <Btn size="xs" variant="primary" onClick={() => restoreBackup(b.filePath)}>Confirm</Btn>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">{fmtBackupDate(b.name)}</p>
-                        <p className="text-xs text-muted-foreground">{fmtBytes(b.size)}</p>
-                      </div>
-                      <div className="flex gap-1 ml-4">
-                        <Btn size="xs" onClick={() => setConfirmRestore(b.filePath)}>
-                          <RotateCcw className="w-3 h-3" /> Restore
-                        </Btn>
-                        <Btn size="xs" variant="danger" onClick={() => deleteBackup(b.filePath)}>
-                          <Trash2 className="w-3 h-3" />
-                        </Btn>
-                      </div>
-                    </>
+              {isElectron && (
+                <Section title="Updates" icon={ArrowUpCircle}
+                  action={
+                    updateStatus.status === "downloaded" ? (
+                      <Btn variant="primary" onClick={() => window.electronAPI!.update.install()}>
+                        <ArrowUpCircle className="w-3.5 h-3.5" /> Restart &amp; Install
+                      </Btn>
+                    ) : updateStatus.status === "available" && (updateStatus as { status: "available"; manual?: boolean }).manual ? (
+                      <a href={(updateStatus as { status: "available"; downloadUrl?: string }).downloadUrl ?? "#"} target="_blank" rel="noopener noreferrer">
+                        <Btn variant="primary"><ArrowUpCircle className="w-3.5 h-3.5" /> Download</Btn>
+                      </a>
+                    ) : updateStatus.status !== "downloading" ? (
+                      <Btn onClick={() => { setUpdateStatus({ status: "checking" }); window.electronAPI!.update.check(); }} disabled={updateStatus.status === "checking"}>
+                        <RefreshCw className={cn("w-3.5 h-3.5", updateStatus.status === "checking" && "animate-spin")} /> Check
+                      </Btn>
+                    ) : null
+                  }
+                >
+                  <div className="flex items-center gap-2.5 text-sm">
+                    {(updateStatus.status === "idle" || updateStatus.status === "current") && <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />}
+                    {(updateStatus.status === "checking" || updateStatus.status === "downloading") && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />}
+                    {(updateStatus.status === "available" || updateStatus.status === "downloaded") && <ArrowUpCircle className="w-4 h-4 text-theme shrink-0" />}
+                    {updateStatus.status === "error" && <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />}
+                    <span className="text-muted-foreground">
+                      {updateStatus.status === "idle" && "Click 'Check' to look for updates"}
+                      {updateStatus.status === "checking" && "Checking for updates…"}
+                      {updateStatus.status === "current" && "BuildVerse is up to date"}
+                      {updateStatus.status === "available" && (() => { const s = updateStatus as { status: "available"; version: string; manual?: boolean }; return s.manual ? `v${s.version} available` : `v${s.version} available — downloading…`; })()}
+                      {updateStatus.status === "downloading" && `Downloading… ${(updateStatus as { status: "downloading"; percent: number }).percent}%`}
+                      {updateStatus.status === "downloaded" && `v${(updateStatus as { status: "downloaded"; version: string }).version} ready — restart to install`}
+                      {updateStatus.status === "error" && "Update check failed"}
+                    </span>
+                  </div>
+                  {updateStatus.status === "downloading" && (
+                    <div className="mt-3 h-1.5 rounded-full bg-secondary overflow-hidden">
+                      <div className="h-full bg-theme rounded-full transition-all duration-300" style={{ width: `${(updateStatus as { status: "downloading"; percent: number }).percent}%` }} />
+                    </div>
                   )}
-                </div>
-              ))}
-            </div>
+                </Section>
+              )}
+            </>
           )}
-        </Section>
-      )}
 
-      {/* ── Sticky Save Button ───────────────────────────────────────────────── */}
-      <div className="sticky bottom-0 pb-4 pt-2 bg-background/80 backdrop-blur border-t border-border/40 flex justify-end">
-        <button
-          onClick={saveSettings}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-theme text-white font-medium text-sm hover:brightness-110 transition-all shadow-lg"
-        >
-          <Save className="w-4 h-4" />
-          Save Settings
-        </button>
+          {/* ══════════════════════ REMOTE ACCESS ════════════════════════ */}
+          {section === "remote" && (
+            <>
+              {!isElectron && (
+                <div className="p-6 rounded-2xl border border-border bg-card text-center text-sm text-muted-foreground">
+                  Remote access settings are only available in the Electron desktop app.
+                </div>
+              )}
+
+              {isElectron && (
+                <>
+                  <Section title="Remote Access" icon={Globe}>
+                    <Row label="Enable Remote Access" desc="Bind the server to all interfaces so it can be reached from other devices or through Traefik">
+                      <Toggle on={remoteEnabled} onChange={setRemoteEnabled} />
+                    </Row>
+                    <div className="pt-4 space-y-4">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-2">External Domain</label>
+                        <input type="text" placeholder="buildverse.yourdomain.com" value={remoteDomain} onChange={e => setRemoteDomain(e.target.value)}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                        <p className="text-xs text-muted-foreground mt-1.5">Your Traefik subdomain pointing to this machine.</p>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-2">Server Port</label>
+                        <input type="number" min={1024} max={65535} value={remotePort} onChange={e => setRemotePort(Number(e.target.value))}
+                          className="w-32 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                        <p className="text-xs text-muted-foreground mt-1.5">Default: 3456.</p>
+                      </div>
+                    </div>
+                    <div className="mt-5 flex justify-end">
+                      <Btn variant="primary" onClick={saveRemoteConfig} disabled={savingRemote}>
+                        {savingRemote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        Save &amp; Restart
+                      </Btn>
+                    </div>
+                  </Section>
+
+                  <Section title="Password Protection" icon={Shield}>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      When enabled, external visitors must enter this password. Local connections (Electron window, same-machine browser) bypass the gate automatically.
+                    </p>
+                    {remoteConfig?.hasPassword ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3 p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-sm">
+                          <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                          <span className="text-green-400 font-medium">Password is set</span>
+                        </div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block">Change Password</label>
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <input type={showPassword ? "text" : "password"} placeholder="New password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)}
+                              className="w-full px-3 py-2 pr-10 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                            <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" tabIndex={-1}>
+                              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          <input type={showPassword ? "text" : "password"} placeholder="Confirm password" value={confirmPasswordInput} onChange={e => setConfirmPasswordInput(e.target.value)}
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                          <div className="flex gap-2 justify-end">
+                            <Btn variant="danger" size="xs" onClick={clearRemotePassword}><X className="w-3 h-3" /> Remove Password</Btn>
+                            <Btn variant="primary" onClick={saveRemotePassword} disabled={settingPassword || !passwordInput}>
+                              {settingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Key className="w-3.5 h-3.5" />} Change
+                            </Btn>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-sm">
+                          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span className="text-amber-400">No password — set one if enabling remote access</span>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="relative">
+                            <input type={showPassword ? "text" : "password"} placeholder="Set a password…" value={passwordInput} onChange={e => setPasswordInput(e.target.value)}
+                              className="w-full px-3 py-2 pr-10 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                            <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" tabIndex={-1}>
+                              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                          </div>
+                          <input type={showPassword ? "text" : "password"} placeholder="Confirm password" value={confirmPasswordInput} onChange={e => setConfirmPasswordInput(e.target.value)}
+                            className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                          <div className="flex justify-end">
+                            <Btn variant="primary" onClick={saveRemotePassword} disabled={settingPassword || !passwordInput}>
+                              {settingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />} Set Password
+                            </Btn>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </Section>
+
+                  <Section title="Access URLs" icon={Smartphone}>
+                    <div className="space-y-5">
+                      {lanUrl ? (
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">Local Network</p>
+                          <div className="p-4 rounded-xl bg-secondary space-y-3">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <p className="font-mono text-sm font-semibold break-all">{lanUrl}</p>
+                              <Btn size="xs" onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied" }); }}>
+                                <Copy className="w-3 h-3" /> Copy
+                              </Btn>
+                            </div>
+                            <div className="flex justify-center pt-1">
+                              <QRCodeSVG value={lanUrl} size={120} bgColor="transparent" fgColor="currentColor" className="rounded-lg opacity-90" />
+                            </div>
+                            <p className="text-xs text-center text-muted-foreground">Scan from your phone — must be on the same Wi-Fi</p>
+                          </div>
+                        </div>
+                      ) : remoteEnabled ? (
+                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
+                          <Wifi className="inline w-3.5 h-3.5 mr-1" />
+                          Restart BuildVerse after enabling remote access to see your LAN URL here.
+                        </div>
+                      ) : null}
+
+                      {externalUrl && (
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">External (via Traefik)</p>
+                          <div className="p-4 rounded-xl bg-secondary space-y-3">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <p className="font-mono text-sm font-semibold break-all">{externalUrl}</p>
+                              <Btn size="xs" onClick={() => { navigator.clipboard.writeText(externalUrl!); toast({ title: "Copied" }); }}>
+                                <Copy className="w-3 h-3" /> Copy
+                              </Btn>
+                            </div>
+                            <div className="flex justify-center pt-1">
+                              <QRCodeSVG value={externalUrl} size={120} bgColor="transparent" fgColor="currentColor" className="rounded-lg opacity-90" />
+                            </div>
+                            <p className="text-xs text-center text-muted-foreground">Accessible from anywhere — requires Traefik configured below</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {!lanUrl && !externalUrl && (
+                        <p className="text-sm text-muted-foreground py-1">Enable remote access and add a domain above to see your access URLs.</p>
+                      )}
+                    </div>
+                  </Section>
+
+                  <Section title="Traefik Configuration" icon={Server}>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Drop this file into your Traefik dynamic config directory to proxy{" "}
+                      <code className="text-xs bg-secondary px-1.5 py-0.5 rounded">{remoteDomain || "your domain"}</code> to BuildVerse.
+                    </p>
+                    <div className="relative">
+                      <pre className="text-xs bg-secondary/80 border border-border rounded-xl p-4 overflow-x-auto leading-relaxed text-muted-foreground whitespace-pre">
+                        {traefikYaml}
+                      </pre>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(traefikYaml); toast({ title: "Config copied" }); }}
+                        className="absolute top-3 right-3 p-1.5 rounded-lg bg-background/80 border border-border text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="mt-4 p-3 rounded-xl bg-secondary/60 border border-border/60 text-xs text-muted-foreground space-y-2">
+                      <p className="font-medium text-foreground">Windows Firewall — allow inbound port {remotePort || 3456}</p>
+                      <p className="font-mono bg-background px-2 py-1.5 rounded break-all">
+                        {`New-NetFirewallRule -DisplayName "BuildVerse" -Direction Inbound -Protocol TCP -LocalPort ${remotePort || 3456} -Action Allow`}
+                      </p>
+                    </div>
+                  </Section>
+
+                  <Section title="Android App" icon={Smartphone}>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      A Capacitor-based Android APK is included in the project. Use the URL below as the server endpoint.
+                    </p>
+                    <div className="p-3 rounded-xl bg-secondary border border-border">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">Server URL for Android</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 text-sm font-mono break-all">
+                          {externalUrl || lanUrl || `http://YOUR_IP:${remotePort || 3456}`}
+                        </code>
+                        {(externalUrl || lanUrl) && (
+                          <Btn size="xs" onClick={() => { navigator.clipboard.writeText((externalUrl || lanUrl)!); toast({ title: "Copied" }); }}>
+                            <Copy className="w-3 h-3" />
+                          </Btn>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+                      Run <code className="bg-secondary px-1 rounded">npx cap add android</code> then{" "}
+                      <code className="bg-secondary px-1 rounded">npx cap open android</code> to build the APK in Android Studio.
+                      Update the server URL in <code className="bg-secondary px-1 rounded">capacitor.config.ts</code>.
+                    </p>
+                  </Section>
+                </>
+              )}
+            </>
+          )}
+
+          {/* ════════════════════════ INTEGRATIONS ═══════════════════════ */}
+          {section === "integrations" && (
+            <>
+              <Section title="Product Tracking" icon={ShoppingBag}>
+                <Row label="Auto-track mod product links" desc="When you add or edit a mod with a product URL, automatically add it to Product Tracker." last>
+                  <Toggle on={autoTrackProducts} onChange={v => { setAutoTrackProducts(v); localStorage.setItem("bv_autoTrackProducts", String(v)); }} />
+                </Row>
+              </Section>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3 px-1">LubeLogger</p>
+                <LubeLoggerSettings />
+              </div>
+            </>
+          )}
+
+          {/* ══════════════════════ DATA & BACKUP ════════════════════════ */}
+          {section === "data" && (
+            <>
+              {stats && (
+                <Section title="Database" icon={Database}>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Vehicles", value: stats.vehicleCount },
+                      { label: "Modifications", value: stats.modCount },
+                      { label: "Products", value: stats.productCount },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="surface-inset p-4 text-center">
+                        <p className="text-2xl font-bold">{value}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {appInfo && <p className="text-xs text-muted-foreground mt-3 font-mono opacity-60">{appInfo.dbPath}</p>}
+                </Section>
+              )}
+
+              <Section title="Data Management" icon={HardDrive}>
+                <Row label="Export Data" desc="Download all vehicles, mods & products as JSON">
+                  <Btn onClick={handleExport}><Download className="w-3.5 h-3.5" /> Export JSON</Btn>
+                </Row>
+                <Row label="Import Data" desc="Restore from a BuildVerse JSON export file">
+                  <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
+                  <Btn onClick={() => importRef.current?.click()} disabled={importing}>
+                    {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                    {importing ? "Importing…" : "Import JSON"}
+                  </Btn>
+                </Row>
+                {isElectron && (
+                  <>
+                    <Row label="Export Transfer Pack" desc="Full ZIP archive — use to move BuildVerse to another computer">
+                      <Btn onClick={handleExportZip} disabled={zipExporting}>
+                        {zipExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                        {zipExporting ? "Exporting…" : "Export Pack"}
+                      </Btn>
+                    </Row>
+                    <Row label="Import Transfer Pack" desc="Restore from a .zip transfer pack — replaces all data and restarts">
+                      <Btn onClick={handleImportZip} disabled={zipImporting}>
+                        {zipImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                        {zipImporting ? "Importing…" : "Import Pack"}
+                      </Btn>
+                    </Row>
+                  </>
+                )}
+                <Row label="Refresh Product Prices" desc="Re-scrape all tracked product URLs">
+                  <Btn onClick={refreshAll}><RefreshCw className="w-3.5 h-3.5" /> Refresh All</Btn>
+                </Row>
+                <Row label="Remove Example Data" desc="Delete the Example S2000 sample vehicle. Your own vehicles are untouched.">
+                  <Btn onClick={removeSampleData}><Trash2 className="w-3.5 h-3.5" /> Remove</Btn>
+                </Row>
+                <Row label="Wipe All Data" desc="Delete every vehicle, mod, maintenance log and product. Cannot be undone." last>
+                  <Btn variant="danger" onClick={wipeAllData}><Trash2 className="w-3.5 h-3.5" /> Wipe Everything</Btn>
+                </Row>
+              </Section>
+
+              {isElectron && (
+                <Section title="Backups" icon={Archive}
+                  action={
+                    <Btn onClick={createBackup} disabled={loadingBkp}>
+                      {loadingBkp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />} New Backup
+                    </Btn>
+                  }
+                >
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Auto-backup on startup · 10 most recent kept
+                    {appInfo && <span className="font-mono ml-2 opacity-60">{appInfo.userDataPath}/backups</span>}
+                  </p>
+                  {loadingBkp ? (
+                    <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>
+                  ) : backups.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-1">No backups yet — one will be created on next launch.</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {backups.map(b => (
+                        <div key={b.filePath} className="flex items-center justify-between px-3 py-2 rounded-xl hover:bg-secondary transition-colors">
+                          {confirmRestore === b.filePath ? (
+                            <>
+                              <p className="text-sm font-medium text-theme">Restore this? App will restart.</p>
+                              <div className="flex gap-2">
+                                <Btn size="xs" onClick={() => setConfirmRestore(null)}>Cancel</Btn>
+                                <Btn size="xs" variant="primary" onClick={() => restoreBackup(b.filePath)}>Confirm</Btn>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">{fmtBackupDate(b.name)}</p>
+                                <p className="text-xs text-muted-foreground">{fmtBytes(b.size)}</p>
+                              </div>
+                              <div className="flex gap-1 ml-4">
+                                <Btn size="xs" onClick={() => setConfirmRestore(b.filePath)}>
+                                  <RotateCcw className="w-3 h-3" /> Restore
+                                </Btn>
+                                <Btn size="xs" variant="danger" onClick={() => deleteBackup(b.filePath)}>
+                                  <Trash2 className="w-3 h-3" />
+                                </Btn>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+              )}
+            </>
+          )}
+
+        </div>
       </div>
-    </div>
     </div>
   );
 }
