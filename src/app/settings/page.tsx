@@ -190,7 +190,8 @@ export default function SettingsPage() {
   const [importing, setImporting] = useState(false);
   const [zipExporting, setZipExporting] = useState(false);
   const [zipImporting, setZipImporting] = useState(false);
-  const importRef = useRef<HTMLInputElement>(null);
+  const importRef      = useRef<HTMLInputElement>(null);
+  const gdriveInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isElectron = typeof window !== "undefined" && !!window.electronAPI?.isElectron;
   const { accent, setAccent } = useCurrentAccent();
@@ -243,6 +244,25 @@ export default function SettingsPage() {
         setGdriveLastSync(s.lastSync ?? null);
       }
     }).catch(() => {});
+  }, []);
+
+  // When the Electron window regains focus (user returns from signing in via browser),
+  // immediately re-check Drive connection status
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        fetch("/api/gdrive").then(r => r.json()).then((s: { connected: boolean; email?: string; lastSync?: string }) => {
+          if (s.connected) {
+            setGdriveEmail(s.email ?? null);
+            setGdriveLastSync(s.lastSync ?? null);
+            setGdriveWaiting(false);
+            if (gdriveInterval.current) { clearInterval(gdriveInterval.current); gdriveInterval.current = null; }
+          }
+        }).catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   useEffect(() => {
@@ -483,31 +503,35 @@ export default function SettingsPage() {
 
   const GDRIVE_CLIENT_ID = "874903401741-bkbf6fjgq04583agk60o1vgi0iv4j34v.apps.googleusercontent.com";
 
+  const checkGdriveNow = useCallback(async (): Promise<boolean> => {
+    try {
+      const s = await fetch("/api/gdrive").then(r => r.json()) as { connected: boolean; email?: string; lastSync?: string };
+      if (s.connected) {
+        setGdriveEmail(s.email ?? null);
+        setGdriveLastSync(s.lastSync ?? null);
+        setGdriveWaiting(false);
+        if (gdriveInterval.current) { clearInterval(gdriveInterval.current); gdriveInterval.current = null; }
+        return true;
+      }
+    } catch { /* ignore */ }
+    return false;
+  }, []);
+
   const handleGdriveConnect = () => {
     const path = `/api/oauth/google/start?client_id=${encodeURIComponent(GDRIVE_CLIENT_ID)}`;
     if (window.electronAPI?.openExternal) {
       const port = window.location.port || "3456";
       window.electronAPI.openExternal(`http://127.0.0.1:${port}${path}`);
       setGdriveWaiting(true);
-      const interval = setInterval(async () => {
-        try {
-          const s = await fetch("/api/gdrive").then(r => r.json()) as { connected: boolean; email?: string; lastSync?: string };
-          if (s.connected) {
-            setGdriveEmail(s.email ?? null);
-            setGdriveLastSync(s.lastSync ?? null);
-            setGdriveWaiting(false);
-            clearInterval(interval);
-            toast({ title: "Google Drive connected!" });
-          }
-        } catch { /* ignore */ }
+      if (gdriveInterval.current) clearInterval(gdriveInterval.current);
+      gdriveInterval.current = setInterval(async () => {
+        const connected = await checkGdriveNow();
+        if (connected) toast({ title: "Google Drive connected!" });
       }, 1000);
       setTimeout(async () => {
-        clearInterval(interval);
-        // Final check before giving up
-        try {
-          const s = await fetch("/api/gdrive").then(r => r.json()) as { connected: boolean; email?: string; lastSync?: string };
-          if (s.connected) { setGdriveEmail(s.email ?? null); setGdriveLastSync(s.lastSync ?? null); toast({ title: "Google Drive connected!" }); }
-        } catch { /* ignore */ }
+        if (gdriveInterval.current) { clearInterval(gdriveInterval.current); gdriveInterval.current = null; }
+        const connected = await checkGdriveNow();
+        if (connected) toast({ title: "Google Drive connected!" });
         setGdriveWaiting(false);
       }, 5 * 60 * 1000);
     } else {
@@ -951,13 +975,25 @@ export default function SettingsPage() {
                           <Btn size="xs" variant="outline" onClick={handleGdriveDisconnect}>Disconnect</Btn>
                         </div>
                       ) : gdriveWaiting ? (
-                        <div className="p-3.5 rounded-xl border border-theme/30 bg-theme/5 flex items-center gap-3">
-                          <Loader2 className="w-4 h-4 animate-spin text-theme shrink-0" />
-                          <div>
-                            <p className="text-sm font-medium">Waiting for Google sign-in…</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">Complete sign-in in your browser, then return here.</p>
+                        <div className="space-y-2">
+                          <div className="p-3.5 rounded-xl border border-theme/30 bg-theme/5 flex items-center gap-3">
+                            <Loader2 className="w-4 h-4 animate-spin text-theme shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">Waiting for Google sign-in…</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">Complete sign-in in your browser, then return here.</p>
+                            </div>
+                            <Btn size="xs" variant="outline" onClick={() => setGdriveWaiting(false)}>Cancel</Btn>
                           </div>
-                          <Btn size="xs" variant="outline" onClick={() => setGdriveWaiting(false)}>Cancel</Btn>
+                          <button
+                            onClick={async () => {
+                              const connected = await checkGdriveNow();
+                              if (connected) toast({ title: "Google Drive connected!" });
+                              else toast({ title: "Not connected yet — finish sign-in in the browser first.", variant: "destructive" });
+                            }}
+                            className="w-full py-2 text-xs text-muted-foreground hover:text-foreground border border-border/60 rounded-lg bg-secondary/40 hover:bg-secondary transition-colors"
+                          >
+                            Already signed in? Check now
+                          </button>
                         </div>
                       ) : (
                         <div className="p-3.5 rounded-xl border border-border bg-secondary/40">
