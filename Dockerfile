@@ -24,11 +24,12 @@ COPY --from=builder --chown=buildverse:buildverse /app/public ./public
 COPY --from=builder --chown=buildverse:buildverse /app/prisma ./prisma
 COPY --from=builder --chown=buildverse:buildverse /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=buildverse:buildverse /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=buildverse:buildverse /app/node_modules/prisma ./node_modules/prisma
 
 RUN mkdir -p /data && chown buildverse:buildverse /data
 
 USER buildverse
 EXPOSE 3000
 
-# Run migrations then start the server
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node server.js"]
+# Apply schema then start the server (prisma CLI lives at node_modules/prisma/build/index.js)
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js db push --skip-generate && node server.js"]
