@@ -1,0 +1,14 @@
+services:
+  buildverse:
+    image: ghcr.io/anthonykphoto/buildverse:latest
+    # build: .   # uncomment to build locally instead
+    ports:
+      - "3456:3000"
+    volumes:
+      - buildverse-data:/data
+    environment:
+      - DATABASE_URL=file:/data/buildverse.db
+    restart: unless-stopped
+
+volumes:
+  buildverse-data:

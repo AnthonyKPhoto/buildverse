@@ -1,0 +1,10 @@
+.git
+node_modules
+.next
+dist-electron
+electron/node_modules
+android
+capacitor-app
+*.exe
+*.db
+.env*

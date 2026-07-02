@@ -25,7 +25,7 @@ interface AppInfo { version: string; userDataPath: string; dbPath: string; isDev
 interface BackupEntry { name: string; filePath: string; size: number; createdAt: string; }
 interface RemoteConfig { enabled: boolean; domain: string; port: number; hasPassword: boolean; }
 type Section = "general" | "remote" | "integrations" | "data" | "sync";
-type SyncMethod = "server" | "webdav" | "gdrive";
+type SyncMethod = "server" | "webdav";
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
   | { status: "available"; version: string; downloadUrl?: string; manual?: boolean }
@@ -53,6 +53,7 @@ declare global {
         exportZip: () => Promise<{ canceled?: boolean; success?: boolean; filePath?: string; error?: string }>;
         importZip: () => Promise<{ canceled?: boolean; success?: boolean; error?: string }>;
       };
+      restart?: () => Promise<void>;
     };
   }
 }
@@ -173,8 +174,6 @@ export default function SettingsPage() {
   const [webdavUsername,   setWebdavUsername]    = useState("");
   const [webdavPassword,   setWebdavPassword]    = useState("");
   const [showWebdavPass,   setShowWebdavPass]    = useState(false);
-  const [gdriveClientId,   setGdriveClientId]   = useState("");
-  const [gdriveAuthed,     setGdriveAuthed]      = useState(false);
   const [syncingDir,       setSyncingDir]        = useState<"upload"|"download"|null>(null);
   const [syncMsg,          setSyncMsg]           = useState<{text:string;type:"info"|"success"|"error"}|null>(null);
   const [lastSyncedAt,     setLastSyncedAt]      = useState<string|null>(null);
@@ -219,32 +218,8 @@ export default function SettingsPage() {
     setWebdavUrl(localStorage.getItem("bv_sync_webdav_url") || "");
     setWebdavUsername(localStorage.getItem("bv_sync_webdav_username") || "");
     setWebdavPassword(localStorage.getItem("bv_sync_webdav_password") || "");
-    setGdriveClientId(localStorage.getItem("bv_sync_gdrive_client_id") || "");
     setLastSyncedAt(localStorage.getItem("bv_sync_last_synced_at"));
-    const expiry = parseInt(localStorage.getItem("bv_sync_gdrive_token_expiry") || "0");
-    setGdriveAuthed(!!(localStorage.getItem("bv_sync_gdrive_token") && Date.now() < expiry - 60_000));
-
-    // Handle OAuth redirect-back
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("section") === "sync") setSection("sync");
-    const pickupKey = params.get("gdrive_pickup");
-    const gdriveErr = params.get("gdrive_error");
-    if (pickupKey) {
-      fetch(`/api/oauth/google/token?key=${pickupKey}`)
-        .then(r => r.ok ? r.json() : Promise.reject(r))
-        .then((data: { accessToken: string; expiresAt: number }) => {
-          localStorage.setItem("bv_sync_gdrive_token",        data.accessToken);
-          localStorage.setItem("bv_sync_gdrive_token_expiry", String(data.expiresAt));
-          setGdriveAuthed(true);
-          toast({ title: "Google Drive authorized" });
-        })
-        .catch(() => toast({ title: "Failed to retrieve token", variant: "destructive" }));
-      window.history.replaceState({}, "", "/settings");
-    } else if (gdriveErr) {
-      toast({ title: `Google auth failed: ${gdriveErr}`, variant: "destructive" });
-      window.history.replaceState({}, "", "/settings");
-    }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem("bv_autoTrackProducts");
@@ -479,28 +454,7 @@ export default function SettingsPage() {
     localStorage.setItem("bv_sync_webdav_url",      webdavUrl);
     localStorage.setItem("bv_sync_webdav_username", webdavUsername);
     localStorage.setItem("bv_sync_webdav_password", webdavPassword);
-    localStorage.setItem("bv_sync_gdrive_client_id",gdriveClientId);
     toast({ title: "Sync settings saved" });
-  };
-
-  const authorizeGoogleDrive = () => {
-    if (!gdriveClientId.trim()) {
-      toast({ title: "Enter your Google Client ID first", variant: "destructive" });
-      return;
-    }
-    localStorage.setItem("bv_sync_gdrive_client_id", gdriveClientId.trim());
-    window.location.href = `/api/oauth/google/start?client_id=${encodeURIComponent(gdriveClientId.trim())}`;
-  };
-
-  const _driveHeaders = () => ({ Authorization: "Bearer " + localStorage.getItem("bv_sync_gdrive_token") });
-
-  const _findDriveFile = async (): Promise<string|null> => {
-    const res = await fetch(
-      "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%27buildverse-sync.json%27&fields=files(id)",
-      { headers: _driveHeaders() }
-    );
-    const data = await res.json();
-    return data.files?.[0]?.id ?? null;
   };
 
   const doSyncUpload = async () => {
@@ -516,19 +470,6 @@ export default function SettingsPage() {
           body:   JSON.stringify(snapshot),
         });
         if (!res.ok) throw new Error("WebDAV error " + res.status);
-
-      } else if (syncMethod === "gdrive") {
-        const token    = localStorage.getItem("bv_sync_gdrive_token");
-        if (!token) { authorizeGoogleDrive(); return; }
-        const existing = await _findDriveFile();
-        const metadata = { name:"buildverse-sync.json", mimeType:"application/json", ...(!existing && { parents:["appDataFolder"] }) };
-        const form = new FormData();
-        form.append("metadata", new Blob([JSON.stringify(metadata)], { type:"application/json" }));
-        form.append("file",     new Blob([JSON.stringify(snapshot)],  { type:"application/json" }));
-        const url    = existing ? `https://www.googleapis.com/upload/drive/v3/files/${existing}?uploadType=multipart` : "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&spaces=appDataFolder";
-        const method = existing ? "PATCH" : "POST";
-        const res    = await fetch(url, { method, headers: { Authorization:"Bearer "+token }, body: form });
-        if (!res.ok) throw new Error("Drive upload error " + res.status);
 
       } else {
         throw new Error("Server is the source of truth — use Pull on your phone instead");
@@ -558,15 +499,6 @@ export default function SettingsPage() {
         });
         if (res.status === 404) throw new Error("No sync file on WebDAV. Push first.");
         if (!res.ok) throw new Error("WebDAV error " + res.status);
-        snapshot = await res.json();
-
-      } else if (syncMethod === "gdrive") {
-        const token = localStorage.getItem("bv_sync_gdrive_token");
-        if (!token) { authorizeGoogleDrive(); return; }
-        const fileId = await _findDriveFile();
-        if (!fileId) throw new Error("No sync file on Drive. Push first.");
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { Authorization:"Bearer "+token } });
-        if (!res.ok) throw new Error("Drive download error " + res.status);
         snapshot = await res.json();
 
       } else {
@@ -625,7 +557,17 @@ export default function SettingsPage() {
         <div className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-sm text-amber-400">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>Restart BuildVerse to apply remote access changes.</span>
-          <button onClick={() => setRestartNeeded(false)} className="ml-auto text-amber-400/60 hover:text-amber-400"><X className="w-4 h-4" /></button>
+          <div className="ml-auto flex items-center gap-2">
+            {window.electronAPI?.restart && (
+              <button
+                onClick={() => window.electronAPI!.restart!()}
+                className="px-2.5 py-1 text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg transition-colors"
+              >
+                Restart Now
+              </button>
+            )}
+            <button onClick={() => setRestartNeeded(false)} className="text-amber-400/60 hover:text-amber-400"><X className="w-4 h-4" /></button>
+          </div>
         </div>
       )}
 
@@ -849,10 +791,18 @@ export default function SettingsPage() {
                         <p className="text-xs text-muted-foreground mt-1.5">Default: 3456.</p>
                       </div>
                     </div>
-                    <div className="mt-5 flex justify-end">
+                    <div className="mt-5 flex items-center justify-between">
+                      {window.electronAPI?.restart && restartNeeded ? (
+                        <button
+                          onClick={() => window.electronAPI!.restart!()}
+                          className="px-3 py-1.5 text-sm font-semibold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 rounded-lg transition-colors"
+                        >
+                          Restart Now
+                        </button>
+                      ) : <span />}
                       <Btn variant="primary" onClick={saveRemoteConfig} disabled={savingRemote}>
                         {savingRemote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                        Save &amp; Restart
+                        Save
                       </Btn>
                     </div>
                   </Section>
@@ -952,6 +902,33 @@ export default function SettingsPage() {
                       )}
                     </div>
                   </Section>
+
+                  <Section title="Self-host with Docker" icon={Database}>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Run BuildVerse as a headless server on any machine — a home server, NAS, or VPS. Your phone connects to it just like the desktop app.
+                    </p>
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-xl bg-secondary/60 border border-border text-xs font-mono space-y-1 text-muted-foreground overflow-x-auto">
+                        <p className="text-foreground font-semibold text-xs mb-2 font-sans not-italic">docker-compose.yml</p>
+                        <p>services:</p>
+                        <p>&nbsp;&nbsp;buildverse:</p>
+                        <p>&nbsp;&nbsp;&nbsp;&nbsp;image: ghcr.io/anthonykphoto/buildverse:latest</p>
+                        <p>&nbsp;&nbsp;&nbsp;&nbsp;ports:</p>
+                        <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- &quot;3456:3000&quot;</p>
+                        <p>&nbsp;&nbsp;&nbsp;&nbsp;volumes:</p>
+                        <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- buildverse-data:/data</p>
+                        <p>&nbsp;&nbsp;&nbsp;&nbsp;restart: unless-stopped</p>
+                        <p>volumes:</p>
+                        <p>&nbsp;&nbsp;buildverse-data:</p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-secondary/60 border border-border text-xs space-y-1.5 text-muted-foreground">
+                        <p>1. Copy the compose file above to your server.</p>
+                        <p>2. Run <code className="bg-secondary px-1 rounded">docker compose up -d</code></p>
+                        <p>3. Open the Android app → enter <code className="bg-secondary px-1 rounded">http://YOUR_SERVER_IP:3456</code></p>
+                        <p>4. Data is stored in the <code className="bg-secondary px-1 rounded">buildverse-data</code> Docker volume.</p>
+                      </div>
+                    </div>
+                  </Section>
                 </>
               )}
             </>
@@ -962,7 +939,6 @@ export default function SettingsPage() {
             const METHODS: { id: SyncMethod; label: string; desc: string }[] = [
               { id:"server", label:"BuildVerse Server", desc:"Phone pulls directly from your PC via LAN or remote access URL. No third-party cloud needed." },
               { id:"webdav", label:"WebDAV",            desc:"Nextcloud, OneDrive, Synology NAS, or any WebDAV-compatible service. Each user provides their own credentials." },
-              { id:"gdrive", label:"Google Drive",      desc:"Your own Google account. Provide your Google Cloud Client ID — data goes to your Drive, not anyone else's." },
             ];
             const syncColor = { info:"text-muted-foreground", success:"text-green-400", error:"text-red-400" } as const;
             return (
@@ -1053,31 +1029,6 @@ export default function SettingsPage() {
                     </div>
                   )}
 
-                  {syncMethod === "gdrive" && (
-                    <div className="space-y-3 mb-5">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Google Drive Config</p>
-                      <div>
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Google Client ID</label>
-                        <input type="text" value={gdriveClientId} onChange={e => { setGdriveClientId(e.target.value); localStorage.setItem("bv_sync_gdrive_client_id", e.target.value); }}
-                          placeholder="1234567890-abc.apps.googleusercontent.com"
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-                        <p className="text-xs text-muted-foreground mt-1.5">
-                          Create at <strong>console.cloud.google.com</strong> → APIs &amp; Services → Credentials → OAuth 2.0 Client ID.
-                          Choose <strong>Desktop app</strong> — loopback redirect URIs are allowed automatically, no registration needed.
-                          Make sure the Google Drive API is enabled in your project.
-                        </p>
-                      </div>
-                      <div className={cn("flex items-center justify-between p-3 rounded-xl border text-sm",
-                        gdriveAuthed ? "bg-green-500/8 border-green-500/20" : "bg-secondary/60 border-border")}>
-                        <span className={gdriveAuthed ? "text-green-400 font-medium" : "text-muted-foreground"}>
-                          {gdriveAuthed ? "✓ Authorized" : "Not authorized"}
-                        </span>
-                        <Btn size="xs" onClick={authorizeGoogleDrive}>
-                          {gdriveAuthed ? "Re-authorize" : "Sign in with Google"}
-                        </Btn>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Status */}
                   {lastSyncedAt && (

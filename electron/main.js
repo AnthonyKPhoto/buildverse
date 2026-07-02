@@ -784,6 +784,7 @@ function getCloseMode() {
 
 ipcMain.handle("prefs:get", () => loadPrefs());
 ipcMain.handle("prefs:set", (_, obj) => { savePrefs(obj); return { success: true }; });
+ipcMain.handle("app:restart", () => { app.relaunch(); app.isQuitting = true; app.quit(); });
 
 // ── Single-instance lock — prevents a second copy from launching ──────────────
 const gotLock = app.requestSingleInstanceLock();
