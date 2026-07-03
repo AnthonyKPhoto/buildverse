@@ -140,7 +140,7 @@ export function Sidebar() {
   return (
     <>
     <aside
-      className="flex-shrink-0 flex flex-col border-r border-border bg-card"
+      className="hidden md:flex flex-shrink-0 flex-col border-r border-border bg-card"
       style={{ width: "var(--sidebar-width, 240px)" }}
     >
       {/* Logo */}

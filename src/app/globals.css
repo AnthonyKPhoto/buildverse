@@ -107,6 +107,36 @@ html.light ::-webkit-scrollbar-thumb:hover { background: hsl(213, 20%, 58%); }
     background: hsl(var(--foreground) / 0.04);
     border-color: hsl(var(--foreground) / 0.06);
   }
+
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom), 1rem);
+  }
+}
+
+/* ── Mobile ──────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Prevent horizontal overflow on mobile */
+  body { overflow-x: hidden; }
+
+  /* Make dialogs/modals full-screen on mobile */
+  [role="dialog"] > div {
+    max-height: 90dvh;
+    overflow-y: auto;
+  }
+
+  /* Larger touch targets for buttons */
+  button, a[role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Tighten headings on mobile */
+  h1 { font-size: 1.25rem !important; }
+  h2 { font-size: 1.1rem !important; }
 }
 
 /* ── Animations ──────────────────────────────────────────────────────────── */

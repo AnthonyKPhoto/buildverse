@@ -194,7 +194,7 @@ export default function GaragePage() {
   return (
     <div className="animate-fade-in">
       {/* Hero banner */}
-      <div className="-mx-6 -mt-8 mb-8 px-6 pt-8 pb-6 border-b border-border/60 relative overflow-hidden">
+      <div className="-mx-3 -mt-4 md:-mx-6 md:-mt-8 mb-6 px-3 md:px-6 pt-4 md:pt-8 pb-6 border-b border-border/60 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
         <div className="absolute top-0 right-0 w-72 h-36 bg-theme/8 rounded-full blur-3xl -translate-y-8 translate-x-8 pointer-events-none" />
         <div className="relative">

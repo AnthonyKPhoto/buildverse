@@ -465,7 +465,7 @@ export default function VehicleDetailPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Vehicle Hero Banner */}
-      <div className="-mx-6 -mt-8 mb-2 px-6 pt-6 pb-6 border-b border-border/60 relative overflow-hidden">
+      <div className="-mx-3 -mt-4 md:-mx-6 md:-mt-8 mb-2 px-3 md:px-6 pt-4 md:pt-6 pb-6 border-b border-border/60 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
         <div className="absolute top-0 right-0 w-80 h-48 bg-theme/8 rounded-full blur-3xl -translate-y-8 translate-x-8 pointer-events-none" />
 
@@ -482,9 +482,9 @@ export default function VehicleDetailPage() {
         </div>
 
         {/* Main row: photo + info + actions */}
-        <div className="relative flex items-start gap-5">
+        <div className="relative flex flex-col sm:flex-row items-start gap-4">
           {/* Photo */}
-          <div className="relative w-24 h-24 rounded-2xl overflow-hidden bg-secondary flex-shrink-0 ring-1 ring-border/40 shadow-lg">
+          <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden bg-secondary flex-shrink-0 ring-1 ring-border/40 shadow-lg">
             {vehicle.photoUrl ? (
               vehicle.photoUrl.startsWith("data:") ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -501,7 +501,7 @@ export default function VehicleDetailPage() {
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <h1 className="text-3xl font-bold tracking-tight leading-tight">
+            <h1 className="text-xl sm:text-3xl font-bold tracking-tight leading-tight">
               {vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
             </h1>
             {vehicle.name && (
@@ -535,13 +535,13 @@ export default function VehicleDetailPage() {
           </div>
 
           {/* Right: completion + actions */}
-          <div className="flex flex-col items-end gap-3 shrink-0">
+          <div className="flex sm:flex-col items-center sm:items-end gap-3 sm:gap-3 shrink-0 w-full sm:w-auto">
             <div className="text-right">
-              <div className="text-3xl font-bold">{completion}%</div>
+              <div className="text-2xl sm:text-3xl font-bold">{completion}%</div>
               <div className="text-xs text-muted-foreground mb-1.5">Build Complete</div>
-              <Progress value={completion} className="h-1.5 w-28" />
+              <Progress value={completion} className="h-1.5 w-24 sm:w-28" />
             </div>
-            <div className="flex gap-1.5 flex-wrap justify-end">
+            <div className="flex gap-1.5 flex-wrap sm:justify-end ml-auto sm:ml-0">
               <Button variant="outline" size="sm" onClick={checkRecalls} className="gap-1.5 h-7 text-xs">
                 <ShieldAlert className="w-3 h-3" />
                 Recalls
@@ -585,7 +585,7 @@ export default function VehicleDetailPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="mods">
-        <TabsList className="grid grid-cols-8 w-full max-w-4xl">
+        <TabsList className="flex w-full max-w-4xl min-w-0">
           <TabsTrigger value="mods" className="gap-1">
             <Wrench className="w-3 h-3" />
             Mods
