@@ -14,8 +14,10 @@ export async function GET(req: NextRequest) {
 
   await storePkce(state, verifier, clientId);
 
-  const port       = req.nextUrl.port || "3456";
-  const redirectUri = `http://127.0.0.1:${port}/api/oauth/google/callback`;
+  const port        = req.nextUrl.port || "3456";
+  const redirectUri = process.env.BASE_URL
+    ? `${process.env.BASE_URL.replace(/\/$/, "")}/api/oauth/google/callback`
+    : `http://127.0.0.1:${port}/api/oauth/google/callback`;
 
   const params = new URLSearchParams({
     client_id:             clientId,

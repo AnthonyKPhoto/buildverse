@@ -37,7 +37,9 @@ export async function GET(req: NextRequest) {
     return closePage("Session Expired", "&#x231B;", "Session Expired", "The sign-in session timed out. Please go back to the app and try connecting again.", true);
   }
 
-  const redirectUri = `http://127.0.0.1:${port}/api/oauth/google/callback`;
+  const redirectUri = process.env.BASE_URL
+    ? `${process.env.BASE_URL.replace(/\/$/, "")}/api/oauth/google/callback`
+    : `http://127.0.0.1:${port}/api/oauth/google/callback`;
   const tokenBody   = new URLSearchParams({
     code,
     client_id:     pkce.clientId,
