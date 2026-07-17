@@ -17,7 +17,10 @@ export async function GET() {
       }).catch(() => [] as { status: string; price: number | null; actualPrice: number | null }[]),
     ]);
 
-    const totalPlanned = mods.reduce((sum, m) => sum + (m.price ?? 0), 0);
+    const EXCLUDED = new Set(["RESEARCHING", "REMOVED"]);
+    const totalPlanned = mods
+      .filter((m) => !EXCLUDED.has(m.status))
+      .reduce((sum, m) => sum + (m.price ?? 0), 0);
     const totalInstalled = mods
       .filter((m) => m.status === "INSTALLED")
       .reduce((sum, m) => sum + (m.actualPrice ?? m.price ?? 0), 0);

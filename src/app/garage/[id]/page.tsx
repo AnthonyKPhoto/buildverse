@@ -814,7 +814,7 @@ export default function VehicleDetailPage() {
             </div>
           ) : (
             Object.entries(modsByCategory).map(([category, mods]) => {
-              const categoryTotal = mods.reduce((s, m) => s + ((m.actualPrice ?? m.price) ?? 0), 0);
+              const categoryTotal = mods.filter((m) => m.status !== "RESEARCHING" && m.status !== "REMOVED").reduce((s, m) => s + ((m.actualPrice ?? m.price) ?? 0), 0);
               return (
                 <div key={category}>
                   <div className="flex items-center gap-2 mb-2">

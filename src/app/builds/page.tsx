@@ -73,7 +73,7 @@ export default function BuildsPage() {
     return acc;
   }, {});
 
-  const totalValue = filtered.reduce((s, m) => s + (m.price ?? 0), 0);
+  const totalValue = filtered.filter((m) => m.status !== "RESEARCHING" && m.status !== "REMOVED").reduce((s, m) => s + (m.price ?? 0), 0);
   const installedCount = filtered.filter((m) => m.status === "INSTALLED").length;
 
   if (loading) {
@@ -194,7 +194,7 @@ export default function BuildsPage() {
                   <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{category}</h3>
                   <span className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{categoryMods.length}</span>
                   <div className="flex-1 h-px bg-border ml-1" />
-                  <span className="text-xs text-muted-foreground">{formatCurrency(categoryMods.reduce((s, m) => s + (m.price ?? 0), 0))}</span>
+                  <span className="text-xs text-muted-foreground">{formatCurrency(categoryMods.filter((m) => m.status !== "RESEARCHING" && m.status !== "REMOVED").reduce((s, m) => s + (m.price ?? 0), 0))}</span>
                 </div>
 
                 <div className="space-y-2">

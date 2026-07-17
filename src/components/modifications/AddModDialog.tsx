@@ -33,6 +33,10 @@ interface AddModDialogProps {
 }
 
 const STATUSES = ["PLANNED", "RESEARCHING", "ORDERED", "PURCHASED", "INSTALLED", "REMOVED"];
+const STATUS_LABELS: Record<string, string> = {
+  PLANNED: "Planned", RESEARCHING: "Researching / Idea", ORDERED: "Ordered",
+  PURCHASED: "Purchased", INSTALLED: "Installed", REMOVED: "Removed",
+};
 const PRIORITIES = [
   { value: "NONE",     label: "—  None" },
   { value: "LOW",      label: "Low" },
@@ -446,7 +450,7 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
                 <Select value={form.status} onValueChange={(v) => set("status", v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {STATUSES.map((s) => <SelectItem key={s} value={s}>{s.charAt(0) + s.slice(1).toLowerCase()}</SelectItem>)}
+                    {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s] ?? s}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

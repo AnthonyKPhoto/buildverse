@@ -21,7 +21,7 @@ interface Vehicle {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  PLANNED: "Planned", RESEARCHING: "Researching", ORDERED: "Ordered",
+  PLANNED: "Planned", RESEARCHING: "Researching / Idea", ORDERED: "Ordered",
   PURCHASED: "Purchased", INSTALLED: "Installed", REMOVED: "Removed",
 };
 const STATUS_COLOR: Record<string, string> = {

@@ -50,7 +50,7 @@ export const MOD_CATEGORIES = [
 
 export const MOD_STATUSES = [
   { value: "PLANNED", label: "Planned", color: "bg-slate-500" },
-  { value: "RESEARCHING", label: "Researching", color: "bg-blue-500" },
+  { value: "RESEARCHING", label: "Researching / Idea", color: "bg-blue-500" },
   { value: "ORDERED", label: "Ordered", color: "bg-yellow-500" },
   { value: "PURCHASED", label: "Purchased", color: "bg-purple-500" },
   { value: "INSTALLED", label: "Installed", color: "bg-green-500" },
@@ -98,16 +98,18 @@ export function calcBuildCompletion(modifications: { status: string }[]): number
   return Math.round((installed / modifications.length) * 100);
 }
 
-export function calcTotalModValue(modifications: { price?: number | null; status: string }[]): {
+export const EXCLUDED_FROM_VALUE = new Set(["RESEARCHING", "REMOVED"]);
+
+export function calcTotalModValue(modifications: { price?: number | null; actualPrice?: number | null; status: string }[]): {
   installed: number;
   planned: number;
   total: number;
 } {
   const installed = modifications
     .filter((m) => m.status === "INSTALLED")
-    .reduce((sum, m) => sum + (m.price ?? 0), 0);
+    .reduce((sum, m) => sum + (m.actualPrice ?? m.price ?? 0), 0);
   const planned = modifications
-    .filter((m) => m.status !== "INSTALLED")
+    .filter((m) => !EXCLUDED_FROM_VALUE.has(m.status) && m.status !== "INSTALLED")
     .reduce((sum, m) => sum + (m.price ?? 0), 0);
   return { installed, planned, total: installed + planned };
 }

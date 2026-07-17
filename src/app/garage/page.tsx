@@ -35,7 +35,7 @@ function VehicleCard({ vehicle, onEdit, onDelete }: { vehicle: Vehicle; onEdit: 
   const installedMods = vehicle.modifications.filter((m) => m.status === "INSTALLED");
   const installedValue = installedMods.reduce((s, m) => s + (m.price ?? 0), 0);
   const plannedValue = vehicle.modifications
-    .filter((m) => m.status !== "INSTALLED")
+    .filter((m) => m.status !== "INSTALLED" && m.status !== "RESEARCHING" && m.status !== "REMOVED")
     .reduce((s, m) => s + (m.price ?? 0), 0);
 
   return (
