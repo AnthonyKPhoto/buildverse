@@ -2,6 +2,9 @@
   "appId": "net.kaiserhomelab.buildverse",
   "appName": "BuildVerse",
   "webDir": "capacitor-app",
+  "server": {
+    "allowNavigation": ["*"]
+  },
   "android": {
     "allowMixedContent": true,
     "captureInput": true,
