@@ -1,10 +1,14 @@
-FROM node:20-slim AS deps
+# Node 22, not 20 — undici@8.9.0 (used by src/lib/scraper.ts's DNS-rebinding-
+# pinned Agent) requires Node >=22.19.0; `next build`'s page-data collection
+# actually executes that import chain and crashes on Node 20 with
+# "s.util.markAsUncloneable is not a function".
+FROM node:22-slim AS deps
 WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 RUN npm ci
 
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 WORKDIR /app
 RUN apt-get update && apt-get install -y openssl --no-install-recommends && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
@@ -15,7 +19,7 @@ ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN node_modules/.bin/prisma generate
 RUN node_modules/.bin/next build
 
-FROM node:20-slim AS runner
+FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV DATABASE_URL=file:/data/buildverse.db
