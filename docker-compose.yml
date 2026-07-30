@@ -6,6 +6,10 @@ services:
       - "3456:3000"
     volumes:
       - buildverse-data:/data
+    # Values come from a .env file in this same directory — copy .env.example
+    # to .env and fill it in (docker compose loads it automatically, no extra
+    # config needed). Don't edit the values below directly; they're just
+    # variable references with fallback defaults for whatever isn't set.
     environment:
       - DATABASE_URL=file:/data/buildverse.db
 
@@ -15,17 +19,17 @@ services:
       # spawned server, which always bypasses it). Any long random string.
       # Generate with:
       #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-      - AUTH_SESSION_SECRET=
+      - AUTH_SESSION_SECRET=${AUTH_SESSION_SECRET:-}
 
       # ── Bootstrap admin account (optional) ───────────────────────────────────────
-      # Leave both blank and the first person to visit the site gets a
+      # Leave both unset in .env and the first person to visit the site gets a
       # "create the admin account" form instead — simplest for a fresh deploy.
       # Set these only if you want a specific admin pre-provisioned before
       # anyone visits. Everyone else (including additional admins) is created
       # afterward from Settings → Users by an admin.
-      - ADMIN_USERNAME=admin
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       # Generate with: node scripts/hash-password.js "your-password"
-      - ADMIN_PASSWORD_HASH=
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-}
 
     restart: unless-stopped
 

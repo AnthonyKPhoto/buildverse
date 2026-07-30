@@ -68,6 +68,20 @@ execSync("node node_modules/prisma/build/index.js db push --skip-generate --acce
 });
 
 async function ensureAdminAndWAL() {
+  // AUTH_SESSION_SECRET missing/empty means the server fails OPEN — no login
+  // required for anyone, not a lockout. This is easy to miss (a blank or
+  // missing .env next to docker-compose.yml silently produces this), so
+  // shout about it on every boot rather than only in a doc somewhere.
+  if (!process.env.AUTH_SESSION_SECRET) {
+    console.warn(
+      "[docker-init-db] WARNING: AUTH_SESSION_SECRET is not set — this server " +
+      "is running with NO LOGIN REQUIRED. Anyone with the URL can view and " +
+      "edit everything. Set AUTH_SESSION_SECRET in a .env file next to " +
+      "docker-compose.yml (see .env.example) and run `docker compose up -d` " +
+      "to apply it, unless this is intentional."
+    );
+  }
+
   const { PrismaClient } = require("@prisma/client");
   const prisma = new PrismaClient({ datasources: { db: { url: DATABASE_URL } } });
   try {

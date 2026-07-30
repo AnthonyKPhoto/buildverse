@@ -248,6 +248,13 @@ corrects on any interaction or reload — not worth a shared theme context for t
 SMTP settings (for temp-password emails) are configured at runtime from **Settings → Access & Sync →
 Email (SMTP)**, not env vars — stored in the `Setting` table.
 
+**Docker:** these three come from a `.env` file placed next to `docker-compose.yml` (copy
+`.env.example`) — `docker compose` loads it automatically for the `${VAR}` references in that file.
+Don't edit `docker-compose.yml`'s `environment:` block directly. This is a common point of confusion
+(a missing/empty `.env` silently means auth stays off, and the server fails open — no login at all,
+not a lockout), so `docker-init-db.js` doesn't warn about it; check `/api/health`'s `mode` field
+(`"server"` vs `"local"`) to confirm auth actually activated after deploying.
+
 Local dev: copy `.env.local` — no variables needed for basic use.
 
 ---

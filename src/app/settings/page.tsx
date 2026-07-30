@@ -743,18 +743,21 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Two-column layout */}
-      <div className="flex gap-6 items-start">
+      {/* Two-column layout on desktop; stacked with a horizontal-scroll tab
+          bar on mobile — this nav used to be a fixed w-52 sidebar with no
+          breakpoint at all, which squeezed both columns into a narrow strip
+          on phones. */}
+      <div className="flex flex-col md:flex-row gap-6 items-start">
 
         {/* ── Sidebar ────────────────────────────────────────────────────── */}
-        <nav className="w-52 shrink-0 sticky top-0">
-          <div className="space-y-0.5">
+        <nav className="w-full md:w-52 shrink-0 md:sticky md:top-0">
+          <div className="flex md:block gap-1 md:space-y-0.5 overflow-x-auto md:overflow-visible pb-1 md:pb-0 -mx-1 px-1 md:mx-0 md:px-0">
             {NAV_ITEMS.map(item => (
               <button
                 key={item.id}
                 onClick={() => setSection(item.id)}
                 className={cn(
-                  "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-left",
+                  "shrink-0 md:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-left whitespace-nowrap",
                   section === item.id ? "bg-theme/10 text-theme" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                 )}
               >
@@ -1066,38 +1069,38 @@ export default function SettingsPage() {
                   )}
 
                   <form onSubmit={addUser} className="pt-3 border-t border-border/60 space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center gap-2">
                       <input
                         type="text"
                         required
                         value={newUsername}
                         onChange={e => setNewUsername(e.target.value)}
                         placeholder="Username"
-                        className="w-32 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        className="w-full sm:w-32 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                       <input
                         type="password"
                         value={newPassword}
                         onChange={e => setNewPassword(e.target.value)}
                         placeholder="Password (optional)"
-                        className="w-36 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        className="w-full sm:w-36 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                       <input
                         type="email"
                         value={newEmail}
                         onChange={e => setNewEmail(e.target.value)}
                         placeholder="Email (for temp password)"
-                        className="w-48 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        className="w-full sm:w-48 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                       <select
                         value={newRole}
                         onChange={e => setNewRole(e.target.value as "admin" | "member")}
-                        className="px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                        className="w-full sm:w-auto px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                       >
                         <option value="member">Member</option>
                         <option value="admin">Admin</option>
                       </select>
-                      <Btn variant="primary" disabled={addingUser || !newUsername || (!newPassword && !newEmail)}>
+                      <Btn variant="primary" className="w-full sm:w-auto justify-center" disabled={addingUser || !newUsername || (!newPassword && !newEmail)}>
                         {addingUser ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                         Add User
                       </Btn>
@@ -1170,7 +1173,7 @@ export default function SettingsPage() {
                     Used to email temporary passwords when you create an account by email instead of typing a password.
                   </p>
                   <form onSubmit={saveSmtpConfig} className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Host</label>
                         <input type="text" required value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.example.com"

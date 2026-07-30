@@ -90,14 +90,23 @@ most self-hosters already have one.
 
 ### 2. Configure
 
-Set in your `.env` (see `.env.example`):
+Create a `.env` file **in the same directory as `docker-compose.yml`** (copy
+`.env.example` — `docker compose` loads a `.env` file next to it automatically,
+no extra flags needed):
+```powershell
+cp .env.example .env
+```
+
+Then set, in that `.env` file:
 ```
 AUTH_SESSION_SECRET=<any long random string>
 ```
 
 That's the only variable that's actually required — setting it turns on
 login for everyone except local connections (auth is completely inert, and
-local dev/Electron completely unaffected, if it's left unset).
+local dev/Electron completely unaffected, if it's left unset). **Without
+this set, the server runs with no login at all — anyone with the URL can
+view and edit everything.**
 
 Optionally, pre-provision a specific admin account before your first visit:
 ```powershell
@@ -111,6 +120,11 @@ If you skip this, the first person to visit the site gets a "create the
 admin account" form instead of a login form — whoever submits it first
 becomes admin. Simplest for a fresh deploy; just don't leave that window
 open on the public internet longer than it takes you to sign up.
+
+If you're already running and want to turn auth on now: create/edit `.env`
+next to `docker-compose.yml` as above, then `docker compose up -d` to
+recreate the container with the new values (a plain restart isn't enough —
+compose only re-reads `.env` on `up`).
 
 ### 3. Start it
 
