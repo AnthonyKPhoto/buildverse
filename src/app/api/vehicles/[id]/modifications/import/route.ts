@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 
@@ -18,6 +19,9 @@ const VALID_STATUSES  = new Set(["PLANNED","RESEARCHING","ORDERED","PURCHASED","
 const VALID_PRIORITIES = new Set(["NONE","LOW","MEDIUM","HIGH","CRITICAL"]);
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await canEditVehicle(req, params.id))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
   const { rows } = await req.json();
   if (!Array.isArray(rows) || rows.length === 0) {
     return NextResponse.json({ error: "rows array required" }, { status: 400 });

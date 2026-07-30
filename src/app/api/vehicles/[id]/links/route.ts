@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 import { randomUUID } from "crypto";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
@@ -11,6 +12,9 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await canEditVehicle(req, params.id))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
   const { title, url, description, category } = await req.json();
   if (!title?.trim() || !url?.trim()) {
     return NextResponse.json({ error: "title and url are required" }, { status: 400 });

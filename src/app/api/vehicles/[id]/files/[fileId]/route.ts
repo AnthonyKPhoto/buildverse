@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 import path from "path";
 import fs from "fs";
 
@@ -10,9 +11,12 @@ function filesRoot(): string {
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: { id: string; fileId: string } }
 ) {
+  if (!(await canEditVehicle(req, params.id))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
   const record = await prisma.vehicleFile.findFirst({
     where: { id: params.fileId, vehicleId: params.id },
   });

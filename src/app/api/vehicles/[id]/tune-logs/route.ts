@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 import path from "path";
 import fs from "fs";
 import { v4 as uuid } from "uuid";
@@ -15,6 +16,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await canEditVehicle(req, params.id))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;

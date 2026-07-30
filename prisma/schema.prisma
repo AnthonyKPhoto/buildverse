@@ -9,26 +9,28 @@ datasource db {
 }
 
 model Vehicle {
-  id           String   @id @default(cuid())
-  name         String?
-  year         Int
-  make         String
-  model        String
-  trim         String?
-  engine       String?
-  transmission String?
-  drivetrain   String?
-  vin          String?
-  mileage      Int?
-  platform     String?
-  color        String?
-  photoUrl     String?
-  notes        String?
-  instagramUrl String?
-  facebookUrl  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String   @id @default(cuid())
+  name            String?
+  year            Int
+  make            String
+  model           String
+  trim            String?
+  engine          String?
+  transmission    String?
+  drivetrain      String?
+  vin             String?
+  mileage         Int?
+  platform        String?
+  color           String?
+  photoUrl        String?
+  notes           String?
+  instagramUrl    String?
+  facebookUrl     String?
+  createdByUserId String?  // server mode only — null in local/Electron use
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
+  createdByUser   User?    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   modifications   Modification[]
   maintenanceLogs MaintenanceLog[]
   budgets         Budget[]
@@ -37,6 +39,9 @@ model Vehicle {
   tuneLogs        TuneLog[]
   links           VehicleLink[]
   vehicleNotes    VehicleNote[]
+  accessGrants    VehicleAccess[]
+
+  @@index([createdByUserId])
 }
 
 model VehicleLink {
@@ -236,12 +241,36 @@ model Setting {
 }
 
 // Server deployments only (see src/lib/auth) — inert/unused in local/Electron
-// mode. Everyone shares the same garage data; this is just per-person login
-// identity plus an admin/member role for account management.
+// mode. Everyone shares the same garage data for *viewing*; edit access to a
+// given vehicle is admins + its creator + explicit VehicleAccess grants.
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  passwordHash String
-  role         String   @default("member") // "admin" | "member"
-  createdAt    DateTime @default(now())
+  id                 String   @id @default(cuid())
+  username           String   @unique
+  email              String?  // used to send a temp password when an admin creates the account
+  passwordHash       String
+  role               String   @default("member") // "admin" | "member"
+  mustChangePassword Boolean  @default(false) // true after an admin creates the account with a temp password
+  // Per-user appearance — each user's own look, editable only by themselves.
+  accentColor        String?
+  radius             String?
+  font               String?
+  colorScheme        String?
+  createdAt          DateTime @default(now())
+
+  createdVehicles Vehicle[]
+  vehicleAccess   VehicleAccess[]
+}
+
+// Explicit "this user may edit this vehicle" grant, set by an admin. Does not
+// affect viewing — the garage stays shared for everyone to look at.
+model VehicleAccess {
+  id        String   @id @default(cuid())
+  vehicleId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, userId])
 }

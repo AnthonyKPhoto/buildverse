@@ -23,7 +23,27 @@ export function verifyPassword(password: string, storedHash: string): boolean {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-/** Remote auth is only active when the bootstrap admin has been configured (Docker deployment). */
+const TEMP_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"; // no 0/O/1/l/I — avoids transcription mistakes when a user reads this off an email
+const TEMP_PASSWORD_LENGTH = 14;
+
+/** Cryptographically random temp password for admin-created accounts that get emailed rather than typed. */
+export function generateTempPassword(): string {
+  const bytes = randomBytes(TEMP_PASSWORD_LENGTH);
+  let out = "";
+  for (let i = 0; i < TEMP_PASSWORD_LENGTH; i++) {
+    out += TEMP_PASSWORD_ALPHABET[bytes[i] % TEMP_PASSWORD_ALPHABET.length];
+  }
+  return out;
+}
+
+// Remote auth is only active for a real server deployment (Docker), never for
+// local/Electron use — AUTH_SESSION_SECRET is the switch, since it's required
+// either way to sign session cookies. ADMIN_PASSWORD_HASH is now optional: if
+// set, it bootstraps a specific admin account on container start (see
+// scripts/docker-init-db.js); if left unset, the first person to visit the
+// site gets a self-service "create the admin account" form instead (see
+// /api/auth/setup) and becomes admin. Either path works, and they compose —
+// docker-init-db.js only creates its bootstrap account if no admin exists yet.
 export function isAuthEnabled(): boolean {
-  return !!process.env.ADMIN_PASSWORD_HASH;
+  return !!process.env.AUTH_SESSION_SECRET;
 }

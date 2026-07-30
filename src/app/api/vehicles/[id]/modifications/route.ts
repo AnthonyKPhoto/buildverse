@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 import { z } from "zod";
 
 // Accepts https:// URLs or base64 data: images uploaded from the client
@@ -48,6 +49,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  if (!(await canEditVehicle(req, params.id))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
   try {
     const body = await req.json();
     const data = modSchema.parse(body);

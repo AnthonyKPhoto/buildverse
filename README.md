@@ -38,6 +38,7 @@ Available as:
 - **Maintenance Logs** — Full service history with next-due alerts
 - **Vendor Directory** — Curated list of trusted automotive vendors
 - **Data Export** — JSON backup from the Settings page
+- **Per-user appearance** (server mode) — each account's accent color, corner style, font, and light/dark mode is saved to their own account and follows them across devices/browsers
 
 ---
 
@@ -89,20 +90,27 @@ most self-hosters already have one.
 
 ### 2. Configure
 
-```powershell
-# Generate a password hash for the bootstrap admin account
-node scripts/hash-password.js "your-password"
-```
-
 Set in your `.env` (see `.env.example`):
 ```
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD_HASH=<output from hash-password.js>
 AUTH_SESSION_SECRET=<any long random string>
 ```
 
-Auth only activates when `ADMIN_PASSWORD_HASH` is set — local dev and the
-Electron app's local mode are completely unaffected either way.
+That's the only variable that's actually required — setting it turns on
+login for everyone except local connections (auth is completely inert, and
+local dev/Electron completely unaffected, if it's left unset).
+
+Optionally, pre-provision a specific admin account before your first visit:
+```powershell
+node scripts/hash-password.js "your-password"
+```
+```
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD_HASH=<output from hash-password.js>
+```
+If you skip this, the first person to visit the site gets a "create the
+admin account" form instead of a login form — whoever submits it first
+becomes admin. Simplest for a fresh deploy; just don't leave that window
+open on the public internet longer than it takes you to sign up.
 
 ### 3. Start it
 
@@ -110,10 +118,10 @@ Electron app's local mode are completely unaffected either way.
 docker compose up -d
 ```
 
-The schema and the bootstrap admin account are both applied automatically on
-every boot (both are no-ops once already up to date, so this is always safe
-to re-run, not just on first start). Visit your domain and sign in with the
-admin account above.
+The schema is applied automatically on every boot (a no-op once already up
+to date, so this is always safe to re-run, not just on first start). Visit
+your domain and either sign in with the admin account above, or create the
+admin account if you didn't pre-provision one.
 
 ### 4. Update later
 
@@ -126,10 +134,23 @@ docker compose up -d
 
 ### Multiple users
 
-Everyone shares the same garage — separate logins are for individual
-accountability, not separate data. Sign in as the admin account, then
-**Settings → Access & Sync → Users** to add an account for each person
-(member or admin role), remove accounts, or reset someone's password.
+Everyone can *view* the same shared garage — separate logins are for
+individual accountability and per-vehicle *edit* permissions, not separate
+data. Sign in as the admin account, then **Settings → Access & Sync →
+Users** to add an account for each person (member or admin role), remove
+accounts, or reset someone's password.
+
+Adding a user with just a username/password works immediately. Give an
+email instead of typing a password and BuildVerse generates a temporary one
+and emails it (configure SMTP first under **Settings → Access & Sync →
+Email (SMTP)**) — that account is asked to set its own password on first
+sign-in. If email delivery fails, the temp password is shown once so you
+can hand it over yourself.
+
+By default a member can edit any vehicle they created; anyone else's
+vehicles are view-only for them unless an admin grants edit access under
+**Settings → Access & Sync → Vehicle Access**. Admins can always edit
+everything.
 
 ### Bringing in vehicles from separate local installs
 
@@ -239,7 +260,7 @@ Without a certificate, Windows shows a SmartScreen warning. To remove it:
 | Database | SQLite via Prisma ORM |
 | Scraping | Cheerio (product price tracking) |
 | Self-hosted server | Docker, Watchtower (auto-update) |
-| Auth (server mode only) | Signed session cookie (jose), `scrypt` password hash — real per-user accounts, admin-managed |
+| Auth (server mode only) | Signed session cookie (jose), `scrypt` password hash — real per-user accounts, admin-managed, self-service first-admin setup, optional SMTP temp-password emails |
 | CI/CD | GitHub Actions |
 
 ---

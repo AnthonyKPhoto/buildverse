@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 import { z } from "zod";
 
 const safeUrl = z
@@ -33,6 +34,12 @@ const modUpdateSchema = z.object({
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const existing = await prisma.modification.findUnique({ where: { id: params.id }, select: { vehicleId: true } });
+    if (!existing) return NextResponse.json({ error: "Modification not found" }, { status: 404 });
+    if (!(await canEditVehicle(req, existing.vehicleId))) {
+      return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+    }
+
     const body = await req.json();
     const data = modUpdateSchema.parse(body);
     const mod = await prisma.modification.update({
@@ -56,8 +63,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const existing = await prisma.modification.findUnique({ where: { id: params.id }, select: { vehicleId: true } });
+    if (!existing) return NextResponse.json({ error: "Modification not found" }, { status: 404 });
+    if (!(await canEditVehicle(req, existing.vehicleId))) {
+      return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+    }
+
     // Remove dependency rows referencing this mod on either side before deleting
     // (SQLite doesn't cascade FK deletes automatically)
     await prisma.modDependency.deleteMany({

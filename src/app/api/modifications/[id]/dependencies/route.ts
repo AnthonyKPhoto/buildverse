@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 
 // GET: list of mods that [id] depends on
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -13,6 +14,12 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 // PUT: replace full dependency list for [id]
 // Body: { dependsOn: string[] }  — array of mod IDs this mod requires
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const existing = await prisma.modification.findUnique({ where: { id: params.id }, select: { vehicleId: true } });
+  if (!existing) return NextResponse.json({ error: "Modification not found" }, { status: 404 });
+  if (!(await canEditVehicle(req, existing.vehicleId))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
+
   const { dependsOn } = await req.json() as { dependsOn: string[] };
 
   if (!Array.isArray(dependsOn)) {

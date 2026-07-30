@@ -6,8 +6,19 @@ import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 const PUBLIC_FILE = /\.[^/]+$/;
 
 // Paths that must stay reachable even when auth is enforced, so the login
-// page itself (and the endpoint it depends on) can render and be used.
-const PUBLIC_PATHS = new Set(["/login", "/api/auth/login", "/api/health"]);
+// page itself (and the endpoints it depends on) can render and be used.
+const PUBLIC_PATHS = new Set([
+  "/login",
+  "/api/auth/login",
+  "/api/auth/setup",
+  "/api/auth/setup-status",
+  "/api/health",
+]);
+
+// Reachable even while a forced password change is pending — the page that
+// does the changing, and logout (so someone can bail out to a different
+// account instead of being stuck).
+const PASSWORD_CHANGE_PATHS = new Set(["/change-password", "/api/auth/change-password", "/api/auth/logout"]);
 
 function isLocalRequest(request: NextRequest): boolean {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -32,11 +43,13 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next({ request: { headers: stripIdentityHeaders(req) } });
   }
 
-  // Auth is entirely inert unless a Docker/server deployment has bootstrapped
-  // an admin account — local dev and the Electron app's local (non-Connected)
-  // mode never see it, and the Electron window loading its own spawned local
-  // server always counts as local below anyway.
-  if (!process.env.ADMIN_PASSWORD_HASH) {
+  // Auth is entirely inert unless a Docker/server deployment has set
+  // AUTH_SESSION_SECRET — local dev and the Electron app's local
+  // (non-Connected) mode never see it, and the Electron window loading its
+  // own spawned local server always counts as local below anyway. Whether an
+  // admin account already exists yet (bootstrapped via ADMIN_PASSWORD_HASH,
+  // or nobody yet — see /api/auth/setup) doesn't change this check.
+  if (!process.env.AUTH_SESSION_SECRET) {
     return NextResponse.next({ request: { headers: stripIdentityHeaders(req) } });
   }
 
@@ -57,6 +70,15 @@ export async function middleware(req: NextRequest) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // An admin-created account (temp password, emailed) must set its own
+  // password before doing anything else.
+  if (claims.mustChangePassword && !PASSWORD_CHANGE_PATHS.has(pathname)) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Password change required" }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL("/change-password", req.url));
   }
 
   // Forward identity to downstream routes as headers — API routes (e.g. the

@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
     userId: user.id,
     username: user.username,
     role: user.role === "admin" ? "admin" : "member",
+    mustChangePassword: user.mustChangePassword,
   });
   const res = NextResponse.json({
     success: true,

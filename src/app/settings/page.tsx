@@ -7,7 +7,7 @@ import {
   Archive, RotateCcw, Trash2, ArrowUpCircle,
   CheckCircle2, AlertCircle, Loader2, X, Save, ShoppingBag,
   Tag, Plus, GripVertical,
-  Shield, Plug, Key, Cloud,
+  Shield, Plug, Key, Cloud, Mail, Send, Copy,
 } from "lucide-react";
 import { MOD_CATEGORIES } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -25,7 +25,10 @@ interface AppInfo { version: string; userDataPath: string; dbPath: string; isDev
 interface BackupEntry { name: string; filePath: string; size: number; createdAt: string; }
 interface HealthInfo { status: string; version: string; mode: "local" | "server"; }
 interface CurrentUser { id: string; username: string; role: "admin" | "member"; }
-interface ManagedUser { id: string; username: string; role: "admin" | "member"; createdAt: string; }
+interface ManagedUser { id: string; username: string; email: string | null; role: "admin" | "member"; mustChangePassword: boolean; createdAt: string; }
+interface SmtpConfigForm { host: string; port: number; secure: boolean; username: string; from: string; hasPassword: boolean; }
+interface AccessVehicle { id: string; name: string | null; year: number; make: string; model: string; createdByUserId: string | null; }
+interface VehicleAccessData { vehicles: AccessVehicle[]; users: ManagedUser[]; grants: { vehicleId: string; userId: string }[]; }
 type Section = "general" | "access" | "integrations" | "data";
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
@@ -167,10 +170,30 @@ export default function SettingsPage() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState<"admin" | "member">("member");
   const [addingUser, setAddingUser] = useState(false);
   const [resetTarget, setResetTarget] = useState<string | null>(null);
   const [resetPasswordValue, setResetPasswordValue] = useState("");
+  const [revealedPassword, setRevealedPassword] = useState<{ username: string; password: string; emailError?: string } | null>(null);
+
+  // SMTP (server mode, admin-only) — used to email temp passwords for
+  // admin-created accounts.
+  const [smtpConfig, setSmtpConfig] = useState<SmtpConfigForm | null>(null);
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState(587);
+  const [smtpSecure, setSmtpSecure] = useState(false);
+  const [smtpUsername, setSmtpUsername] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpFrom, setSmtpFrom] = useState("");
+  const [savingSmtp, setSavingSmtp] = useState(false);
+  const [testEmailTo, setTestEmailTo] = useState("");
+  const [testingSmtp, setTestingSmtp] = useState(false);
+
+  // Per-vehicle edit access (server mode, admin-only)
+  const [vehicleAccess, setVehicleAccess] = useState<VehicleAccessData | null>(null);
+  const [loadingAccess, setLoadingAccess] = useState(false);
+  const [togglingCell, setTogglingCell] = useState<string | null>(null);
 
   // Server Data (admin-only DB restore, server mode only)
   const [restorePassword, setRestorePassword] = useState("");
@@ -220,6 +243,30 @@ export default function SettingsPage() {
     finally { setLoadingUsers(false); }
   }, []);
 
+  const loadVehicleAccess = useCallback(async () => {
+    setLoadingAccess(true);
+    try {
+      const res = await fetch("/api/admin/vehicle-access");
+      if (res.ok) setVehicleAccess(await res.json());
+    } catch {}
+    finally { setLoadingAccess(false); }
+  }, []);
+
+  const loadSmtpConfig = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/settings/smtp");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data) return;
+      setSmtpConfig(data);
+      setSmtpHost(data.host);
+      setSmtpPort(data.port);
+      setSmtpSecure(data.secure);
+      setSmtpUsername(data.username);
+      setSmtpFrom(data.from);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     const stored = localStorage.getItem("bv_autoTrackProducts");
     setAutoTrackProducts(stored === null ? true : stored === "true");
@@ -227,7 +274,7 @@ export default function SettingsPage() {
     fetch("/api/health").then(r => r.json()).then(setHealth).catch(() => {});
     fetch("/api/auth/me").then(r => r.json()).then(({ user }) => {
       setCurrentUser(user);
-      if (user?.role === "admin") loadUsers();
+      if (user?.role === "admin") { loadUsers(); loadSmtpConfig(); loadVehicleAccess(); }
     }).catch(() => {});
     if (isElectron) {
       window.electronAPI!.getAppInfo().then(setAppInfo).catch(() => {});
@@ -240,7 +287,7 @@ export default function SettingsPage() {
       const unsub = window.electronAPI!.update.onStatus(setUpdateStatus);
       return unsub;
     }
-  }, [isElectron, loadBackups, loadStats, loadUsers]);
+  }, [isElectron, loadBackups, loadStats, loadUsers, loadSmtpConfig, loadVehicleAccess]);
 
   useEffect(() => {
     fetch("/api/settings/categories")
@@ -307,17 +354,98 @@ export default function SettingsPage() {
       const res = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: newUsername, password: newPassword, role: newRole }),
+        body: JSON.stringify({
+          username: newUsername,
+          role: newRole,
+          ...(newPassword ? { password: newPassword } : {}),
+          ...(newEmail ? { email: newEmail } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(Array.isArray(data.error) ? data.error[0]?.message : data.error);
-      toast({ title: `User "${newUsername}" created` });
-      setNewUsername(""); setNewPassword(""); setNewRole("member");
+      if (data.tempPassword) {
+        // Email sending failed — surface the auto-generated password so the
+        // admin can hand it to the user directly instead of a dead end.
+        setRevealedPassword({ username: data.username, password: data.tempPassword, emailError: data.emailError });
+        toast({ title: `User "${newUsername}" created`, description: "Couldn't email the temp password — copy it from the dialog.", variant: "destructive" });
+      } else if (!newPassword) {
+        toast({ title: `User "${newUsername}" created`, description: `Temp password emailed to ${newEmail}` });
+      } else {
+        toast({ title: `User "${newUsername}" created` });
+      }
+      setNewUsername(""); setNewPassword(""); setNewEmail(""); setNewRole("member");
       await loadUsers();
     } catch (err) {
       toast({ title: "Couldn't add user", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
     } finally {
       setAddingUser(false);
+    }
+  };
+
+  const toggleVehicleAccess = async (vehicleId: string, userId: string, grant: boolean) => {
+    const cellKey = `${vehicleId}:${userId}`;
+    setTogglingCell(cellKey);
+    try {
+      const res = await fetch("/api/admin/vehicle-access", {
+        method: grant ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vehicleId, userId }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setVehicleAccess(prev => {
+        if (!prev) return prev;
+        const grants = grant
+          ? [...prev.grants, { vehicleId, userId }]
+          : prev.grants.filter(g => !(g.vehicleId === vehicleId && g.userId === userId));
+        return { ...prev, grants };
+      });
+    } catch (err) {
+      toast({ title: "Couldn't update access", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setTogglingCell(null);
+    }
+  };
+
+  const saveSmtpConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingSmtp(true);
+    try {
+      const res = await fetch("/api/admin/settings/smtp", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: smtpHost, port: smtpPort, secure: smtpSecure, username: smtpUsername, from: smtpFrom,
+          ...(smtpPassword ? { password: smtpPassword } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSmtpConfig(data);
+      setSmtpPassword("");
+      toast({ title: "SMTP settings saved" });
+    } catch (err) {
+      toast({ title: "Couldn't save SMTP settings", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setSavingSmtp(false);
+    }
+  };
+
+  const sendTestEmail = async () => {
+    if (!testEmailTo) return;
+    setTestingSmtp(true);
+    try {
+      const res = await fetch("/api/admin/settings/smtp/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to: testEmailTo }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({ title: `Test email sent to ${testEmailTo}` });
+    } catch (err) {
+      toast({ title: "Test email failed", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setTestingSmtp(false);
     }
   };
 
@@ -561,6 +689,30 @@ export default function SettingsPage() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="animate-fade-in">
+      {/* Temp password reveal — shown when email delivery failed so the
+          admin can still hand the account over manually. */}
+      {revealedPassword && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card shadow-card p-5 space-y-3">
+            <div className="flex items-center gap-2 text-amber-400">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <p className="text-sm font-semibold">Couldn't email the temp password</p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {revealedPassword.emailError || "Delivery failed."} Share this password with{" "}
+              <span className="font-medium text-foreground">{revealedPassword.username}</span> directly — they'll be asked to set their own on first sign-in.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 px-3 py-2 text-sm rounded-lg border border-input bg-secondary/40 select-all">{revealedPassword.password}</code>
+              <Btn onClick={() => navigator.clipboard.writeText(revealedPassword.password)}>
+                <Copy className="w-3.5 h-3.5" />
+              </Btn>
+            </div>
+            <Btn variant="primary" className="w-full justify-center" onClick={() => setRevealedPassword(null)}>Done</Btn>
+          </div>
+        </div>
+      )}
+
       {/* Hero banner */}
       <div className="-mx-6 -mt-8 mb-8 px-6 pt-8 pb-6 border-b border-border/60 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
@@ -880,6 +1032,9 @@ export default function SettingsPage() {
                               >
                                 {u.role}
                               </button>
+                              {u.mustChangePassword && (
+                                <span className="text-2xs text-muted-foreground shrink-0" title="Must set their own password on next sign-in">pending</span>
+                              )}
                               {u.id === currentUser.id && <span className="text-2xs text-muted-foreground">(you)</span>}
                             </div>
                             <div className="flex gap-1 shrink-0">
@@ -910,36 +1065,165 @@ export default function SettingsPage() {
                     </div>
                   )}
 
-                  <form onSubmit={addUser} className="flex flex-wrap items-center gap-2 pt-3 border-t border-border/60">
-                    <input
-                      type="text"
-                      required
-                      value={newUsername}
-                      onChange={e => setNewUsername(e.target.value)}
-                      placeholder="Username"
-                      className="w-32 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    <input
-                      type="password"
-                      required
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      placeholder="Password"
-                      className="w-32 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    <select
-                      value={newRole}
-                      onChange={e => setNewRole(e.target.value as "admin" | "member")}
-                      className="px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                    >
-                      <option value="member">Member</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                    <Btn variant="primary" disabled={addingUser}>
-                      {addingUser ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                      Add User
-                    </Btn>
+                  <form onSubmit={addUser} className="pt-3 border-t border-border/60 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        required
+                        value={newUsername}
+                        onChange={e => setNewUsername(e.target.value)}
+                        placeholder="Username"
+                        className="w-32 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        placeholder="Password (optional)"
+                        className="w-36 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      <input
+                        type="email"
+                        value={newEmail}
+                        onChange={e => setNewEmail(e.target.value)}
+                        placeholder="Email (for temp password)"
+                        className="w-48 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      <select
+                        value={newRole}
+                        onChange={e => setNewRole(e.target.value as "admin" | "member")}
+                        className="px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <option value="member">Member</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                      <Btn variant="primary" disabled={addingUser || !newUsername || (!newPassword && !newEmail)}>
+                        {addingUser ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                        Add User
+                      </Btn>
+                    </div>
+                    <p className="text-2xs text-muted-foreground">
+                      Leave password blank and give an email to auto-generate one and email it — they'll set their own on first sign-in.
+                    </p>
                   </form>
+                </Section>
+              )}
+
+              {health?.mode === "server" && currentUser?.role === "admin" && (
+                <Section title="Vehicle Access" icon={Key}>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Viewing the garage is always shared. Editing a vehicle is limited to admins, its creator (★), and anyone checked below.
+                  </p>
+                  {loadingAccess ? (
+                    <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+                    </div>
+                  ) : !vehicleAccess || vehicleAccess.vehicles.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-2">No vehicles yet.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="border-b border-border/60">
+                            <th className="text-left font-medium text-muted-foreground py-2 pr-3 whitespace-nowrap">Vehicle</th>
+                            {vehicleAccess.users.filter(u => u.role !== "admin").map(u => (
+                              <th key={u.id} className="text-center font-medium text-muted-foreground py-2 px-2 whitespace-nowrap">{u.username}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {vehicleAccess.vehicles.map(v => (
+                            <tr key={v.id} className="border-b border-border/40 last:border-0">
+                              <td className="py-2 pr-3 whitespace-nowrap">{v.name || `${v.year} ${v.make} ${v.model}`}</td>
+                              {vehicleAccess.users.filter(u => u.role !== "admin").map(u => {
+                                const isCreator = v.createdByUserId === u.id;
+                                const hasGrant = vehicleAccess.grants.some(g => g.vehicleId === v.id && g.userId === u.id);
+                                const cellKey = `${v.id}:${u.id}`;
+                                return (
+                                  <td key={u.id} className="text-center py-2 px-2">
+                                    {isCreator ? (
+                                      <span title={`${u.username} created this vehicle — always has edit access`} className="text-theme">★</span>
+                                    ) : (
+                                      <input
+                                        type="checkbox"
+                                        checked={hasGrant}
+                                        disabled={togglingCell === cellKey}
+                                        onChange={e => toggleVehicleAccess(v.id, u.id, e.target.checked)}
+                                        className="w-4 h-4 accent-theme cursor-pointer disabled:opacity-50"
+                                      />
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Section>
+              )}
+
+              {health?.mode === "server" && currentUser?.role === "admin" && (
+                <Section title="Email (SMTP)" icon={Mail}>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Used to email temporary passwords when you create an account by email instead of typing a password.
+                  </p>
+                  <form onSubmit={saveSmtpConfig} className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Host</label>
+                        <input type="text" required value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.example.com"
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Port</label>
+                        <input type="number" required value={smtpPort} onChange={e => setSmtpPort(Number(e.target.value))} placeholder="587"
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Username</label>
+                        <input type="text" required value={smtpUsername} onChange={e => setSmtpUsername(e.target.value)} placeholder="you@example.com"
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Password</label>
+                        <input type="password" value={smtpPassword} onChange={e => setSmtpPassword(e.target.value)}
+                          placeholder={smtpConfig?.hasPassword ? "•••••••• (unchanged)" : "SMTP password"}
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">From address</label>
+                        <input type="text" required value={smtpFrom} onChange={e => setSmtpFrom(e.target.value)} placeholder="BuildVerse <noreply@example.com>"
+                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
+                      </div>
+                    </div>
+                    <Row label="Use TLS (implicit)" desc="On for port 465, off for 587/25 (STARTTLS)" last>
+                      <Toggle on={smtpSecure} onChange={setSmtpSecure} />
+                    </Row>
+                    <div className="flex items-center gap-2 pt-1">
+                      <Btn variant="primary" disabled={savingSmtp}>
+                        {savingSmtp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        Save
+                      </Btn>
+                    </div>
+                  </form>
+
+                  {smtpConfig?.hasPassword && (
+                    <div className="flex items-center gap-2 pt-3 mt-3 border-t border-border/60">
+                      <input
+                        type="email"
+                        value={testEmailTo}
+                        onChange={e => setTestEmailTo(e.target.value)}
+                        placeholder="Send a test email to…"
+                        className="flex-1 max-w-xs px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      <Btn onClick={sendTestEmail} disabled={testingSmtp || !testEmailTo}>
+                        {testingSmtp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        Send Test
+                      </Btn>
+                    </div>
+                  )}
                 </Section>
               )}
 

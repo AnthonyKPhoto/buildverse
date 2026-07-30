@@ -53,7 +53,11 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const data = vehicleSchema.parse(body);
-    const vehicle = await prisma.vehicle.create({ data });
+    // Null in local/Electron mode (no x-user-id header there) — the creator
+    // always keeps edit access on top of whatever VehicleAccess grants an
+    // admin adds later, see src/lib/auth/vehicle-access.ts.
+    const createdByUserId = req.headers.get("x-user-id");
+    const vehicle = await prisma.vehicle.create({ data: { ...data, ...(createdByUserId ? { createdByUserId } : {}) } });
     return NextResponse.json(vehicle, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {

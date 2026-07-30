@@ -11,6 +11,10 @@ export interface SessionClaims {
   userId: string;
   username: string;
   role: "admin" | "member";
+  // Set at login time from the User row. Middleware redirects to
+  // /change-password whenever this is true — see src/middleware.ts. Changing
+  // password issues a fresh token with this cleared, so no re-login needed.
+  mustChangePassword: boolean;
 }
 
 function getSecretKey(): Uint8Array {
@@ -37,7 +41,12 @@ export async function verifySessionToken(token: string): Promise<SessionClaims |
     ) {
       return null;
     }
-    return { userId: payload.userId, username: payload.username, role: payload.role };
+    return {
+      userId: payload.userId,
+      username: payload.username,
+      role: payload.role,
+      mustChangePassword: payload.mustChangePassword === true,
+    };
   } catch {
     return null;
   }

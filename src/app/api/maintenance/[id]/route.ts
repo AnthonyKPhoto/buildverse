@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -16,6 +17,12 @@ const updateSchema = z.object({
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const existing = await prisma.maintenanceLog.findUnique({ where: { id: params.id }, select: { vehicleId: true } });
+    if (!existing) return NextResponse.json({ error: "Maintenance log not found" }, { status: 404 });
+    if (!(await canEditVehicle(req, existing.vehicleId))) {
+      return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+    }
+
     const body = await req.json();
     const data = updateSchema.parse(body);
     const log = await prisma.maintenanceLog.update({
@@ -35,8 +42,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const existing = await prisma.maintenanceLog.findUnique({ where: { id: params.id }, select: { vehicleId: true } });
+    if (!existing) return NextResponse.json({ error: "Maintenance log not found" }, { status: 404 });
+    if (!(await canEditVehicle(req, existing.vehicleId))) {
+      return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+    }
+
     await prisma.maintenanceLog.delete({ where: { id: params.id } });
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { CheckCircle2, ArrowRight, ChevronRight } from "lucide-react";
 import { ACCENT_PRESETS, applyAccent } from "@/components/ThemeProvider";
 
@@ -9,6 +10,7 @@ const STORAGE_KEY = "bv_setup_complete";
 type Step = "welcome" | "appearance" | "done";
 
 export function SetupWizard() {
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
   const [step,    setStep]    = useState<Step>("welcome");
   const [accent,  setAccent]  = useState("blue");
@@ -31,7 +33,12 @@ export function SetupWizard() {
     setVisible(false);
   }, []);
 
-  if (!visible) return null;
+  // Never show this over the login/setup/change-password screens — it's
+  // local-only "welcome to the app" onboarding (tracked per-browser via
+  // localStorage) and its z-[200] would otherwise sit on top of their z-50
+  // overlays, blocking those flows for any browser profile that hasn't
+  // dismissed it yet.
+  if (!visible || pathname === "/login" || pathname === "/change-password") return null;
 
   const STEPS: Step[] = ["welcome", "appearance", "done"];
   const stepIdx = STEPS.indexOf(step);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 import { z } from "zod";
 
 const updateSchema = z.object({
@@ -8,11 +9,14 @@ const updateSchema = z.object({
   notes:   z.string().max(2000).optional(),
 });
 
-export async function PUT(req: NextRequest, { params }: { params: { budgetId: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: { id: string; budgetId: string } }) {
+  if (!(await canEditVehicle(req, params.id))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
   try {
     const body = await req.json();
     const data = updateSchema.parse(body);
-    const budget = await prisma.budget.update({ where: { id: params.budgetId }, data });
+    const budget = await prisma.budget.update({ where: { id: params.budgetId, vehicleId: params.id }, data });
     return NextResponse.json(budget);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -22,9 +26,12 @@ export async function PUT(req: NextRequest, { params }: { params: { budgetId: st
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { budgetId: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string; budgetId: string } }) {
+  if (!(await canEditVehicle(req, params.id))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
   try {
-    await prisma.budget.delete({ where: { id: params.budgetId } });
+    await prisma.budget.delete({ where: { id: params.budgetId, vehicleId: params.id } });
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: "Failed to delete budget item" }, { status: 500 });

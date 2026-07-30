@@ -9,18 +9,23 @@ services:
     environment:
       - DATABASE_URL=file:/data/buildverse.db
 
-      # ── Bootstrap admin account ─────────────────────────────────────────────────
-      # Created automatically on first boot. Everyone else (including additional
-      # admins) is created afterward from Settings → Users by an admin — these two
-      # vars only matter for this very first account. Local connections (127.0.0.1,
-      # ::1 — the Electron window talking to its own spawned server) always bypass
-      # login; every other device signs in as a real user.
+      # ── Server mode ──────────────────────────────────────────────────────────────
+      # Setting AUTH_SESSION_SECRET turns on login for everyone except local
+      # connections (127.0.0.1, ::1 — the Electron window talking to its own
+      # spawned server, which always bypasses it). Any long random string.
+      # Generate with:
+      #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      - AUTH_SESSION_SECRET=
+
+      # ── Bootstrap admin account (optional) ───────────────────────────────────────
+      # Leave both blank and the first person to visit the site gets a
+      # "create the admin account" form instead — simplest for a fresh deploy.
+      # Set these only if you want a specific admin pre-provisioned before
+      # anyone visits. Everyone else (including additional admins) is created
+      # afterward from Settings → Users by an admin.
       - ADMIN_USERNAME=admin
       # Generate with: node scripts/hash-password.js "your-password"
       - ADMIN_PASSWORD_HASH=
-      # Any long random string, used to sign session cookies. Generate with:
-      #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-      - AUTH_SESSION_SECRET=
 
     restart: unless-stopped
 

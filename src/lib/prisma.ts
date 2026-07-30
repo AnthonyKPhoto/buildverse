@@ -149,6 +149,26 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key" ON "User"("username")`,
+    // User columns for admin-managed accounts (temp-password email + forced
+    // change) and per-user appearance — added after the initial User table.
+    `ALTER TABLE "User" ADD COLUMN "email" TEXT`,
+    `ALTER TABLE "User" ADD COLUMN "mustChangePassword" BOOLEAN NOT NULL DEFAULT 0`,
+    `ALTER TABLE "User" ADD COLUMN "accentColor" TEXT`,
+    `ALTER TABLE "User" ADD COLUMN "radius" TEXT`,
+    `ALTER TABLE "User" ADD COLUMN "font" TEXT`,
+    `ALTER TABLE "User" ADD COLUMN "colorScheme" TEXT`,
+    // Vehicle.createdByUserId + VehicleAccess — per-vehicle edit permissions.
+    `ALTER TABLE "Vehicle" ADD COLUMN "createdByUserId" TEXT`,
+    `CREATE INDEX IF NOT EXISTS "Vehicle_createdByUserId_idx" ON "Vehicle"("createdByUserId")`,
+    `CREATE TABLE IF NOT EXISTS "VehicleAccess" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "vehicleId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("vehicleId") REFERENCES "Vehicle"("id") ON DELETE CASCADE,
+      FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "VehicleAccess_vehicleId_userId_key" ON "VehicleAccess"("vehicleId","userId")`,
   ];
   for (const sql of stmts) {
     await prisma.$executeRawUnsafe(sql).catch(() => {});

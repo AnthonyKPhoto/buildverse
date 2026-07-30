@@ -41,8 +41,9 @@ src/
       vehicles/[id]/      CRUD + nested resources (mods, budget, maintenance, files, dyno, tune-logs, links, notes, recalls)
       modifications/[id]/ PUT (update) + DELETE (also cleans ModDependency rows)
       products/           Tracked product scraping + price history + alerts
-      auth/               Login/logout/me — per-user, cookie-based session (see Authentication below)
-      admin/              Admin-only: users CRUD, restore-db (raw .db upload, server mode only)
+      auth/               Login/logout/me/setup/setup-status/change-password — per-user, cookie-based session (see Authentication below)
+      admin/              Admin-only: users CRUD, vehicle-access grants, settings/smtp, restore-db (raw .db upload, server mode only)
+      user/theme/         Self-only PUT of the signed-in account's own appearance prefs
       health/             Unauthenticated status/mode endpoint (Docker healthcheck + client mode detection)
       integrations/lubelogger/  LubeLogger pull sync
       stats/              Dashboard aggregate counts
@@ -58,7 +59,8 @@ src/
     maintenance/          Global maintenance log
     vendors/              Static vendor directory
     settings/             App settings, theme, data management, Access & Sync (server connection, account, users)
-    login/                Server-mode login page (username + password)
+    login/                Server-mode login page — AuthGate branches between LoginForm and SetupForm (first-run self-service admin)
+    change-password/      Forced password-change page (temp-password accounts) — also reachable voluntarily
   components/
     layout/               Sidebar, BottomNav (mobile), GlobalSearch
     modifications/        AddModDialog, CSVImportDialog
@@ -73,9 +75,11 @@ src/
     utils.ts              Shared helpers — formatCurrency, calcTotalModValue, MOD_STATUSES, EXCLUDED_FROM_VALUE, etc.
     scraper.ts            Product URL scraper (cheerio via undici, SSRF-guarded + DNS-rebinding pinned)
     lubelogger.ts         LubeLogger API client
-    auth/password.ts       scrypt hash/verify + isAuthEnabled() (Node-only, never import from middleware.ts)
-    auth/session.ts        Signed session cookie (jose, Edge-safe) carrying {userId, username, role}
-  middleware.ts           Auth gate — loopback always bypasses (Electron's own spawned server); remote requires a valid per-user session
+    auth/password.ts       scrypt hash/verify + isAuthEnabled() + generateTempPassword() (Node-only, never import from middleware.ts)
+    auth/session.ts        Signed session cookie (jose, Edge-safe) carrying {userId, username, role, mustChangePassword}
+    auth/vehicle-access.ts canEditVehicle() — per-vehicle edit permission check, called from mutating vehicle sub-resource routes
+    mailer.ts              nodemailer wrapper + SMTP config storage (Setting table key "smtp"), used for temp-password emails
+  middleware.ts           Auth gate — loopback always bypasses (Electron's own spawned server); remote requires a valid per-user session; forces mustChangePassword accounts to /change-password
   hooks/
     use-toast.ts
     use-categories.ts     Dynamic category list from API
@@ -105,8 +109,9 @@ electron/
 | `TuneLog` | name, filename, originalName, size | |
 | `VehicleNote` | title, content, color, importance | Sticky-note board |
 | `VehicleLink` | title, url, description, category | External links per vehicle |
-| `Setting` | key, value | App-wide key/value store |
-| `User` | username (unique), passwordHash, role (admin\|member) | Server mode only — see Authentication below. Everyone shares the same garage; this is per-person login identity, not data isolation. |
+| `Setting` | key, value | App-wide key/value store (custom categories, LubeLogger config, SMTP config under key `"smtp"`) |
+| `User` | username (unique), email, passwordHash, role (admin\|member), mustChangePassword, accentColor, radius, font, colorScheme | Server mode only — see Authentication below. Everyone shares the same garage; this is per-person login identity, not data isolation. Theme fields are this account's own saved appearance (see "Per-user theme"). |
+| `VehicleAccess` | vehicleId, userId (unique pair) | Explicit "this user may edit this vehicle" grant set by an admin. `Vehicle.createdByUserId` (nullable, `SetNull` on user delete) tracks the creator, who always keeps edit access alongside admins and anyone with a grant. |
 
 **Schema changes:** edit `prisma/schema.prisma` then run `npx prisma db push`. No migrations needed (SQLite + `db push`).
 
@@ -137,7 +142,7 @@ replaced an earlier single-shared-password + Google-login scheme, and Google Dri
 OAuth) has been removed entirely in favor of the server itself being the single source of truth
 (see "Server-as-source-of-truth" below).
 
-Auth is entirely **inert** unless `ADMIN_PASSWORD_HASH` is set (i.e. local dev and Electron's local
+Auth is entirely **inert** unless `AUTH_SESSION_SECRET` is set (i.e. local dev and Electron's local
 mode are never affected). When it is set (Docker/server deployments):
 
 - Loopback (`127.0.0.1`, `::1`) always bypasses — this is Electron's own spawned local server talking
@@ -149,14 +154,36 @@ mode are never affected). When it is set (Docker/server deployments):
   `x-user-role` headers to the request for downstream routes to trust — it strips any client-supplied
   copies of those headers first, so they can't be spoofed.
 
-**First admin:** bootstrapped automatically on container boot from `ADMIN_USERNAME` /
-`ADMIN_PASSWORD_HASH` (see `scripts/docker-init-db.js`) — this also re-runs (self-healing) if the
-`User` table ever ends up with zero admins, e.g. after restoring an old Electron backup via
-`/api/admin/restore-db` that predates the `User` table. Every other account (including more admins)
-is created afterward from **Settings → Access & Sync → Users**, admin-only.
+**First admin — two ways, and they compose:**
+1. **Self-service (default):** the first time anyone visits a fresh server with zero `User` rows, the
+   login page (`src/app/login/AuthGate.tsx`, driven by `GET /api/auth/setup-status`) shows a
+   "create the admin account" form instead of a login form (`POST /api/auth/setup`). Whoever submits
+   it first becomes admin — race-safe via a `$transaction` count-then-create, but note this means
+   whoever reaches a freshly-deployed empty server first gets the admin slot, so complete setup
+   promptly after first boot (or pre-provision below if that window is a concern).
+2. **Pre-provisioned (optional):** set `ADMIN_USERNAME` / `ADMIN_PASSWORD_HASH` before first boot and
+   `scripts/docker-init-db.js` bootstraps that specific account instead — this also re-runs
+   (self-healing) if the `User` table ever ends up with zero admins, e.g. after restoring an old
+   Electron backup via `/api/admin/restore-db` that predates the `User` table.
+
+Every other account (including more admins) is created afterward from **Settings → Access & Sync →
+Users**, admin-only — either with a password the admin types directly, or (if an email is given
+instead) an auto-generated temp password emailed via the SMTP settings on that same page
+(`src/lib/mailer.ts`, config stored in the `Setting` table). A temp-password account gets
+`mustChangePassword: true` and is forced to `/change-password` (`src/middleware.ts`) before it can do
+anything else; submitting a new password there (`POST /api/auth/change-password`) clears the flag and
+issues a fresh session token — no re-login needed.
 
 **Login:** POST `/api/auth/login` with `{ username, password }`.
-**Current user:** GET `/api/auth/me` (reads the headers middleware already attached).
+**Current user:** GET `/api/auth/me` (reads the headers middleware already attached, plus the user's
+saved theme fields straight from the DB — see "Per-user theme" below).
+
+**Per-vehicle edit access:** viewing the garage is always shared. Editing a given vehicle (and its
+mods/maintenance/budget/etc.) requires being an admin, that vehicle's creator (`Vehicle.createdByUserId`,
+set from `x-user-id` at creation time), or holding an explicit `VehicleAccess` grant — see
+`src/lib/auth/vehicle-access.ts`'s `canEditVehicle()`, called from every mutating vehicle sub-resource
+route. Admins manage grants from **Settings → Access & Sync → Vehicle Access**
+(`GET/POST/DELETE /api/admin/vehicle-access`).
 
 ---
 
@@ -191,14 +218,35 @@ introduced here.
 
 ---
 
+## Per-user theme (server mode)
+
+`ThemeProvider.tsx` applies from this browser's own `localStorage` immediately on mount (avoids a
+flash of default theme), then fetches `GET /api/auth/me` — if it's a real signed-in identity (server
+mode, not the loopback bypass) and the account has saved theme fields, those override the local
+fallback. Each `useCurrentAccent`/`useCurrentRadius`/`useCurrentFont`/`useCurrentScheme` setter both
+applies locally and fire-and-forgets a `PUT /api/user/theme` (self-only — a user can only set their
+own). This is what makes the same account's look follow it to a different browser/device; local mode
+and the loopback bypass never call the server path at all (the PUT just 401s silently, which is fine
+since it's never awaited or surfaced).
+
+Known minor gap: the Settings page's own `useCurrentX` hooks read `localStorage` once on mount for
+their swatch-highlight state, so on a brand-new browser the highlighted swatch can lag a moment behind
+`ThemeProvider`'s async server override (the actual applied CSS variables are always correct). Self-
+corrects on any interaction or reload — not worth a shared theme context for this.
+
+---
+
 ## Environment variables
 
 | Variable | Required | Purpose |
 |----------|---------|---------|
 | `DATABASE_URL` | Docker only | `file:/data/buildverse.db` — dev uses `.env`/`.env.local` |
-| `ADMIN_USERNAME` | Optional (server mode) | Bootstrap admin's username, default `admin` |
-| `ADMIN_PASSWORD_HASH` | Optional (server mode) | Generate with `node scripts/hash-password.js "password"`. Setting this is what turns auth on at all. |
-| `AUTH_SESSION_SECRET` | Required if `ADMIN_PASSWORD_HASH` is set | Long random string signing session cookies |
+| `AUTH_SESSION_SECRET` | Optional (server mode) | Long random string signing session cookies. **Setting this is what turns server-mode auth on at all** — `isAuthEnabled()` in `src/lib/auth/password.ts`. |
+| `ADMIN_USERNAME` | Optional | Pre-provisioned bootstrap admin's username, default `admin`. Leave unset to use self-service setup instead (see Authentication). |
+| `ADMIN_PASSWORD_HASH` | Optional | Generate with `node scripts/hash-password.js "password"`. Only needed if pre-provisioning the first admin instead of using self-service setup. |
+
+SMTP settings (for temp-password emails) are configured at runtime from **Settings → Access & Sync →
+Email (SMTP)**, not env vars — stored in the `Setting` table.
 
 Local dev: copy `.env.local` — no variables needed for basic use.
 

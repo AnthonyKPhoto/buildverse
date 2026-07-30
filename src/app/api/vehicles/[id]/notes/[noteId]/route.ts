@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string; noteId: string } }) {
+  if (!(await canEditVehicle(req, params.id))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
   try {
     const { title, content, color, importance } = await req.json();
     const note = await prisma.vehicleNote.update({
-      where: { id: params.noteId },
+      where: { id: params.noteId, vehicleId: params.id },
       data: {
         ...(title !== undefined && { title }),
         ...(content !== undefined && { content }),
@@ -19,9 +23,12 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string; 
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: { noteId: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string; noteId: string } }) {
+  if (!(await canEditVehicle(req, params.id))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
   try {
-    await prisma.vehicleNote.delete({ where: { id: params.noteId } });
+    await prisma.vehicleNote.delete({ where: { id: params.noteId, vehicleId: params.id } });
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: "Failed to delete note" }, { status: 500 });

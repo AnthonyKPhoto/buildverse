@@ -63,6 +63,18 @@ export function applyScheme(id: string) {
   localStorage.setItem("bv-scheme", id);
 }
 
+// Best-effort push to the signed-in account's own record, so their look
+// follows them to another browser/device. A no-op (401, swallowed) in
+// local/Electron mode or when nobody's signed in — never surfaced to the
+// user since there's nothing actionable for them to do about it.
+function syncThemeToServer(partial: Partial<{ accentColor: string; radius: string; font: string; colorScheme: string }>) {
+  fetch("/api/user/theme", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(partial),
+  }).catch(() => {});
+}
+
 export function useCurrentAccent() {
   const [accent, setAccentState] = useState("blue");
   useEffect(() => {
@@ -71,7 +83,7 @@ export function useCurrentAccent() {
   }, []);
   return {
     accent,
-    setAccent: (id: string) => { applyAccent(id); setAccentState(id); },
+    setAccent: (id: string) => { applyAccent(id); setAccentState(id); syncThemeToServer({ accentColor: id }); },
   };
 }
 
@@ -83,7 +95,7 @@ export function useCurrentRadius() {
   }, []);
   return {
     radius,
-    setRadius: (id: string) => { applyRadius(id); setRadiusState(id); },
+    setRadius: (id: string) => { applyRadius(id); setRadiusState(id); syncThemeToServer({ radius: id }); },
   };
 }
 
@@ -95,7 +107,7 @@ export function useCurrentFont() {
   }, []);
   return {
     font,
-    setFont: (id: string) => { applyFont(id); setFontState(id); },
+    setFont: (id: string) => { applyFont(id); setFontState(id); syncThemeToServer({ font: id }); },
   };
 }
 
@@ -107,16 +119,32 @@ export function useCurrentScheme() {
   }, []);
   return {
     scheme,
-    setScheme: (id: string) => { applyScheme(id); setSchemeState(id); },
+    setScheme: (id: string) => { applyScheme(id); setSchemeState(id); syncThemeToServer({ colorScheme: id }); },
   };
 }
 
 export function ThemeProvider() {
   useEffect(() => {
+    // Fast path: apply the last-known values immediately (avoids a flash of
+    // default theme), from this browser's own localStorage.
     applyAccent(localStorage.getItem("bv-accent") ?? "blue");
     applyRadius(localStorage.getItem("bv-radius") ?? "default");
     applyFont(localStorage.getItem("bv-font") ?? "inter");
     applyScheme(localStorage.getItem("bv-scheme") ?? "dark");
+
+    // Authoritative: in server mode with a real signed-in identity, the
+    // account's own saved theme (if any) overrides the local fallback above
+    // — this is what makes the look follow the account across devices.
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then(({ user }) => {
+        if (!user) return;
+        if (user.accentColor) applyAccent(user.accentColor);
+        if (user.radius) applyRadius(user.radius);
+        if (user.font) applyFont(user.font);
+        if (user.colorScheme) applyScheme(user.colorScheme);
+      })
+      .catch(() => {});
   }, []);
   return null;
 }

@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 import path from "path";
 import fs from "fs";
 
 const DATA_DIR = process.env.BUILDVERSE_DATA_DIR || path.join(process.cwd(), "data");
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string; logId: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string; logId: string } }) {
+  if (!(await canEditVehicle(req, params.id))) {
+    return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
+  }
   const log = await prisma.tuneLog.findUnique({ where: { id: params.logId } });
   if (!log || log.vehicleId !== params.id) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
