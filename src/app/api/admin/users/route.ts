@@ -1,0 +1,67 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { hashPassword } from "@/lib/auth/password";
+import { z } from "zod";
+
+// Admin-only account management. Everyone shares the same garage data — this
+// is just per-person login identity, not per-user data isolation.
+
+const createUserSchema = z.object({
+  username: z.string().min(3).max(50).regex(/^[a-zA-Z0-9_.-]+$/, "Letters, numbers, _ . - only"),
+  password: z.string().min(8).max(200),
+  role: z.enum(["admin", "member"]).default("member"),
+});
+
+function requireAdmin(req: NextRequest): NextResponse | null {
+  if (req.headers.get("x-user-role") !== "admin") {
+    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+  }
+  return null;
+}
+
+export async function GET(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
+  try {
+    const users = await prisma.user.findMany({
+      select: { id: true, username: true, role: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+    return NextResponse.json(users);
+  } catch {
+    return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const denied = requireAdmin(req);
+  if (denied) return denied;
+
+  try {
+    const body = await req.json();
+    const data = createUserSchema.parse(body);
+
+    const existing = await prisma.user.findUnique({ where: { username: data.username } });
+    if (existing) {
+      return NextResponse.json({ error: "That username is already taken" }, { status: 409 });
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        username: data.username,
+        role: data.role,
+        passwordHash: hashPassword(data.password),
+      },
+      select: { id: true, username: true, role: true, createdAt: true },
+    });
+    return NextResponse.json(user, { status: 201 });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.errors }, { status: 400 });
+    }
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[POST /api/admin/users]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}

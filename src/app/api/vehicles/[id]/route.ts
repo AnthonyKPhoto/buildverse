@@ -11,22 +11,22 @@ const safeUrl = z
   );
 
 const vehicleUpdateSchema = z.object({
-  name:         z.string().max(100).optional(),
+  name:         z.string().max(100).nullable().optional(),
   year:         z.number().int().min(1900).max(2030).optional(),
   make:         z.string().max(100).optional(),
   model:        z.string().max(100).optional(),
-  trim:         z.string().max(100).optional(),
-  engine:       z.string().max(100).optional(),
-  transmission: z.string().max(100).optional(),
-  drivetrain:   z.string().max(50).optional(),
-  vin:          z.string().max(17).optional(),
-  mileage:      z.number().int().min(0).optional(),
-  platform:     z.string().max(100).optional(),
-  color:        z.string().max(100).optional(),
-  photoUrl:     safeUrl.optional(),
-  notes:        z.string().max(50000).optional(),
-  instagramUrl: z.string().url().max(500).optional().or(z.literal("")),
-  facebookUrl:  z.string().url().max(500).optional().or(z.literal("")),
+  trim:         z.string().max(100).nullable().optional(),
+  engine:       z.string().max(100).nullable().optional(),
+  transmission: z.string().max(100).nullable().optional(),
+  drivetrain:   z.string().max(50).nullable().optional(),
+  vin:          z.string().max(17).nullable().optional(),
+  mileage:      z.number().int().min(0).nullable().optional(),
+  platform:     z.string().max(100).nullable().optional(),
+  color:        z.string().max(100).nullable().optional(),
+  photoUrl:     safeUrl.nullable().optional(),
+  notes:        z.string().max(50000).nullable().optional(),
+  instagramUrl: z.string().url().max(500).nullable().optional().or(z.literal("")),
+  facebookUrl:  z.string().url().max(500).nullable().optional().or(z.literal("")),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

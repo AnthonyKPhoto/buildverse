@@ -2,16 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
+// Nullable + optional on every field that's nullable in the Prisma schema —
+// a GET-then-POST round trip (JSON export/import) gets `null` back for unset
+// fields, not `undefined`, and .optional() alone rejects null.
 const maintenanceSchema = z.object({
   service:    z.string().min(1).max(255),
-  mileage:    z.number().int().min(0).optional(),
+  mileage:    z.number().int().min(0).nullable().optional(),
   date:       z.string(),
-  cost:       z.number().min(0).optional(),
-  notes:      z.string().max(2000).optional(),
-  shop:       z.string().max(255).optional(),
-  diy:        z.boolean().optional(),
-  nextDue:    z.string().optional(),
-  nextMiles:  z.number().int().min(0).optional(),
+  cost:       z.number().min(0).nullable().optional(),
+  notes:      z.string().max(2000).nullable().optional(),
+  shop:       z.string().max(255).nullable().optional(),
+  diy:        z.boolean().optional(), // non-nullable in Prisma (@default(false))
+  nextDue:    z.string().nullable().optional(),
+  nextMiles:  z.number().int().min(0).nullable().optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

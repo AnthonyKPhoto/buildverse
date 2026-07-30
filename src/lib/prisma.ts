@@ -4,7 +4,15 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 // BV_DATABASE_URL is set by Electron main.js as an absolute path and takes
 // priority over the relative DATABASE_URL baked into the standalone .env file.
-const datasourceUrl = process.env.BV_DATABASE_URL || process.env.DATABASE_URL;
+let datasourceUrl = process.env.BV_DATABASE_URL || process.env.DATABASE_URL;
+
+// Serialize Prisma's internal connection pool to 1 for SQLite. Combined with
+// WAL mode (enabled once at startup by scripts/docker-init-db.js), this avoids
+// SQLITE_BUSY errors when two clients — e.g. the PC app and a phone, both
+// talking to the same server — write at close to the same moment.
+if (datasourceUrl?.startsWith("file:") && !datasourceUrl.includes("connection_limit=")) {
+  datasourceUrl += (datasourceUrl.includes("?") ? "&" : "?") + "connection_limit=1";
+}
 
 export const prisma =
   globalForPrisma.prisma ||
@@ -130,6 +138,17 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
     `CREATE INDEX IF NOT EXISTS "VehicleNote_vehicleId_idx" ON "VehicleNote"("vehicleId")`,
     // VehicleNote.importance — added in v1.3.25 (column may be absent if table was created by v1.3.24)
     `ALTER TABLE "VehicleNote" ADD COLUMN "importance" INTEGER NOT NULL DEFAULT 0`,
+    // User table — added for multi-user server logins. Inert for local/Electron
+    // use (nothing reads it unless ADMIN_PASSWORD_HASH is set), but created here
+    // too so an in-place Electron update never leaves it missing.
+    `CREATE TABLE IF NOT EXISTS "User" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "username" TEXT NOT NULL,
+      "passwordHash" TEXT NOT NULL,
+      "role" TEXT NOT NULL DEFAULT 'member',
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key" ON "User"("username")`,
   ];
   for (const sql of stmts) {
     await prisma.$executeRawUnsafe(sql).catch(() => {});

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifySessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 
-const COOKIE_NAME = "bv_session";
+// Any path with a file extension (favicon.ico, logo.svg, icon-192.png, …) —
+// always public, regardless of auth state.
+const PUBLIC_FILE = /\.[^/]+$/;
 
-async function sha256hex(text: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+// Paths that must stay reachable even when auth is enforced, so the login
+// page itself (and the endpoint it depends on) can render and be used.
+const PUBLIC_PATHS = new Set(["/login", "/api/auth/login", "/api/health"]);
 
 function isLocalRequest(request: NextRequest): boolean {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -15,55 +15,58 @@ function isLocalRequest(request: NextRequest): boolean {
   return ip === "" || ip === "127.0.0.1" || ip === "::1" || ip === "localhost" || ip === "::ffff:127.0.0.1";
 }
 
-export async function middleware(request: NextRequest) {
-  const remoteEnabled  = process.env.BUILDVERSE_REMOTE_ENABLED === "1";
-  const passwordHash   = process.env.BUILDVERSE_REMOTE_PASSWORD_HASH;
-  const googleClientId = process.env.GOOGLE_AUTH_CLIENT_ID;
+// A client could otherwise set these directly on the incoming request and
+// have a downstream route trust them as if middleware had verified them.
+function stripIdentityHeaders(req: NextRequest): Headers {
+  const headers = new Headers(req.headers);
+  headers.delete("x-user-id");
+  headers.delete("x-user-username");
+  headers.delete("x-user-role");
+  return headers;
+}
 
-  // Gate only activates when remote access is enabled AND some auth method is configured
-  if (!remoteEnabled || (!passwordHash && !googleClientId)) {
-    return NextResponse.next();
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  if (PUBLIC_FILE.test(pathname) || PUBLIC_PATHS.has(pathname)) {
+    return NextResponse.next({ request: { headers: stripIdentityHeaders(req) } });
   }
 
-  const { pathname } = request.nextUrl;
-
-  // Always pass: Next.js internals, login page, auth APIs, OAuth callbacks
-  if (
-    pathname.startsWith("/_next/") ||
-    pathname.startsWith("/api/auth/") ||
-    pathname.startsWith("/api/oauth/") ||
-    pathname === "/login" ||
-    pathname === "/favicon.ico"
-  ) {
-    return NextResponse.next();
+  // Auth is entirely inert unless a Docker/server deployment has bootstrapped
+  // an admin account — local dev and the Electron app's local (non-Connected)
+  // mode never see it, and the Electron window loading its own spawned local
+  // server always counts as local below anyway.
+  if (!process.env.ADMIN_PASSWORD_HASH) {
+    return NextResponse.next({ request: { headers: stripIdentityHeaders(req) } });
   }
 
-  // Bypass for local connections (Electron window, same-machine browser)
-  if (isLocalRequest(request)) {
-    return NextResponse.next();
+  // Loopback bypass — the Electron window talking to its own spawned local
+  // server. Deliberately NOT a subnet/LAN check: other devices (a phone on
+  // the same Wi-Fi) still need to sign in as a real user.
+  if (isLocalRequest(req)) {
+    return NextResponse.next({ request: { headers: stripIdentityHeaders(req) } });
   }
 
-  const session = request.cookies.get(COOKIE_NAME)?.value;
+  const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const claims = token ? await verifySessionToken(token) : null;
 
-  // Password session
-  if (passwordHash) {
-    const expectedPassword = await sha256hex(passwordHash + "bv-ok");
-    if (session === expectedPassword) return NextResponse.next();
+  if (!claims) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("from", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
-  // Google session
-  if (googleClientId) {
-    const expectedGoogle = await sha256hex(googleClientId + "bv-google-session");
-    if (session === expectedGoogle) return NextResponse.next();
-  }
-
-  // Save intended destination, redirect to login
-  const url = request.nextUrl.clone();
-  url.pathname = "/login";
-  url.searchParams.set("from", pathname);
-  const response = NextResponse.redirect(url);
-  response.cookies.set("bv_login_from", pathname, { httpOnly: true, sameSite: "lax", maxAge: 300, path: "/" });
-  return response;
+  // Forward identity to downstream routes as headers — API routes (e.g. the
+  // admin user-management endpoints) trust these instead of re-verifying the
+  // JWT or querying Prisma again, since middleware already did that work.
+  const headers = stripIdentityHeaders(req);
+  headers.set("x-user-id", claims.userId);
+  headers.set("x-user-username", claims.username);
+  headers.set("x-user-role", claims.role);
+  return NextResponse.next({ request: { headers } });
 }
 
 export const config = {

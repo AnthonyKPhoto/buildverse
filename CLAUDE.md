@@ -41,15 +41,15 @@ src/
       vehicles/[id]/      CRUD + nested resources (mods, budget, maintenance, files, dyno, tune-logs, links, notes, recalls)
       modifications/[id]/ PUT (update) + DELETE (also cleans ModDependency rows)
       products/           Tracked product scraping + price history + alerts
-      auth/               Password login/logout (cookie-based)
-      oauth/              Google Drive OAuth (PKCE flow)
-      gdrive/             Google Drive sync endpoint
+      auth/               Login/logout/me — per-user, cookie-based session (see Authentication below)
+      admin/              Admin-only: users CRUD, restore-db (raw .db upload, server mode only)
+      health/             Unauthenticated status/mode endpoint (Docker healthcheck + client mode detection)
       integrations/lubelogger/  LubeLogger pull sync
       stats/              Dashboard aggregate counts
       builds/             Cross-vehicle mod list
       search/             Global search
       suggestions/        Autocomplete suggestions
-      sync/               Generic sync trigger
+      sync/               Generic sync trigger (consumed by the Capacitor/Android app, not the desktop UI)
       wipe/               Factory reset
     garage/[id]/          Vehicle detail page (tabs: Mods, Maintenance, Budget, Dyno, Tune Logs, Files, Notes, Links)
     builds/               Cross-vehicle mod list
@@ -57,8 +57,8 @@ src/
     products/             Product tracker / price monitoring
     maintenance/          Global maintenance log
     vendors/              Static vendor directory
-    settings/             App settings, theme, data management
-    login/                Remote-access login page
+    settings/             App settings, theme, data management, Access & Sync (server connection, account, users)
+    login/                Server-mode login page (username + password)
   components/
     layout/               Sidebar, BottomNav (mobile), GlobalSearch
     modifications/        AddModDialog, CSVImportDialog
@@ -71,11 +71,11 @@ src/
   lib/
     prisma.ts             Singleton Prisma client
     utils.ts              Shared helpers — formatCurrency, calcTotalModValue, MOD_STATUSES, EXCLUDED_FROM_VALUE, etc.
-    scraper.ts            Product URL scraper (cheerio + fetch, SSRF-guarded)
+    scraper.ts            Product URL scraper (cheerio via undici, SSRF-guarded + DNS-rebinding pinned)
     lubelogger.ts         LubeLogger API client
-    oauth-store.ts        Google Drive token persistence
-    pkce-db.ts            PKCE challenge storage
-  middleware.ts           Auth gate — local connections always bypass; remote requires session cookie
+    auth/password.ts       scrypt hash/verify + isAuthEnabled() (Node-only, never import from middleware.ts)
+    auth/session.ts        Signed session cookie (jose, Edge-safe) carrying {userId, username, role}
+  middleware.ts           Auth gate — loopback always bypasses (Electron's own spawned server); remote requires a valid per-user session
   hooks/
     use-toast.ts
     use-categories.ts     Dynamic category list from API
@@ -106,6 +106,7 @@ electron/
 | `VehicleNote` | title, content, color, importance | Sticky-note board |
 | `VehicleLink` | title, url, description, category | External links per vehicle |
 | `Setting` | key, value | App-wide key/value store |
+| `User` | username (unique), passwordHash, role (admin\|member) | Server mode only — see Authentication below. Everyone shares the same garage; this is per-person login identity, not data isolation. |
 
 **Schema changes:** edit `prisma/schema.prisma` then run `npx prisma db push`. No migrations needed (SQLite + `db push`).
 
@@ -131,17 +132,62 @@ export const EXCLUDED_FROM_VALUE = new Set(["RESEARCHING", "REMOVED"]);
 
 ## Authentication
 
-Auth only activates when **both** conditions are true:
-1. `BUILDVERSE_REMOTE_ENABLED=1`
-2. At least one of `BUILDVERSE_REMOTE_PASSWORD_HASH` or `GOOGLE_AUTH_CLIENT_ID` is set
+Real per-user accounts (`User` table: username, scrypt password hash, admin/member role) — this
+replaced an earlier single-shared-password + Google-login scheme, and Google Drive sync (separate
+OAuth) has been removed entirely in favor of the server itself being the single source of truth
+(see "Server-as-source-of-truth" below).
 
-Local connections (`127.0.0.1`, `::1`) always bypass auth — Electron window never sees a login page.
+Auth is entirely **inert** unless `ADMIN_PASSWORD_HASH` is set (i.e. local dev and Electron's local
+mode are never affected). When it is set (Docker/server deployments):
 
-**Password login:** POST `/api/auth/login` with `{ password }`. Compares SHA-256 hash. Sets `bv_session` cookie (30-day, httpOnly).
+- Loopback (`127.0.0.1`, `::1`) always bypasses — this is Electron's own spawned local server talking
+  to itself, not a real remote client. It is **not** a subnet/LAN check: a phone on the same Wi-Fi is
+  not loopback and still has to sign in as a real user.
+- Everyone else needs a valid session cookie (`bv_session`, signed via `AUTH_SESSION_SECRET` — see
+  `src/lib/auth/session.ts`), or gets redirected to `/login` (pages) / 401 (API routes).
+- `src/middleware.ts` verifies the JWT and, on success, attaches `x-user-id` / `x-user-username` /
+  `x-user-role` headers to the request for downstream routes to trust — it strips any client-supplied
+  copies of those headers first, so they can't be spoofed.
 
-**Google login:** PKCE OAuth flow via `/api/auth/google/start` → Google → `/api/auth/google/callback`.
+**First admin:** bootstrapped automatically on container boot from `ADMIN_USERNAME` /
+`ADMIN_PASSWORD_HASH` (see `scripts/docker-init-db.js`) — this also re-runs (self-healing) if the
+`User` table ever ends up with zero admins, e.g. after restoring an old Electron backup via
+`/api/admin/restore-db` that predates the `User` table. Every other account (including more admins)
+is created afterward from **Settings → Access & Sync → Users**, admin-only.
 
-**Google Drive sync:** Separate OAuth (`/api/oauth/google/*`) for Drive backup/restore. Token stored via `oauth-store.ts`.
+**Login:** POST `/api/auth/login` with `{ username, password }`.
+**Current user:** GET `/api/auth/me` (reads the headers middleware already attached).
+
+---
+
+## Server-as-source-of-truth (replaces the old Google Drive / WebDAV / "BuildVerse Server" picker)
+
+The desktop Settings → Access & Sync tab used to offer a Google Drive / WebDAV / "BuildVerse Server"
+sync-method picker. That's gone. The model now: a self-hosted Docker server is the one live database;
+the Electron desktop app can either stay fully local (default, unchanged) or switch to **Connect to
+Server** mode, in which case it skips spawning its own local server entirely and just points its
+`BrowserWindow` at the remote server URL — every `fetch()` in the app already uses relative URLs, so
+this required zero data-layer changes, only a navigation/origin change in `electron/main.js`
+(`serverMode`/`serverUrl` in `prefs.json`, `server:testConnection` IPC to check reachability from the
+main process so it isn't blocked by CORS).
+
+**Migrating existing local data onto a server:** Settings → Backups → New Backup (Electron, unchanged)
+produces a raw `.db` file; upload it via **Settings → Access & Sync → Server Data** (admin-only,
+requires re-entering the admin's own password) to seed the server. This does a full destructive
+replace — use it once for your own primary migration, not for adding a second person's cars (for
+that, each person exports their own JSON from Settings → Data & Backup → Export Data and imports it
+into their own account on the server — that's additive, not destructive).
+
+**Note on WAL mode:** the server enables SQLite WAL mode for concurrent multi-client writes
+(`scripts/docker-init-db.js`). If you ever back up the live server's volume by copying the `.db` file
+directly (rather than through the app's own restore-db flow), run `PRAGMA wal_checkpoint(FULL);`
+first, or copy the `.db-wal`/`.db-shm` sidecar files too — otherwise the copy can be missing recent
+writes that are still sitting in the WAL file.
+
+**Android/Capacitor app:** `capacitor-app/sync.js` still talks to `GET`/`POST /api/sync` directly
+(untouched by this rework) — that endpoint's `POST` only merges 3 of the ~13 syncable tables
+(`vehicleNote`, `maintenanceLog`, `modification`); this is a known pre-existing gap, not something
+introduced here.
 
 ---
 
@@ -149,14 +195,10 @@ Local connections (`127.0.0.1`, `::1`) always bypass auth — Electron window ne
 
 | Variable | Required | Purpose |
 |----------|---------|---------|
-| `DATABASE_URL` | Docker only | `file:/data/buildverse.db` — dev uses hardcoded path in schema.prisma |
-| `BUILDVERSE_REMOTE_ENABLED` | Optional | Set to `1` to require login from non-local IPs |
-| `BUILDVERSE_REMOTE_PASSWORD_HASH` | Optional | SHA-256 of the remote access password |
-| `GOOGLE_AUTH_CLIENT_ID` | Optional | Google OAuth for login |
-| `GOOGLE_AUTH_CLIENT_SECRET` | Optional | Google OAuth for login |
-| `GOOGLE_ALLOWED_EMAIL` | Optional | Restrict Google login to one account |
-| `BASE_URL` | Docker | Public URL used for OAuth redirect URIs |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional | Google Drive backup OAuth (separate from auth) |
+| `DATABASE_URL` | Docker only | `file:/data/buildverse.db` — dev uses `.env`/`.env.local` |
+| `ADMIN_USERNAME` | Optional (server mode) | Bootstrap admin's username, default `admin` |
+| `ADMIN_PASSWORD_HASH` | Optional (server mode) | Generate with `node scripts/hash-password.js "password"`. Setting this is what turns auth on at all. |
+| `AUTH_SESSION_SECRET` | Required if `ADMIN_PASSWORD_HASH` is set | Long random string signing session cookies |
 
 Local dev: copy `.env.local` — no variables needed for basic use.
 

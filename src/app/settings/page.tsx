@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Database, HardDrive, RefreshCw, Download, Upload,
   Zap, Monitor, Palette, Moon, Sun,
   Archive, RotateCcw, Trash2, ArrowUpCircle,
   CheckCircle2, AlertCircle, Loader2, X, Save, ShoppingBag,
-  Tag, Plus, GripVertical, Globe, Lock, Eye, EyeOff,
-  Shield, Copy, Smartphone, Plug, Key, Cloud,
+  Tag, Plus, GripVertical,
+  Shield, Plug, Key, Cloud,
 } from "lucide-react";
 import { MOD_CATEGORIES } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -23,9 +23,10 @@ interface Stats { vehicleCount: number; modCount: number; productCount: number; 
 interface VehicleItem { _count: { modifications: number } }
 interface AppInfo { version: string; userDataPath: string; dbPath: string; isDev: boolean; }
 interface BackupEntry { name: string; filePath: string; size: number; createdAt: string; }
-interface RemoteConfig { enabled: boolean; domain: string; port: number; hasPassword: boolean; }
+interface HealthInfo { status: string; version: string; mode: "local" | "server"; }
+interface CurrentUser { id: string; username: string; role: "admin" | "member"; }
+interface ManagedUser { id: string; username: string; role: "admin" | "member"; createdAt: string; }
 type Section = "general" | "access" | "integrations" | "data";
-type SyncMethod = "server" | "webdav" | "gdrive";
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
   | { status: "available"; version: string; downloadUrl?: string; manual?: boolean }
@@ -41,17 +42,12 @@ declare global {
       prefs: { get: () => Promise<Record<string, unknown>>; set: (o: Record<string, unknown>) => Promise<void>; };
       backup: { create: () => Promise<{ success: boolean; filePath: string }>; list: () => Promise<BackupEntry[]>; restore: (f: string) => Promise<{ success: boolean }>; delete: (f: string) => Promise<{ success: boolean }>; };
       update: { check: () => Promise<void>; install: () => Promise<void>; onStatus: (cb: (s: UpdateStatus) => void) => () => void; };
-      network?: {
-        getLanUrl: () => Promise<string | null>;
-        setLanAccess: (enabled: boolean) => Promise<{ success: boolean; requiresRestart: boolean }>;
-        getRemoteConfig: () => Promise<RemoteConfig>;
-        setRemoteConfig: (cfg: { enabled: boolean; domain: string; port: number }) => Promise<{ success: boolean; requiresRestart: boolean }>;
-        setRemotePassword: (password: string) => Promise<{ success: boolean; requiresRestart: boolean }>;
-        clearRemotePassword: () => Promise<{ success: boolean; requiresRestart: boolean }>;
-      };
       transfer?: {
         exportZip: () => Promise<{ canceled?: boolean; success?: boolean; filePath?: string; error?: string }>;
         importZip: () => Promise<{ canceled?: boolean; success?: boolean; error?: string }>;
+      };
+      server?: {
+        testConnection: (url: string) => Promise<{ ok: true; data: HealthInfo } | { ok: false; error: string }>;
       };
       restart?:      () => Promise<void>;
       openExternal?: (url: string) => Promise<void>;
@@ -156,31 +152,30 @@ export default function SettingsPage() {
   const [catInput, setCatInput] = useState("");
   const [savingCats, setSavingCats] = useState(false);
 
-  // Remote Access state
-  const [remoteConfig, setRemoteConfig] = useState<RemoteConfig | null>(null);
-  const [remoteEnabled, setRemoteEnabled] = useState(false);
-  const [remoteDomain, setRemoteDomain] = useState("");
-  const [remotePort, setRemotePort] = useState(3456);
-  const [lanUrl, setLanUrl] = useState<string | null>(null);
-  const [savingRemote, setSavingRemote] = useState(false);
-  const [passwordInput, setPasswordInput] = useState("");
-  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [settingPassword, setSettingPassword] = useState(false);
   const [restartNeeded, setRestartNeeded] = useState(false);
 
-  // Mobile Sync state
-  const [syncMethod,       setSyncMethodState]  = useState<SyncMethod>("server");
-  const [webdavUrl,        setWebdavUrl]         = useState("");
-  const [webdavUsername,   setWebdavUsername]    = useState("");
-  const [webdavPassword,   setWebdavPassword]    = useState("");
-  const [showWebdavPass,   setShowWebdavPass]    = useState(false);
-  const [syncingDir,       setSyncingDir]        = useState<"upload"|"download"|null>(null);
-  const [gdriveEmail,      setGdriveEmail]       = useState<string | null>(null);
-  const [gdriveLastSync,   setGdriveLastSync]    = useState<string | null>(null);
-  const [gdriveWaiting,    setGdriveWaiting]     = useState(false);
-  const [syncMsg,          setSyncMsg]           = useState<{text:string;type:"info"|"success"|"error"}|null>(null);
-  const [lastSyncedAt,     setLastSyncedAt]      = useState<string|null>(null);
+  // Server connection (Electron "connect to a self-hosted server" mode)
+  const [serverMode, setServerMode] = useState<"local" | "remote">("local");
+  const [serverUrl, setServerUrl] = useState("");
+  const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
+  const [testError, setTestError] = useState<string | null>(null);
+
+  // Account / multi-user (server mode only)
+  const [health, setHealth] = useState<HealthInfo | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"admin" | "member">("member");
+  const [addingUser, setAddingUser] = useState(false);
+  const [resetTarget, setResetTarget] = useState<string | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
+
+  // Server Data (admin-only DB restore, server mode only)
+  const [restorePassword, setRestorePassword] = useState("");
+  const [restoring, setRestoring] = useState(false);
+  const restoreDbRef = useRef<HTMLInputElement>(null);
 
   // Data & Backup state
   const [stats, setStats] = useState<Stats | null>(null);
@@ -191,7 +186,6 @@ export default function SettingsPage() {
   const [zipExporting, setZipExporting] = useState(false);
   const [zipImporting, setZipImporting] = useState(false);
   const importRef      = useRef<HTMLInputElement>(null);
-  const gdriveInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isElectron = typeof window !== "undefined" && !!window.electronAPI?.isElectron;
   const { accent, setAccent } = useCurrentAccent();
@@ -217,81 +211,36 @@ export default function SettingsPage() {
     finally { setLoadingBkp(false); }
   }, [isElectron]);
 
-  // Load sync config + handle OAuth redirect-back params
-  useEffect(() => {
-    setSyncMethodState((localStorage.getItem("bv_sync_method") as SyncMethod) || "server");
-    setWebdavUrl(localStorage.getItem("bv_sync_webdav_url") || "");
-    setWebdavUsername(localStorage.getItem("bv_sync_webdav_username") || "");
-    setWebdavPassword(localStorage.getItem("bv_sync_webdav_password") || "");
-    setLastSyncedAt(localStorage.getItem("bv_sync_last_synced_at"));
-
-    // Handle gdrive OAuth redirect params
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("gdrive") === "connected") {
-      setSyncMethodState("gdrive");
-      localStorage.setItem("bv_sync_method", "gdrive");
-      window.history.replaceState({}, "", window.location.pathname + "?section=access");
-    }
-    if (params.get("gdrive_error")) {
-      toast({ title: "Google Drive error", description: decodeURIComponent(params.get("gdrive_error") || ""), variant: "destructive" });
-      window.history.replaceState({}, "", window.location.pathname + "?section=access");
-    }
-
-    // Load gdrive connection status
-    fetch("/api/gdrive").then(r => r.json()).then((s: { connected: boolean; email?: string; lastSync?: string }) => {
-      if (s.connected) {
-        setGdriveEmail(s.email || null);
-        setGdriveLastSync(s.lastSync ?? null);
-        setSyncMethodState("gdrive");
-        localStorage.setItem("bv_sync_method", "gdrive");
-      }
-    }).catch(() => {});
-  }, []);
-
-  // When the Electron window regains focus (user returns from signing in via browser),
-  // immediately re-check Drive connection status
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        fetch("/api/gdrive").then(r => r.json()).then((s: { connected: boolean; email?: string; lastSync?: string }) => {
-          if (s.connected) {
-            setGdriveEmail(s.email || null);
-            setGdriveLastSync(s.lastSync ?? null);
-            setGdriveWaiting(false);
-            setSyncMethodState("gdrive");
-            localStorage.setItem("bv_sync_method", "gdrive");
-            if (gdriveInterval.current) { clearInterval(gdriveInterval.current); gdriveInterval.current = null; }
-          }
-        }).catch(() => {});
-      }
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+  const loadUsers = useCallback(async () => {
+    setLoadingUsers(true);
+    try {
+      const res = await fetch("/api/admin/users");
+      if (res.ok) setUsers(await res.json());
+    } catch {}
+    finally { setLoadingUsers(false); }
   }, []);
 
   useEffect(() => {
     const stored = localStorage.getItem("bv_autoTrackProducts");
     setAutoTrackProducts(stored === null ? true : stored === "true");
     loadStats();
+    fetch("/api/health").then(r => r.json()).then(setHealth).catch(() => {});
+    fetch("/api/auth/me").then(r => r.json()).then(({ user }) => {
+      setCurrentUser(user);
+      if (user?.role === "admin") loadUsers();
+    }).catch(() => {});
     if (isElectron) {
       window.electronAPI!.getAppInfo().then(setAppInfo).catch(() => {});
       loadBackups();
       window.electronAPI!.prefs.get().then(p => {
         setCloseModeState((p.closeMode as "background" | "quit") ?? "quit");
-      }).catch(() => {});
-      window.electronAPI!.network?.getLanUrl().then(url => setLanUrl(url)).catch(() => {});
-      window.electronAPI!.network?.getRemoteConfig?.().then(cfg => {
-        if (cfg) {
-          setRemoteConfig(cfg);
-          setRemoteEnabled(cfg.enabled);
-          setRemoteDomain(cfg.domain || "");
-          setRemotePort(cfg.port || 3456);
-        }
+        setServerMode((p.serverMode as "local" | "remote") ?? "local");
+        setServerUrl((p.serverUrl as string) ?? "");
       }).catch(() => {});
       const unsub = window.electronAPI!.update.onStatus(setUpdateStatus);
       return unsub;
     }
-  }, [isElectron, loadBackups, loadStats]);
+  }, [isElectron, loadBackups, loadStats, loadUsers]);
 
   useEffect(() => {
     fetch("/api/settings/categories")
@@ -322,48 +271,148 @@ export default function SettingsPage() {
     toast({ title: "Categories reset to defaults" });
   };
 
-  const saveRemoteConfig = async () => {
-    if (!isElectron) return;
-    setSavingRemote(true);
-    try {
-      await window.electronAPI!.network?.setRemoteConfig?.({ enabled: remoteEnabled, domain: remoteDomain, port: remotePort || 3456 });
-      setRestartNeeded(true);
-      toast({ title: "Remote access saved", description: "Restart BuildVerse to apply." });
-    } catch { toast({ title: "Failed to save settings", variant: "destructive" }); }
-    finally { setSavingRemote(false); }
+  const testServerConnection = async () => {
+    if (!serverUrl) return;
+    setTestStatus("testing");
+    setTestError(null);
+    const result = await window.electronAPI!.server!.testConnection(serverUrl);
+    if (result.ok) {
+      setTestStatus("ok");
+    } else {
+      setTestStatus("error");
+      setTestError(result.error);
+    }
   };
 
-  const saveRemotePassword = async () => {
-    if (!isElectron || !passwordInput) return;
-    if (passwordInput !== confirmPasswordInput) { toast({ title: "Passwords don't match", variant: "destructive" }); return; }
-    setSettingPassword(true);
-    try {
-      await window.electronAPI!.network?.setRemotePassword?.(passwordInput);
-      setRemoteConfig(c => c ? { ...c, hasPassword: true } : c);
-      setPasswordInput("");
-      setConfirmPasswordInput("");
-      setRestartNeeded(true);
-      toast({ title: "Password set", description: "Restart BuildVerse to apply." });
-    } catch { toast({ title: "Failed to set password", variant: "destructive" }); }
-    finally { setSettingPassword(false); }
+  const applyServerConnection = async (mode: "local" | "remote") => {
+    if (mode === "remote" && !serverUrl) {
+      toast({ title: "Enter a server URL first", variant: "destructive" });
+      return;
+    }
+    await window.electronAPI!.prefs.set({ serverMode: mode, serverUrl });
+    setServerMode(mode);
+    setRestartNeeded(true);
+    toast({ title: mode === "remote" ? "Server connection saved" : "Switched to local mode", description: "Restart BuildVerse to apply." });
   };
 
-  const clearRemotePassword = async () => {
-    if (!isElectron) return;
-    if (!confirm("Remove the remote access password? Anyone with network access will be able to view your data.")) return;
-    try {
-      await window.electronAPI!.network?.clearRemotePassword?.();
-      setRemoteConfig(c => c ? { ...c, hasPassword: false } : c);
-      setRestartNeeded(true);
-      toast({ title: "Password removed", description: "Restart BuildVerse to apply." });
-    } catch { toast({ title: "Failed to remove password", variant: "destructive" }); }
+  const signOut = async () => {
+    try { await fetch("/api/auth/logout", { method: "POST" }); }
+    finally { window.location.href = "/login"; }
   };
 
-  const externalUrl = useMemo(() => remoteDomain ? `https://${remoteDomain}` : null, [remoteDomain]);
+  const addUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddingUser(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: newUsername, password: newPassword, role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(Array.isArray(data.error) ? data.error[0]?.message : data.error);
+      toast({ title: `User "${newUsername}" created` });
+      setNewUsername(""); setNewPassword(""); setNewRole("member");
+      await loadUsers();
+    } catch (err) {
+      toast({ title: "Couldn't add user", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setAddingUser(false);
+    }
+  };
+
+  const deleteUser = async (user: ManagedUser) => {
+    if (!confirm(`Remove "${user.username}"? They'll be signed out and won't be able to log back in.`)) return;
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({ title: `"${user.username}" removed` });
+      setUsers(prev => prev.filter(u => u.id !== user.id));
+    } catch (err) {
+      toast({ title: "Couldn't remove user", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    }
+  };
+
+  const toggleUserRole = async (user: ManagedUser) => {
+    const role = user.role === "admin" ? "member" : "admin";
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setUsers(prev => prev.map(u => (u.id === user.id ? { ...u, role } : u)));
+    } catch (err) {
+      toast({ title: "Couldn't change role", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    }
+  };
+
+  const resetUserPassword = async (user: ManagedUser) => {
+    if (resetPasswordValue.length < 8) {
+      toast({ title: "Password must be at least 8 characters", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: resetPasswordValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({ title: `Password reset for "${user.username}"` });
+      setResetTarget(null);
+      setResetPasswordValue("");
+    } catch (err) {
+      toast({ title: "Couldn't reset password", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    }
+  };
+
+  const handleRestoreDb = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!restorePassword) {
+      toast({ title: "Enter the server password first", variant: "destructive" });
+      if (restoreDbRef.current) restoreDbRef.current.value = "";
+      return;
+    }
+    if (!confirm(`Replace the server's entire database with "${file.name}"? This cannot be undone.`)) {
+      if (restoreDbRef.current) restoreDbRef.current.value = "";
+      return;
+    }
+    setRestoring(true);
+    try {
+      const formData = new FormData();
+      formData.append("password", restorePassword);
+      formData.append("file", file);
+      const res = await fetch("/api/admin/restore-db", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Restore failed");
+      toast({ title: "Database restored", description: "The server is restarting — reload in a few seconds." });
+      setRestorePassword("");
+    } catch (err) {
+      toast({ title: "Restore failed", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setRestoring(false);
+      if (restoreDbRef.current) restoreDbRef.current.value = "";
+    }
+  };
 
   const handleExport = async () => {
     try {
-      const [vehicles, products] = await Promise.all([fetch("/api/vehicles").then(r => r.json()), fetch("/api/products").then(r => r.json())]);
+      const [vehicleList, products] = await Promise.all([fetch("/api/vehicles").then(r => r.json()), fetch("/api/products").then(r => r.json())]);
+      // The list endpoint is deliberately slim (partial mods, no maintenanceLogs
+      // — it's used by the dashboard/garage grid) so fetch each vehicle's full
+      // detail for export, otherwise maintenance history and full mod/budget
+      // data silently get dropped on import.
+      const vehicles = Array.isArray(vehicleList)
+        ? await Promise.all(
+            vehicleList.map((v: { id: string }) => fetch(`/api/vehicles/${v.id}`).then(r => r.json()))
+          )
+        : [];
       const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), version: "1.0", vehicles, products }, null, 2)], { type: "application/json" });
       const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `buildverse-export-${new Date().toISOString().slice(0, 10)}.json` });
       a.click(); URL.revokeObjectURL(a.href);
@@ -426,6 +475,17 @@ export default function SettingsPage() {
     } catch { toast({ title: "Import failed", variant: "destructive" }); setZipImporting(false); }
   };
 
+  // Exported records have `null` for unset optional fields (that's what Prisma
+  // returns); the create-endpoint schemas now accept that too, but stripping
+  // here as well means a future new field can't silently reintroduce the gap.
+  const stripNulls = <T extends Record<string, unknown>>(obj: T): Partial<T> => {
+    const out: Partial<T> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v !== null) out[k as keyof T] = v as T[keyof T];
+    }
+    return out;
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -437,20 +497,20 @@ export default function SettingsPage() {
       let vehiclesImported = 0, modsImported = 0, logsImported = 0, productsImported = 0;
       for (const v of (data.vehicles ?? [])) {
         const { modifications, maintenanceLogs, budgets, _count: _c, ...vehicleData } = v;
-        const res = await fetch("/api/vehicles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: vehicleData.name, year: vehicleData.year, make: vehicleData.make, model: vehicleData.model, trim: vehicleData.trim, engine: vehicleData.engine, transmission: vehicleData.transmission, drivetrain: vehicleData.drivetrain, vin: vehicleData.vin, mileage: vehicleData.mileage, platform: vehicleData.platform, color: vehicleData.color, photoUrl: vehicleData.photoUrl, notes: vehicleData.notes }) });
+        const res = await fetch("/api/vehicles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(stripNulls({ name: vehicleData.name, year: vehicleData.year, make: vehicleData.make, model: vehicleData.model, trim: vehicleData.trim, engine: vehicleData.engine, transmission: vehicleData.transmission, drivetrain: vehicleData.drivetrain, vin: vehicleData.vin, mileage: vehicleData.mileage, platform: vehicleData.platform, color: vehicleData.color, photoUrl: vehicleData.photoUrl, notes: vehicleData.notes })) });
         if (!res.ok) continue;
         const newVehicle = await res.json();
         vehiclesImported++;
         for (const m of (modifications ?? [])) {
-          const mr = await fetch(`/api/vehicles/${newVehicle.id}/modifications`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: m.name, category: m.category, brand: m.brand, vendor: m.vendor, price: m.price, actualPrice: m.actualPrice, status: m.status, priority: m.priority, difficulty: m.difficulty, link: m.link, imageUrl: m.imageUrl, notes: m.notes, partNumber: m.partNumber, orderNumber: m.orderNumber, installDate: m.installDate, installMileage: m.installMileage, laborCost: m.laborCost, diyInstall: m.diyInstall }) });
+          const mr = await fetch(`/api/vehicles/${newVehicle.id}/modifications`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(stripNulls({ name: m.name, category: m.category, brand: m.brand, vendor: m.vendor, price: m.price, actualPrice: m.actualPrice, status: m.status, priority: m.priority, difficulty: m.difficulty, link: m.link, imageUrl: m.imageUrl, notes: m.notes, partNumber: m.partNumber, orderNumber: m.orderNumber, installDate: m.installDate, installMileage: m.installMileage, laborCost: m.laborCost, diyInstall: m.diyInstall })) });
           if (mr.ok) modsImported++;
         }
         for (const log of (maintenanceLogs ?? [])) {
-          const lr = await fetch(`/api/vehicles/${newVehicle.id}/maintenance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ service: log.service, mileage: log.mileage, date: log.date, cost: log.cost, notes: log.notes, shop: log.shop, diy: log.diy, nextDue: log.nextDue, nextMiles: log.nextMiles }) });
+          const lr = await fetch(`/api/vehicles/${newVehicle.id}/maintenance`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(stripNulls({ service: log.service, mileage: log.mileage, date: log.date, cost: log.cost, notes: log.notes, shop: log.shop, diy: log.diy, nextDue: log.nextDue, nextMiles: log.nextMiles })) });
           if (lr.ok) logsImported++;
         }
         for (const b of (budgets ?? [])) {
-          await fetch(`/api/vehicles/${newVehicle.id}/budget`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: b.category, planned: b.planned, actual: b.actual }) });
+          await fetch(`/api/vehicles/${newVehicle.id}/budget`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(stripNulls({ category: b.category, planned: b.planned, actual: b.actual })) });
         }
       }
       for (const p of (data.products ?? [])) {
@@ -489,165 +549,6 @@ export default function SettingsPage() {
       setBackups(p => p.filter(b => b.filePath !== filePath));
       toast({ title: "Backup deleted" });
     } catch { toast({ title: "Delete failed", variant: "destructive" }); }
-  };
-
-  // ── Mobile Sync handlers ──────────────────────────────────────────────────
-  const setSyncMethod = (m: SyncMethod) => {
-    setSyncMethodState(m);
-    localStorage.setItem("bv_sync_method", m);
-  };
-
-  const saveSyncConfig = () => {
-    localStorage.setItem("bv_sync_method",          syncMethod);
-    localStorage.setItem("bv_sync_webdav_url",      webdavUrl);
-    localStorage.setItem("bv_sync_webdav_username", webdavUsername);
-    localStorage.setItem("bv_sync_webdav_password", webdavPassword);
-    toast({ title: "Sync settings saved" });
-  };
-
-  const GDRIVE_CLIENT_ID = "874903401741-bkbf6fjgq04583agk60o1vgi0iv4j34v.apps.googleusercontent.com";
-
-  const checkGdriveNow = useCallback(async (): Promise<boolean> => {
-    try {
-      const s = await fetch("/api/gdrive").then(r => r.json()) as { connected: boolean; email?: string; lastSync?: string };
-      if (s.connected) {
-        setGdriveEmail(s.email || null);
-        setGdriveLastSync(s.lastSync ?? null);
-        setGdriveWaiting(false);
-        setSyncMethodState("gdrive");
-        localStorage.setItem("bv_sync_method", "gdrive");
-        if (gdriveInterval.current) { clearInterval(gdriveInterval.current); gdriveInterval.current = null; }
-        return true;
-      }
-    } catch { /* ignore */ }
-    return false;
-  }, []);
-
-  const handleGdriveConnect = () => {
-    const path = `/api/oauth/google/start?client_id=${encodeURIComponent(GDRIVE_CLIENT_ID)}`;
-    if (window.electronAPI?.openExternal) {
-      const port = window.location.port || "3456";
-      window.electronAPI.openExternal(`http://127.0.0.1:${port}${path}`);
-      setGdriveWaiting(true);
-      if (gdriveInterval.current) clearInterval(gdriveInterval.current);
-      gdriveInterval.current = setInterval(async () => {
-        const connected = await checkGdriveNow();
-        if (connected) toast({ title: "Google Drive connected!" });
-      }, 1000);
-      setTimeout(async () => {
-        if (gdriveInterval.current) { clearInterval(gdriveInterval.current); gdriveInterval.current = null; }
-        const connected = await checkGdriveNow();
-        if (connected) toast({ title: "Google Drive connected!" });
-        setGdriveWaiting(false);
-      }, 5 * 60 * 1000);
-    } else {
-      window.location.href = path;
-    }
-  };
-
-  const handleGdriveDisconnect = async () => {
-    await fetch("/api/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "disconnect" }) });
-    setGdriveEmail(null);
-    setGdriveLastSync(null);
-    toast({ title: "Google Drive disconnected" });
-  };
-
-  const doSyncUpload = async () => {
-    setSyncingDir("upload");
-    setSyncMsg(null);
-    try {
-      if (syncMethod === "gdrive") {
-        const res = await fetch("/api/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "upload" }) });
-        const result = await res.json() as { success?: boolean; syncedAt?: string; error?: string };
-        if (!res.ok) throw new Error(result.error || "Drive upload failed");
-        setGdriveLastSync(result.syncedAt ?? null);
-        setSyncMsg({ text: "All data backed up to Google Drive", type: "success" });
-        toast({ title: "Backed up to Google Drive" });
-        return;
-      }
-
-      const snapshot = await fetch("/api/sync").then(r => r.json());
-
-      if (syncMethod === "webdav") {
-        const auth = "Basic " + btoa(`${webdavUsername}:${webdavPassword}`);
-        const res  = await fetch(webdavUrl.replace(/\/$/, "") + "/buildverse-sync.json", {
-          method: "PUT", headers: { Authorization: auth, "Content-Type": "application/json" },
-          body:   JSON.stringify(snapshot),
-        });
-        if (!res.ok) throw new Error("WebDAV error " + res.status);
-
-      } else {
-        throw new Error("Server is the source of truth — use Pull on your phone instead");
-      }
-
-      const now = new Date().toISOString();
-      localStorage.setItem("bv_sync_last_synced_at", now);
-      setLastSyncedAt(now);
-      setSyncMsg({ text: "Snapshot uploaded successfully", type: "success" });
-      toast({ title: "Snapshot uploaded" });
-    } catch (e) {
-      setSyncMsg({ text: e instanceof Error ? e.message : String(e), type: "error" });
-      toast({ title: "Upload failed", variant: "destructive" });
-    } finally { setSyncingDir(null); }
-  };
-
-  const doSyncDownload = async () => {
-    setSyncingDir("download");
-    setSyncMsg(null);
-    try {
-      if (syncMethod === "gdrive") {
-        if (!confirm("This will replace all local data with the version saved in Google Drive. Continue?")) {
-          setSyncingDir(null);
-          return;
-        }
-        const res = await fetch("/api/gdrive", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "download" }) });
-        const result = await res.json() as { success?: boolean; imported?: Record<string, number>; syncedAt?: string; error?: string };
-        if (!res.ok) throw new Error(result.error || "Drive download failed");
-        setGdriveLastSync(result.syncedAt ?? null);
-        const c = result.imported ?? {};
-        setSyncMsg({ text: `Restored from Drive: ${c.vehicles ?? 0} vehicles, ${c.modifications ?? 0} mods`, type: "success" });
-        toast({ title: "Restored from Google Drive" });
-        return;
-      }
-
-      let snapshot: unknown;
-
-      if (syncMethod === "webdav") {
-        const auth = "Basic " + btoa(`${webdavUsername}:${webdavPassword}`);
-        const res  = await fetch(webdavUrl.replace(/\/$/, "") + "/buildverse-sync.json", {
-          headers: { Authorization: auth },
-        });
-        if (res.status === 404) throw new Error("No sync file on WebDAV. Push first.");
-        if (!res.ok) throw new Error("WebDAV error " + res.status);
-        snapshot = await res.json();
-
-      } else {
-        throw new Error("Server method: pull changes from the phone using the app, not the desktop");
-      }
-
-      // Merge offline queue from snapshot into local DB
-      const body = snapshot as { offlineQueue?: unknown[] };
-      if (body.offlineQueue?.length) {
-        const res = await fetch("/api/sync", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ offlineQueue: body.offlineQueue }),
-        });
-        const result = await res.json();
-        setSyncMsg({ text: `Merged ${result.merged ?? 0} offline change(s) from phone`, type: "success" });
-        toast({ title: `Merged ${result.merged ?? 0} offline change(s)` });
-      } else {
-        setSyncMsg({ text: "No pending offline changes from phone", type: "info" });
-        toast({ title: "No pending phone changes" });
-      }
-
-      const now = new Date().toISOString();
-      localStorage.setItem("bv_sync_last_synced_at", now);
-      setLastSyncedAt(now);
-    } catch (e) {
-      setSyncMsg({ text: e instanceof Error ? e.message : String(e), type: "error" });
-      toast({ title: "Download failed", variant: "destructive" });
-    } finally { setSyncingDir(null); }
   };
 
   const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
@@ -832,9 +733,9 @@ export default function SettingsPage() {
                   }
                 </Row>
                 <Row label="Mode" last>
-                  {gdriveEmail ? (
+                  {health?.mode === "server" ? (
                     <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-1 rounded-lg">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> Google Drive Sync
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> Connected to Server
                     </span>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-1 rounded-lg">
@@ -889,240 +790,198 @@ export default function SettingsPage() {
 
           {/* ══════════════════════ ACCESS & SYNC ════════════════════════ */}
 
-          {section === "access" && (() => {
-            const METHODS: { id: SyncMethod; label: string; desc: string }[] = [
-              { id:"gdrive", label:"Google Drive",      desc:"Sign in with Google to sync all your data automatically. Works across desktop, Android, and any browser." },
-              { id:"server", label:"BuildVerse Server", desc:"Phone pulls directly from your PC via LAN or remote access URL. No third-party cloud needed." },
-              { id:"webdav", label:"WebDAV",            desc:"Nextcloud, OneDrive, Synology NAS, or any WebDAV-compatible service. Each user provides their own credentials." },
-            ];
-            const syncColor = { info:"text-muted-foreground", success:"text-green-400", error:"text-red-400" } as const;
-            return (
-              <>
-                <Section title="Access & Sync" icon={Cloud}>
-                  {isElectron && (
-                    <div className="flex items-center justify-between pb-4 mb-4 border-b border-border/60">
-                      <div>
-                        <p className="text-sm font-medium">Phone &amp; Remote Access</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Allow other devices to reach this app over the network.</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Toggle on={remoteEnabled} onChange={v => { setRemoteEnabled(v); saveRemoteConfig(); }} />
-                        {lanUrl && remoteEnabled && (
-                          <Btn size="xs" onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied" }); }}>
-                            <Copy className="w-3 h-3" />{lanUrl.replace("http://", "").split(":")[0]}
-                          </Btn>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Choose how your phone and browser sync BuildVerse data.
+          {section === "access" && (
+            <>
+              {isElectron && (
+                <Section title="Server Connection" icon={Cloud}>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Point BuildVerse at a self-hosted server so this PC and your phone share
+                    the same live data. Leave disconnected to keep everything local to this PC.
                   </p>
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={serverUrl}
+                        onChange={e => { setServerUrl(e.target.value); setTestStatus("idle"); }}
+                        placeholder="https://buildverse.yourdomain.com"
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      <Btn onClick={testServerConnection} disabled={!serverUrl || testStatus === "testing"}>
+                        {testStatus === "testing" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Test"}
+                      </Btn>
+                    </div>
 
-                  {/* Method selector */}
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Sync Method</p>
-                  <div className="space-y-2 mb-5">
-                    {METHODS.map(m => (
-                      <label key={m.id}
-                        onClick={() => setSyncMethod(m.id)}
-                        className={cn(
-                          "flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-colors",
-                          syncMethod === m.id ? "border-theme bg-theme/5" : "border-border bg-secondary/40 hover:border-border/80"
+                    {testStatus === "ok" && (
+                      <p className="text-xs text-green-400 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Reachable</p>
+                    )}
+                    {testStatus === "error" && (
+                      <p className="text-xs text-red-400 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> {testError || "Could not connect"}</p>
+                    )}
+
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-xs text-muted-foreground">
+                        Currently: <strong className="text-foreground">{serverMode === "remote" ? "Connected to server" : "Local"}</strong>
+                      </span>
+                      <div className="flex gap-2">
+                        {serverMode === "remote" && (
+                          <Btn onClick={() => applyServerConnection("local")}>Disconnect</Btn>
                         )}
-                      >
-                        <div className={cn(
-                          "w-4.5 h-4.5 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center",
-                          syncMethod === m.id ? "border-theme bg-theme" : "border-border/80"
-                        )}>
-                          {syncMethod === m.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold">{m.label}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{m.desc}</p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-
-                  {/* Config fields */}
-                  {syncMethod === "server" && (
-                    <div className="space-y-3 mb-5">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">How it works</p>
-                      <div className="p-3 rounded-xl bg-secondary/60 border border-border text-sm space-y-1.5 text-muted-foreground">
-                        <p>1. Enable Remote Access in Settings → Remote Access.</p>
-                        <p>2. Open the Android app → Sync → enter your server URL.</p>
-                        <p>3. Tap <strong className="text-foreground">Pull</strong> on the phone to download your garage.</p>
-                        <p>4. When offline, changes queue locally. Tap <strong className="text-foreground">Push</strong> to sync back.</p>
+                        <Btn variant="primary" onClick={() => applyServerConnection("remote")} disabled={!serverUrl}>
+                          <Cloud className="w-3.5 h-3.5" /> Connect
+                        </Btn>
                       </div>
-                      {lanUrl && (
-                        <div className="p-3 rounded-xl bg-secondary border border-border">
-                          <p className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-widest">Your server URL (LAN)</p>
-                          <div className="flex items-center gap-2">
-                            <code className="flex-1 text-sm font-mono break-all">{lanUrl}</code>
-                            <Btn size="xs" onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied" }); }}>
-                              <Copy className="w-3 h-3" /> Copy
-                            </Btn>
-                          </div>
-                        </div>
-                      )}
                     </div>
-                  )}
-
-                  {syncMethod === "gdrive" && (
-                    <div className="space-y-3 mb-5">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Google Account</p>
-                      {gdriveEmail ? (
-                        <div className="p-3.5 rounded-xl border border-green-500/30 bg-green-500/5 flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium text-green-400">Connected</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{gdriveEmail}</p>
-                            {gdriveLastSync && <p className="text-xs text-muted-foreground mt-0.5">Last sync: {new Date(gdriveLastSync).toLocaleString()}</p>}
-                          </div>
-                          <Btn size="xs" variant="outline" onClick={handleGdriveDisconnect}>Disconnect</Btn>
-                        </div>
-                      ) : gdriveWaiting ? (
-                        <div className="space-y-2">
-                          <div className="p-3.5 rounded-xl border border-theme/30 bg-theme/5 flex items-center gap-3">
-                            <Loader2 className="w-4 h-4 animate-spin text-theme shrink-0" />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium">Waiting for Google sign-in…</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">Complete sign-in in your browser, then return here.</p>
-                            </div>
-                            <Btn size="xs" variant="outline" onClick={() => setGdriveWaiting(false)}>Cancel</Btn>
-                          </div>
-                          <button
-                            onClick={async () => {
-                              const connected = await checkGdriveNow();
-                              if (connected) toast({ title: "Google Drive connected!" });
-                              else toast({ title: "Not connected yet — finish sign-in in the browser first.", variant: "destructive" });
-                            }}
-                            className="w-full py-2 text-xs text-muted-foreground hover:text-foreground border border-border/60 rounded-lg bg-secondary/40 hover:bg-secondary transition-colors"
-                          >
-                            Already signed in? Check now
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="p-3.5 rounded-xl border border-border bg-secondary/40">
-                          <p className="text-sm text-muted-foreground mb-3">Connect your Google account to enable sync. Your data is stored in a private app folder in your Drive — not visible to other apps.</p>
-                          <button
-                            onClick={handleGdriveConnect}
-                            className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-white text-gray-700 text-sm font-medium border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm"
-                          >
-                            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-                            Sign in with Google
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {syncMethod === "webdav" && (
-                    <div className="space-y-3 mb-5">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">WebDAV Config</p>
-                      <div>
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">WebDAV URL</label>
-                        <input type="url" value={webdavUrl} onChange={e => { setWebdavUrl(e.target.value); localStorage.setItem("bv_sync_webdav_url", e.target.value); }}
-                          placeholder="https://nextcloud.example.com/remote.php/dav/files/user/"
-                          className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Username</label>
-                          <input type="text" value={webdavUsername} onChange={e => { setWebdavUsername(e.target.value); localStorage.setItem("bv_sync_webdav_username", e.target.value); }}
-                            autoComplete="off"
-                            className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-                        </div>
-                        <div>
-                          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Password</label>
-                          <div className="relative">
-                            <input type={showWebdavPass ? "text" : "password"} value={webdavPassword} onChange={e => { setWebdavPassword(e.target.value); localStorage.setItem("bv_sync_webdav_password", e.target.value); }}
-                              autoComplete="off"
-                              className="w-full px-3 py-2 pr-9 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
-                            <button type="button" onClick={() => setShowWebdavPass(v => !v)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" tabIndex={-1}>
-                              {showWebdavPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Enter the same credentials in the Android app → Sync → WebDAV.</p>
-                    </div>
-                  )}
-
-
-                  {/* Status */}
-                  {lastSyncedAt && (
-                    <p className="text-xs text-muted-foreground mb-4">
-                      Last sync: {new Date(lastSyncedAt).toLocaleString()}
-                    </p>
-                  )}
-
-                  {syncMsg && (
-                    <p className={cn("text-xs mb-4", syncColor[syncMsg.type])}>{syncMsg.text}</p>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex gap-2 flex-wrap">
-                    {syncMethod === "gdrive" && gdriveEmail && (
-                      <>
-                        <Btn variant="primary" onClick={doSyncUpload} disabled={!!syncingDir}>
-                          {syncingDir === "upload" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                          Back up to Drive
-                        </Btn>
-                        <Btn variant="outline" onClick={doSyncDownload} disabled={!!syncingDir}>
-                          {syncingDir === "download" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                          Restore from Drive
-                        </Btn>
-                      </>
-                    )}
-                    {syncMethod === "gdrive" && !gdriveEmail && (
-                      <p className="text-xs text-muted-foreground">Connect your Google account above to enable sync.</p>
-                    )}
-                    {syncMethod === "webdav" && (
-                      <>
-                        <Btn variant="primary" onClick={doSyncUpload} disabled={!!syncingDir}>
-                          {syncingDir === "upload" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                          Push to WebDAV
-                        </Btn>
-                        <Btn variant="outline" onClick={doSyncDownload} disabled={!!syncingDir}>
-                          {syncingDir === "download" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                          Pull changes from phone
-                        </Btn>
-                      </>
-                    )}
-                    {syncMethod === "server" && (
-                      <p className="text-xs text-muted-foreground">Use the Android app to pull/push via your server URL above.</p>
-                    )}
                   </div>
                 </Section>
+              )}
 
-                {isElectron && (lanUrl || externalUrl) && (
-                  <Section title="Phone Connection URL" icon={Smartphone}>
-                    <div className="space-y-2">
-                      {lanUrl && (
-                        <div className="p-3 rounded-xl bg-secondary border border-border">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">LAN (same Wi-Fi)</p>
-                          <div className="flex items-center gap-2">
-                            <code className="flex-1 text-sm font-mono break-all">{lanUrl}</code>
-                            <Btn size="xs" onClick={() => { navigator.clipboard.writeText(lanUrl!); toast({ title: "Copied" }); }}><Copy className="w-3 h-3" /> Copy</Btn>
-                          </div>
-                        </div>
-                      )}
-                      {externalUrl && (
-                        <div className="p-3 rounded-xl bg-secondary border border-border">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">External (anywhere)</p>
-                          <div className="flex items-center gap-2">
-                            <code className="flex-1 text-sm font-mono break-all">{externalUrl}</code>
-                            <Btn size="xs" onClick={() => { navigator.clipboard.writeText(externalUrl!); toast({ title: "Copied" }); }}><Copy className="w-3 h-3" /> Copy</Btn>
-                          </div>
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground pt-1">Open the BuildVerse Android app → Sync → enter this URL → tap <strong className="text-foreground">Pull</strong>.</p>
+              {health?.mode === "server" && currentUser && (
+                <Section title="Account" icon={Shield}>
+                  <Row label="Signed in as" last>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium">{currentUser.username}</span>
+                      <span className={cn(
+                        "text-2xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full",
+                        currentUser.role === "admin" ? "bg-theme/15 text-theme" : "bg-secondary text-muted-foreground"
+                      )}>
+                        {currentUser.role}
+                      </span>
+                      <Btn variant="ghost" onClick={signOut}>Sign Out</Btn>
                     </div>
-                  </Section>
-                )}
-              </>
-            );
-          })()}
+                  </Row>
+                </Section>
+              )}
+
+              {health?.mode === "server" && currentUser?.role === "admin" && (
+                <Section title="Users" icon={Shield}>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Everyone shares the same garage — accounts are just for individual sign-in.
+                  </p>
+
+                  {loadingUsers ? (
+                    <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+                    </div>
+                  ) : (
+                    <div className="space-y-1 mb-4">
+                      {users.map(u => (
+                        <div key={u.id} className="rounded-xl hover:bg-secondary transition-colors">
+                          <div className="flex items-center justify-between px-3 py-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-sm font-medium truncate">{u.username}</span>
+                              <button
+                                onClick={() => toggleUserRole(u)}
+                                title="Click to toggle admin/member"
+                                className={cn(
+                                  "text-2xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full cursor-pointer",
+                                  u.role === "admin" ? "bg-theme/15 text-theme" : "bg-secondary text-muted-foreground"
+                                )}
+                              >
+                                {u.role}
+                              </button>
+                              {u.id === currentUser.id && <span className="text-2xs text-muted-foreground">(you)</span>}
+                            </div>
+                            <div className="flex gap-1 shrink-0">
+                              <Btn size="xs" onClick={() => { setResetTarget(u.id); setResetPasswordValue(""); }}>
+                                <Key className="w-3 h-3" /> Reset Password
+                              </Btn>
+                              <Btn size="xs" variant="danger" onClick={() => deleteUser(u)} disabled={u.id === currentUser.id}>
+                                <Trash2 className="w-3 h-3" />
+                              </Btn>
+                            </div>
+                          </div>
+                          {resetTarget === u.id && (
+                            <div className="flex items-center gap-2 px-3 pb-3">
+                              <input
+                                type="password"
+                                autoFocus
+                                value={resetPasswordValue}
+                                onChange={e => setResetPasswordValue(e.target.value)}
+                                placeholder="New password (min 8 characters)"
+                                className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                              />
+                              <Btn size="xs" onClick={() => setResetTarget(null)}>Cancel</Btn>
+                              <Btn size="xs" variant="primary" onClick={() => resetUserPassword(u)}>Save</Btn>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <form onSubmit={addUser} className="flex flex-wrap items-center gap-2 pt-3 border-t border-border/60">
+                    <input
+                      type="text"
+                      required
+                      value={newUsername}
+                      onChange={e => setNewUsername(e.target.value)}
+                      placeholder="Username"
+                      className="w-32 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <input
+                      type="password"
+                      required
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      placeholder="Password"
+                      className="w-32 px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                    <select
+                      value={newRole}
+                      onChange={e => setNewRole(e.target.value as "admin" | "member")}
+                      className="px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                    >
+                      <option value="member">Member</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <Btn variant="primary" disabled={addingUser}>
+                      {addingUser ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      Add User
+                    </Btn>
+                  </form>
+                </Section>
+              )}
+
+              {health?.mode === "server" && currentUser?.role === "admin" && (
+                <Section title="Server Data" icon={HardDrive}>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    One-time migration: on the desktop app, use Settings → Data &amp; Backup → New Backup
+                    to produce a <code>.db</code> file, then upload it here to seed this server.
+                    This replaces everything currently on the server.
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">Server password (confirm)</label>
+                      <input
+                        type="password"
+                        value={restorePassword}
+                        onChange={e => setRestorePassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full max-w-xs px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                    <input ref={restoreDbRef} type="file" accept=".db" className="hidden" onChange={handleRestoreDb} />
+                    <Btn variant="danger" onClick={() => restoreDbRef.current?.click()} disabled={restoring || !restorePassword}>
+                      {restoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      {restoring ? "Restoring…" : "Upload & Restore Database"}
+                    </Btn>
+                  </div>
+                </Section>
+              )}
+
+              {!isElectron && !(health?.mode === "server" && currentUser) && (
+                <Section title="Access & Sync" icon={Cloud}>
+                  <p className="text-sm text-muted-foreground">
+                    {health?.mode === "server"
+                      ? "This connection isn't signed in as a specific user (e.g. a loopback/local request), so there's nothing personalized to show here. Sign in normally to see your account and, if you're an admin, user management."
+                      : "This browser is talking to a local, single-machine instance of BuildVerse — there's nothing to configure here. Self-host BuildVerse with Docker to get a shared server that this page, the desktop app, and the Android app can all connect to (see the README)."}
+                  </p>
+                </Section>
+              )}
+            </>
+          )}
+
 
           {/* ════════════════════════ INTEGRATIONS ═══════════════════════ */}
           {section === "integrations" && (

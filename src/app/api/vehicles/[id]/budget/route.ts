@@ -6,7 +6,7 @@ const budgetSchema = z.object({
   category: z.string().min(1).max(100),
   planned:  z.number().min(0).max(100_000_000),
   actual:   z.number().min(0).max(100_000_000).optional(),
-  notes:    z.string().max(2000).optional(),
+  notes:    z.string().max(2000).nullable().optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

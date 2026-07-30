@@ -11,25 +11,28 @@ const safeUrl = z
     "Only http/https URLs or data:image/ strings are allowed"
   );
 
+// Nullable + optional on every field that's nullable in the Prisma schema —
+// a GET-then-POST round trip (JSON export/import) gets `null` back for unset
+// fields, not `undefined`, and .optional() alone rejects null.
 const modSchema = z.object({
   name:           z.string().min(1).max(255),
   category:       z.string().min(1).max(100),
-  vendor:         z.string().max(255).optional(),
-  brand:          z.string().max(255).optional(),
-  price:          z.number().min(0).optional(),
-  actualPrice:    z.number().min(0).optional(),
-  notes:          z.string().max(2000).optional(),
+  vendor:         z.string().max(255).nullable().optional(),
+  brand:          z.string().max(255).nullable().optional(),
+  price:          z.number().min(0).nullable().optional(),
+  actualPrice:    z.number().min(0).nullable().optional(),
+  notes:          z.string().max(2000).nullable().optional(),
   priority:       z.enum(["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("NONE"),
   status:         z.enum(["PLANNED", "RESEARCHING", "ORDERED", "PURCHASED", "INSTALLED", "REMOVED"]).default("PLANNED"),
   link:           safeUrl.optional().nullable(),
   imageUrl:       safeUrl.optional().nullable(),
-  difficulty:     z.string().max(50).optional(),
-  installDate:    z.string().optional(),
-  installMileage: z.number().int().min(0).optional(),
-  laborCost:      z.number().min(0).optional(),
-  diyInstall:     z.boolean().optional(),
-  partNumber:     z.string().max(100).optional(),
-  orderNumber:    z.string().max(100).optional(),
+  difficulty:     z.string().max(50).nullable().optional(),
+  installDate:    z.string().nullable().optional(),
+  installMileage: z.number().int().min(0).nullable().optional(),
+  laborCost:      z.number().min(0).nullable().optional(),
+  diyInstall:     z.boolean().optional(), // non-nullable in Prisma (@default(false))
+  partNumber:     z.string().max(100).nullable().optional(),
+  orderNumber:    z.string().max(100).nullable().optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

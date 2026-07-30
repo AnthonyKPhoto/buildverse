@@ -16,7 +16,6 @@ const http = require("http");
 const https = require("https");
 const os = require("os");
 const fs = require("fs");
-const crypto = require("crypto");
 
 // ──────────────────────────────────────────────────────────
 // Configuration
@@ -28,6 +27,7 @@ const APP_NAME = "BuildVerse";
 let mainWindow = null;
 let tray = null;
 let serverProcess = null;
+let currentTargetUrl = null;
 
 app.isQuitting = false;
 
@@ -264,44 +264,36 @@ ipcMain.handle("capture:build-card", async (event, rect) => {
   }
 });
 
-ipcMain.handle("network:setLanAccess", (_, enabled) => {
-  savePrefs({ lanAccess: !!enabled });
-  return { success: true, requiresRestart: true };
-});
+// ── Server connection mode ─────────────────────────────────────────────────
+// Stored in the same prefs.json:  { "serverMode": "local" | "remote", "serverUrl": "https://..." }
+// "local" (or unset) is today's behaviour unchanged: spawn the bundled Next.js
+// server against the per-user local database. "remote" skips all of that and
+// just points the window at a server elsewhere (e.g. buildverse.kaiserhomelab.net)
+// — every fetch() in the app already uses relative URLs, so no data-layer
+// changes are needed for this. This replaces the old "expose my own local
+// server to the LAN with a shared password" feature — the real self-hosted
+// server is the one source of truth now, so there's nothing to expose locally.
 
-ipcMain.handle("network:getRemoteConfig", () => {
-  const p = loadPrefs();
-  return {
-    enabled: !!(p.remoteEnabled || p.lanAccess),
-    domain: p.remoteDomain || "",
-    port: p.remotePort || PORT,
-    hasPassword: !!p.remotePasswordHash,
-  };
-});
+function getServerTarget() {
+  const { serverMode, serverUrl } = loadPrefs();
+  const isRemote = serverMode === "remote" && typeof serverUrl === "string" && /^https?:\/\//i.test(serverUrl);
+  return isRemote ? { remote: true, url: serverUrl } : { remote: false, url: `http://127.0.0.1:${PORT}` };
+}
 
-ipcMain.handle("network:setRemoteConfig", (_, { enabled, domain, port }) => {
-  savePrefs({
-    remoteEnabled: !!enabled,
-    lanAccess: !!enabled,
-    remoteDomain: domain || "",
-    remotePort: port || PORT,
-  });
-  return { success: true, requiresRestart: true };
-});
-
-ipcMain.handle("network:setRemotePassword", (_, password) => {
-  if (!password) {
-    savePrefs({ remotePasswordHash: "" });
-  } else {
-    const hash = crypto.createHash("sha256").update(String(password)).digest("hex");
-    savePrefs({ remotePasswordHash: hash });
+// Run from the main process (Node), not the renderer — a renderer-side
+// fetch() to an arbitrary remote origin would be blocked by CORS since the
+// server has no CORS headers (it doesn't need them for its own same-origin
+// requests). Main-process fetch isn't a browser context, so this sidesteps
+// that entirely.
+ipcMain.handle("server:testConnection", async (_, url) => {
+  try {
+    const res = await fetch(`${url.replace(/\/$/, "")}/api/health`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json();
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
-  return { success: true, requiresRestart: true };
-});
-
-ipcMain.handle("network:clearRemotePassword", () => {
-  savePrefs({ remotePasswordHash: "" });
-  return { success: true, requiresRestart: true };
 });
 
 // ──────────────────────────────────────────────────────────
@@ -585,20 +577,19 @@ async function startServer(dbPath) {
   }
   console.log(`[buildverse] Using Node.js at: ${nodeExe}`);
 
-  const prefs = loadPrefs();
-  const remoteEnabled = !!(prefs.remoteEnabled || prefs.lanAccess);
   const env = {
     ...process.env,
     PORT: String(PORT),
-    HOSTNAME: remoteEnabled ? "0.0.0.0" : "127.0.0.1",
+    // Always loopback-only — the local server is never exposed to the LAN
+    // directly. To reach BuildVerse from another device, self-host it via
+    // Docker (see README) and use Settings → Server Connection instead.
+    HOSTNAME: "127.0.0.1",
     NODE_ENV: "production",
     // BV_DATABASE_URL takes priority over the relative DATABASE_URL baked into
     // the standalone .env — always an absolute path so it resolves correctly.
     BV_DATABASE_URL: `file:${dbPath.replace(/\\/g, "/")}`,
     DATABASE_URL: `file:${dbPath.replace(/\\/g, "/")}`,
     BUILDVERSE_DATA_DIR: app.getPath("userData"),
-    BUILDVERSE_REMOTE_ENABLED: remoteEnabled ? "1" : "",
-    BUILDVERSE_REMOTE_PASSWORD_HASH: prefs.remotePasswordHash || "",
   };
 
   serverProcess = spawn(nodeExe, [serverScript], {
@@ -649,7 +640,10 @@ async function startServer(dbPath) {
 // Browser window
 // ──────────────────────────────────────────────────────────
 
-function createWindow() {
+function createWindow(targetUrl) {
+  currentTargetUrl = targetUrl;
+  const targetOrigin = new URL(targetUrl).origin;
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -668,10 +662,10 @@ function createWindow() {
     show: false,
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
+  mainWindow.loadURL(targetUrl);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(`http://127.0.0.1:${PORT}`)) {
+    if (!url.startsWith(targetOrigin)) {
       shell.openExternal(url);
       return { action: "deny" };
     }
@@ -679,7 +673,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(`http://127.0.0.1:${PORT}`)) {
+    if (!url.startsWith(targetOrigin)) {
       event.preventDefault();
       shell.openExternal(url);
     }
@@ -727,7 +721,7 @@ function createTray() {
       label: "Open BuildVerse",
       click: () => {
         if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
-        else createWindow();
+        else createWindow(currentTargetUrl || getServerTarget().url);
       },
     },
     { type: "separator" },
@@ -743,7 +737,7 @@ function createTray() {
   tray.setContextMenu(contextMenu);
   tray.on("double-click", () => {
     if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
-    else createWindow();
+    else createWindow(currentTargetUrl || getServerTarget().url);
   });
 }
 
@@ -803,10 +797,17 @@ app.on("second-instance", () => {
 
 app.whenReady().then(async () => {
   try {
-    const dbPath = ensureDatabase();
-    autoBackupOnStartup(dbPath);
-    await startServer(dbPath);
-    createWindow();
+    const target = getServerTarget();
+    if (!target.remote) {
+      // Local mode (default): unchanged from before — bootstrap and spawn
+      // the bundled server against the per-user local database.
+      const dbPath = ensureDatabase();
+      autoBackupOnStartup(dbPath);
+      await startServer(dbPath);
+    }
+    // Remote mode: no local database, no spawned server — the window just
+    // loads the configured server URL directly, same as a phone browser would.
+    createWindow(target.url);
     createTray();
     initAutoUpdater();
   } catch (err) {
@@ -824,7 +825,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  if (!mainWindow) createWindow();
+  if (!mainWindow) createWindow(currentTargetUrl || getServerTarget().url);
 });
 
 app.on("before-quit", () => {

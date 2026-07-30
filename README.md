@@ -1,11 +1,14 @@
 # BuildVerse — Intelligent Vehicle Modification Manager
 
 Plan, track, budget, research, and organize your vehicle modifications.
-Runs **100% locally** — no cloud, no accounts, no internet required for core features.
+Runs **100% locally by default** — no cloud, no accounts, no internet required.
+Optionally, self-host it as a server (Docker) so the desktop app and your phone
+share the same live data instead of each keeping a separate copy.
 
 Available as:
 - **Windows Desktop App** (Electron) — install from GitHub Releases, system tray, fully self-contained
 - **Browser App** — run via Node.js / `npm run dev`
+- **Self-hosted Server** (Docker) — one shared database with real per-user accounts, reachable from the desktop app, a browser, and the Android app
 
 ---
 
@@ -70,6 +73,83 @@ npm run electron:dev
 
 ---
 
+## Self-Hosting with Docker
+
+Running BuildVerse as a server makes it the single source of truth: the desktop
+app (in "Connect to Server" mode) and a phone browser both talk to the same
+live database, so an edit made on one shows up on the other immediately —
+nothing to sync or merge, because there's only one database.
+
+### 1. Point a domain at your server
+
+Set up a reverse proxy (Caddy, nginx, Nginx Proxy Manager, a Cloudflare
+Tunnel — whatever you already use) in front of this container's port 3456,
+terminating HTTPS. `docker-compose.yml` doesn't bundle a proxy itself, since
+most self-hosters already have one.
+
+### 2. Configure
+
+```powershell
+# Generate a password hash for the bootstrap admin account
+node scripts/hash-password.js "your-password"
+```
+
+Set in your `.env` (see `.env.example`):
+```
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD_HASH=<output from hash-password.js>
+AUTH_SESSION_SECRET=<any long random string>
+```
+
+Auth only activates when `ADMIN_PASSWORD_HASH` is set — local dev and the
+Electron app's local mode are completely unaffected either way.
+
+### 3. Start it
+
+```powershell
+docker compose up -d
+```
+
+The schema and the bootstrap admin account are both applied automatically on
+every boot (both are no-ops once already up to date, so this is always safe
+to re-run, not just on first start). Visit your domain and sign in with the
+admin account above.
+
+### 4. Update later
+
+Watchtower (bundled in `docker-compose.yml`) polls for new images hourly and
+updates automatically. To update immediately:
+```powershell
+docker compose pull
+docker compose up -d
+```
+
+### Multiple users
+
+Everyone shares the same garage — separate logins are for individual
+accountability, not separate data. Sign in as the admin account, then
+**Settings → Access & Sync → Users** to add an account for each person
+(member or admin role), remove accounts, or reset someone's password.
+
+### Bringing in vehicles from separate local installs
+
+If you and someone else have each been tracking your own vehicles locally
+and want them both in the shared server:
+
+1. Each person signs in on their own PC's BuildVerse app (local mode is
+   fine) and goes to **Settings → Data & Backup → Export Data** to download
+   a JSON file.
+2. Each person signs in to the server (their own account) and uses
+   **Settings → Data & Backup → Import Data** with that JSON file. This
+   *adds* vehicles — it doesn't touch anyone else's data.
+
+This is different from **Settings → Access & Sync → Server Data**
+(admin-only), which replaces the server's *entire* database from a raw
+`.db` backup — use that only once, for your own primary migration onto the
+server, not for bringing in a second person's cars.
+
+---
+
 ## Publishing a New Release
 
 GitHub Actions automatically builds and publishes the Windows installer whenever you push a version tag.
@@ -128,10 +208,11 @@ npm run package:win
 | Browser / dev | `prisma/dev.db` (project directory) |
 | Electron (installed) | `%APPDATA%\BuildVerse\buildverse.db` |
 | Electron (portable) | `%APPDATA%\BuildVerse\buildverse.db` |
+| Docker | named volume (`/data/buildverse.db` inside the container) |
 
 On first launch the installer's demo database (Example S2000 with a sample build) is copied to the AppData location automatically. Your data persists across app updates.
 
-**Backup:** Settings → Export Data → downloads a full JSON backup.
+**Backup:** Settings → Data & Backup → Export Data → downloads a full JSON backup.
 
 ---
 
@@ -157,6 +238,8 @@ Without a certificate, Windows shows a SmartScreen warning. To remove it:
 | Backend | Next.js API Routes |
 | Database | SQLite via Prisma ORM |
 | Scraping | Cheerio (product price tracking) |
+| Self-hosted server | Docker, Watchtower (auto-update) |
+| Auth (server mode only) | Signed session cookie (jose), `scrypt` password hash — real per-user accounts, admin-managed |
 | CI/CD | GitHub Actions |
 
 ---
