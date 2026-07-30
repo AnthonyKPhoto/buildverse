@@ -24,6 +24,13 @@ jobs:
     name: Package Windows installer
     runs-on: windows-latest
     timeout-minutes: 30
+    # prisma/schema.prisma reads its datasource from DATABASE_URL (needed for
+    # Docker's sake — see CLAUDE.md). A relative file: URL resolves relative
+    # to prisma/schema.prisma's own directory, so this points at the same
+    # prisma/dev.db that electron-builder.yml bundles into the installer as
+    # the template database.
+    env:
+      DATABASE_URL: "file:./dev.db"
 
     steps:
       # ── 1. Source ─────────────────────────────────────────────────────────
