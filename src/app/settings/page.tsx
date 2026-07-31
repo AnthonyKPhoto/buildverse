@@ -878,7 +878,9 @@ export default function SettingsPage() {
 
               <Section title="About BuildVerse" icon={Zap}>
                 <Row label="Version">
-                  <span className="text-xs font-mono bg-secondary border border-border px-2 py-1 rounded-md">v{appInfo?.version ?? "1.0.9"}</span>
+                  <span className="text-xs font-mono bg-secondary border border-border px-2 py-1 rounded-md">
+                    v{appInfo?.version ?? health?.version ?? "…"}
+                  </span>
                 </Row>
                 <Row label="Stack"><span className="text-sm text-muted-foreground">Next.js 14 · Prisma · SQLite</span></Row>
                 <Row label="Running in">
