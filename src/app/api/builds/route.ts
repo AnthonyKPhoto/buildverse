@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// See src/app/api/health/route.ts for why this matters.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const vehicles = await prisma.vehicle.findMany({

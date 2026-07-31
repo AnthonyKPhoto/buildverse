@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { scrapeProduct } from "@/lib/scraper";
 import { z } from "zod";
 
+// See src/app/api/health/route.ts for why this matters.
+export const dynamic = "force-dynamic";
+
 // Only http/https URLs up to 2 000 chars are accepted for scraping
 const addProductSchema = z.object({
   url: z

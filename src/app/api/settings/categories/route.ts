@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { MOD_CATEGORIES } from "@/lib/utils";
 
+// See src/app/api/health/route.ts for why this matters.
+export const dynamic = "force-dynamic";
+
 const KEY = "custom_categories";
 
 export async function GET() {

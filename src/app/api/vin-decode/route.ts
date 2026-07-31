@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// See src/app/api/health/route.ts for why this matters.
+export const dynamic = "force-dynamic";
+
 const NHTSA = "https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended";
 
 export async function GET(req: NextRequest) {

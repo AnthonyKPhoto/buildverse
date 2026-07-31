@@ -4,6 +4,9 @@ import { hashPassword, generateTempPassword } from "@/lib/auth/password";
 import { sendTempPasswordEmail } from "@/lib/mailer";
 import { z } from "zod";
 
+// See src/app/api/health/route.ts for why this matters.
+export const dynamic = "force-dynamic";
+
 // Admin-only account management. Everyone shares the same garage data — this
 // is just per-person login identity, not per-user data isolation.
 

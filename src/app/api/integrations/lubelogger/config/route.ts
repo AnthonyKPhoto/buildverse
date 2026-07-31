@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadConfig, saveConfig } from "@/lib/lubelogger";
 
+// See src/app/api/health/route.ts for why this matters.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const cfg = await loadConfig();
   // Mask credentials in response — client never needs the raw secrets back

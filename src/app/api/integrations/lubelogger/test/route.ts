@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadConfig, llFetch, normaliseUrl, LubeLoggerConfig } from "@/lib/lubelogger";
 
+// See src/app/api/health/route.ts for why this matters.
+export const dynamic = "force-dynamic";
+
 async function tryFetch(cfg: LubeLoggerConfig, path: string) {
   return llFetch(cfg, path);
 }

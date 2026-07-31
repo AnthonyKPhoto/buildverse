@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
+// See src/app/api/health/route.ts for why this matters — this is the
+// garage's own vehicle list, so a build-time-cached response here would
+// show a permanently stale/empty garage in Docker.
+export const dynamic = "force-dynamic";
+
 // Accepts https:// URLs or base64 data: images uploaded from the client
 const safeUrl = z
   .string()

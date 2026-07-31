@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
+// See src/app/api/health/route.ts for why this matters.
+export const dynamic = "force-dynamic";
+
 // Admin-only management of per-vehicle edit grants. Viewing stays shared for
 // everyone — this only controls who besides a vehicle's creator (and admins,
 // who always bypass) may edit it. See src/lib/auth/vehicle-access.ts.

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// See src/app/api/health/route.ts for why this matters.
+export const dynamic = "force-dynamic";
+
 // Reads the identity middleware already verified and attached as headers —
 // returns null when auth is disabled (local/Electron mode) or when the
 // request came through the loopback bypass (no per-user identity to report).

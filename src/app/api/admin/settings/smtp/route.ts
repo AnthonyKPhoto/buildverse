@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSmtpConfigMasked, saveSmtpConfig } from "@/lib/mailer";
 
+// See src/app/api/health/route.ts for why this matters — without it, GET
+// routes with no dynamic-API usage can get statically cached at build time.
+export const dynamic = "force-dynamic";
+
 function requireAdmin(req: NextRequest): NextResponse | null {
   if (req.headers.get("x-user-role") !== "admin") {
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });

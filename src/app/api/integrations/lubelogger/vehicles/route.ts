@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadConfig, llFetch, LubeLoggerConfig } from "@/lib/lubelogger";
 import { prisma } from "@/lib/prisma";
 
+// See src/app/api/health/route.ts for why this matters.
+export const dynamic = "force-dynamic";
+
 async function fetchLLAndBVVehicles(cfg: LubeLoggerConfig) {
   const [llRes, bvVehicles] = await Promise.all([
     llFetch(cfg, "/api/vehicles"),
