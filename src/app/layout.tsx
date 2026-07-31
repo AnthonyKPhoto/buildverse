@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { AccountMenu } from "@/components/layout/AccountMenu";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { SetupWizard } from "@/components/SetupWizard";
@@ -34,6 +35,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="flex h-screen overflow-hidden">
           <Sidebar />
           <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+            {/* Mobile-only — desktop has the same control in the sidebar
+                footer. Renders nothing outside server mode. */}
+            <AccountMenu className="md:hidden px-4 py-2.5 border-b border-border/60 bg-card" />
             <div className="container mx-auto px-3 py-4 md:px-6 md:py-8 max-w-7xl">
               {children}
             </div>
