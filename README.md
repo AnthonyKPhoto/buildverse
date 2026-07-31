@@ -179,9 +179,13 @@ and want them both in the shared server:
    *adds* vehicles — it doesn't touch anyone else's data.
 
 This is different from **Settings → Access & Sync → Server Data**
-(admin-only), which replaces the server's *entire* database from a raw
-`.db` backup — use that only once, for your own primary migration onto the
-server, not for bringing in a second person's cars.
+(admin-only), which replaces the server's *entire* database from a backup —
+use that only once, for your own primary migration onto the server, not for
+bringing in a second person's cars. It accepts either a `.db` file (database
+only) or a `.zip` transfer pack from Electron's **Export Transfer Pack**
+(database *and* any uploaded vehicle files/tune logs, which live on disk and
+aren't included in a plain `.db` backup or the JSON export above) — use the
+zip if you have any of those, or they won't come across.
 
 ---
 

@@ -42,7 +42,7 @@ src/
       modifications/[id]/ PUT (update) + DELETE (also cleans ModDependency rows)
       products/           Tracked product scraping + price history + alerts
       auth/               Login/logout/me/setup/setup-status/change-password — per-user, cookie-based session (see Authentication below)
-      admin/              Admin-only: users CRUD, vehicle-access grants, settings/smtp, restore-db (raw .db upload, server mode only)
+      admin/              Admin-only: users CRUD, vehicle-access grants, settings/smtp, restore-db (raw .db OR .zip transfer pack, server mode only)
       user/theme/         Self-only PUT of the signed-in account's own appearance prefs
       health/             Unauthenticated status/mode endpoint (Docker healthcheck + client mode detection)
       integrations/lubelogger/  LubeLogger pull sync
@@ -198,12 +198,32 @@ this required zero data-layer changes, only a navigation/origin change in `elect
 (`serverMode`/`serverUrl` in `prefs.json`, `server:testConnection` IPC to check reachability from the
 main process so it isn't blocked by CORS).
 
-**Migrating existing local data onto a server:** Settings → Backups → New Backup (Electron, unchanged)
-produces a raw `.db` file; upload it via **Settings → Access & Sync → Server Data** (admin-only,
-requires re-entering the admin's own password) to seed the server. This does a full destructive
-replace — use it once for your own primary migration, not for adding a second person's cars (for
-that, each person exports their own JSON from Settings → Data & Backup → Export Data and imports it
-into their own account on the server — that's additive, not destructive).
+**Migrating existing local data onto a server:** two options from Electron, both uploaded via
+**Settings → Access & Sync → Server Data** (admin-only, requires re-entering the admin's own
+password) — `POST /api/admin/restore-db` accepts either and auto-detects which by magic bytes:
+- **Settings → Backups → New Backup** produces a raw `.db` file — database only, no file attachments.
+- **Settings → Backups → Export Transfer Pack** produces a `.zip` (db + `vehicle-files/` +
+  `tune-logs/`, the two tables whose content lives on disk rather than in the SQLite file — see
+  `VehicleFile`/`TuneLog` below). Use this one if the install being migrated has any uploaded
+  documents or tune logs, or those attachments become dead references on the server.
+
+Both do a full destructive replace — use this once for your own primary migration, not for adding a
+second person's cars (for that, each person exports their own JSON from Settings → Data & Backup →
+Export Data and imports it into their own account on the server — that's additive, not destructive,
+though note the JSON export/import path doesn't carry `VehicleFile`/`TuneLog` attachments either).
+
+Electron's zip export (`electron/main.js`, `transfer:export-zip`) shells out to PowerShell's
+`ZipFile.CreateFromDirectory`, which on Windows stores entry names with **backslash** separators
+(`vehicle-files\veh1\photo.jpg`), not the forward slashes the ZIP format conventionally uses —
+confirmed by building one and inspecting it, not assumed. `restore-db/route.ts` normalizes every
+entry name before any path matching; don't reintroduce a raw `.startsWith("vehicle-files/")` check
+without that normalization; or it will silently match nothing on a real Windows-exported pack.
+
+**`BUILDVERSE_DATA_DIR` must be set for Docker** (`docker-compose.yml` sets it to `/data`, the
+mounted volume) — `vehicle-files`/`tune-logs` uploads are written under this directory (or
+`process.cwd()/data` if unset, which in the container is inside the writable layer, **not** the
+volume, and gets silently wiped on every image update). Electron sets this itself
+(`app.getPath("userData")`); it's only Docker that needs the explicit env var.
 
 **Note on WAL mode:** the server enables SQLite WAL mode for concurrent multi-client writes
 (`scripts/docker-init-db.js`). If you ever back up the live server's volume by copying the `.db` file

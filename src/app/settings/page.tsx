@@ -519,7 +519,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/admin/restore-db", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Restore failed");
-      toast({ title: "Database restored", description: "The server is restarting — reload in a few seconds." });
+      toast({ title: data.message || "Database restored", description: "The server is restarting — reload in a few seconds." });
       setRestorePassword("");
     } catch (err) {
       toast({ title: "Restore failed", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
@@ -1233,9 +1233,10 @@ export default function SettingsPage() {
               {health?.mode === "server" && currentUser?.role === "admin" && (
                 <Section title="Server Data" icon={HardDrive}>
                   <p className="text-xs text-muted-foreground mb-3">
-                    One-time migration: on the desktop app, use Settings → Data &amp; Backup → New Backup
-                    to produce a <code>.db</code> file, then upload it here to seed this server.
-                    This replaces everything currently on the server.
+                    One-time migration from the desktop app: <strong>Settings → Data &amp; Backup → New Backup</strong> gives
+                    you a <code>.db</code> file (database only); <strong>Export Transfer Pack</strong> gives you a{" "}
+                    <code>.zip</code> (database plus any uploaded vehicle files and tune logs — use this one if you have
+                    those). Upload either here to seed this server — this replaces everything currently on the server.
                   </p>
                   <div className="space-y-3">
                     <div>
@@ -1248,10 +1249,10 @@ export default function SettingsPage() {
                         className="w-full max-w-xs px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                     </div>
-                    <input ref={restoreDbRef} type="file" accept=".db" className="hidden" onChange={handleRestoreDb} />
+                    <input ref={restoreDbRef} type="file" accept=".db,.zip" className="hidden" onChange={handleRestoreDb} />
                     <Btn variant="danger" onClick={() => restoreDbRef.current?.click()} disabled={restoring || !restorePassword}>
                       {restoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                      {restoring ? "Restoring…" : "Upload & Restore Database"}
+                      {restoring ? "Restoring…" : "Upload & Restore (.db or .zip)"}
                     </Btn>
                   </div>
                 </Section>

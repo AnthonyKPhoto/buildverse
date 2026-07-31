@@ -12,6 +12,12 @@ services:
     # variable references with fallback defaults for whatever isn't set.
     environment:
       - DATABASE_URL=file:/data/buildverse.db
+      # Vehicle file/tune-log uploads are written under this directory (see
+      # src/app/api/vehicles/[id]/files/route.ts and .../tune-logs/route.ts).
+      # Without it, they default to a path inside the container's own
+      # writable layer — NOT the volume above — and get silently wiped every
+      # time the container is recreated (an image update, docker compose up).
+      - BUILDVERSE_DATA_DIR=/data
 
       # ── Server mode ──────────────────────────────────────────────────────────────
       # Setting AUTH_SESSION_SECRET turns on login for everyone except local

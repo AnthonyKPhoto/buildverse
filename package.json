@@ -41,6 +41,7 @@
     "@radix-ui/react-toast": "^1.2.1",
     "@radix-ui/react-tooltip": "^1.1.2",
     "@react-pdf/renderer": "^4.5.1",
+    "adm-zip": "^0.6.0",
     "cheerio": "^1.0.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
@@ -64,6 +65,7 @@
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",
     "@resvg/resvg-js": "^2.6.2",
+    "@types/adm-zip": "^0.5.8",
     "@types/cheerio": "^0.22.35",
     "@types/node": "^20.16.11",
     "@types/nodemailer": "^8.0.1",
