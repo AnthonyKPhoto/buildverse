@@ -77,6 +77,18 @@ export async function POST(req: NextRequest) {
 
   const password = formData.get("password");
   const requester = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
+  // A session's JWT only carries a userId, never re-verified against the DB
+  // per-request (see src/lib/auth/session.ts) — so a session issued before a
+  // *previous* restore swapped the database out from under it can still look
+  // "signed in" while pointing at a user row that no longer exists. That's a
+  // different problem than a wrong password, and "Incorrect password" here
+  // would be actively misleading about it.
+  if (userId && !requester) {
+    return NextResponse.json(
+      { error: "Your session doesn't match the current server data (likely from an earlier restore) — sign out and back in, then try again." },
+      { status: 401 }
+    );
+  }
   if (
     typeof password !== "string" ||
     !requester ||
