@@ -125,6 +125,51 @@ export async function POST(req: NextRequest) {
   const tempPath = path.join(path.dirname(dbPath), `.restore-${Date.now()}.tmp`);
 
   try {
+    // Attachments FIRST, database swap LAST. The db rename is the
+    // point of no return (irreversible, and immediately followed by
+    // process.exit() below) — if it ran first and *this* step then failed,
+    // the live database would already be replaced while the response still
+    // said "Restore failed", with no restart to bring docker-init-db.js's
+    // schema/admin reconciliation back into play. Extracting first means a
+    // failure here leaves the live database completely untouched.
+    if (zip) {
+      const dataDir = attachmentsRoot();
+      try {
+        const allEntries = zip.getEntries();
+        for (const dirName of ["vehicle-files", "tune-logs"]) {
+          const prefix = `${zipRoot}${dirName}/`;
+          const entries = allEntries.filter(e => !e.isDirectory && normalizeEntryName(e.entryName).startsWith(prefix));
+          if (entries.length === 0) continue;
+
+          const destRoot = path.join(dataDir, dirName);
+          await rm(destRoot, { recursive: true, force: true }).catch(() => {});
+          await mkdir(destRoot, { recursive: true });
+
+          for (const entry of entries) {
+            const relPath = normalizeEntryName(entry.entryName).slice(prefix.length);
+            const destPath = path.join(destRoot, relPath);
+            // Guard against a corrupted/malicious entry (e.g. "../../etc/x")
+            // writing outside destRoot — admin-only route, but cheap to check.
+            if (!destPath.startsWith(destRoot + path.sep) && destPath !== destRoot) continue;
+            await mkdir(path.dirname(destPath), { recursive: true });
+            await writeFile(destPath, entry.getData());
+          }
+        }
+      } catch (err) {
+        // Most likely cause: BUILDVERSE_DATA_DIR isn't set (or points
+        // somewhere the container's non-root user can't write), so this fell
+        // back to a path inside the image's own read-only-ish layer instead
+        // of the mounted volume. Surface that directly instead of a raw
+        // ENOENT/EACCES fragment — see docker-compose.yml and CLAUDE.md.
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Couldn't write attachments to "${dataDir}" (${detail}). If this is Docker, check that ` +
+          `BUILDVERSE_DATA_DIR is set (docker-compose.yml) and points at the mounted volume, then ` +
+          `redeploy with docker compose up -d — pulling a new image alone doesn't apply compose-file changes.`
+        );
+      }
+    }
+
     await writeFile(tempPath, dbBuffer);
     // Release Prisma's handle on the live file before swapping it out — the
     // process is about to exit anyway (see below), and closing first avoids
@@ -135,34 +180,6 @@ export async function POST(req: NextRequest) {
     // to be atomic rather than a cross-device copy that could be interrupted
     // partway through.
     await rename(tempPath, dbPath);
-
-    // Transfer pack also carries vehicle-files/tune-logs — those live on
-    // disk, not in the SQLite file, so a raw .db restore alone would leave
-    // every attachment as a dead reference. Full replace to match the .db
-    // swap above (this is a one-time migration, not a merge).
-    if (zip) {
-      const dataDir = attachmentsRoot();
-      const allEntries = zip.getEntries();
-      for (const dirName of ["vehicle-files", "tune-logs"]) {
-        const prefix = `${zipRoot}${dirName}/`;
-        const entries = allEntries.filter(e => !e.isDirectory && normalizeEntryName(e.entryName).startsWith(prefix));
-        if (entries.length === 0) continue;
-
-        const destRoot = path.join(dataDir, dirName);
-        await rm(destRoot, { recursive: true, force: true }).catch(() => {});
-        await mkdir(destRoot, { recursive: true });
-
-        for (const entry of entries) {
-          const relPath = normalizeEntryName(entry.entryName).slice(prefix.length);
-          const destPath = path.join(destRoot, relPath);
-          // Guard against a corrupted/malicious entry (e.g. "../../etc/x")
-          // writing outside destRoot — admin-only route, but cheap to check.
-          if (!destPath.startsWith(destRoot + path.sep) && destPath !== destRoot) continue;
-          await mkdir(path.dirname(destPath), { recursive: true });
-          await writeFile(destPath, entry.getData());
-        }
-      }
-    }
   } catch (err) {
     // The rename can fail (e.g. a transient file-lock) before the temp file
     // is consumed — clean it up rather than leaving it to accumulate next
