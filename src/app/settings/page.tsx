@@ -1373,13 +1373,6 @@ export default function SettingsPage() {
                     </Row>
                   </>
                 )}
-                {isElectron && serverMode === "remote" && (
-                  <Row label="Transfer Pack" desc="Not available while connected to a server — those buttons would read/write this app's own local file, which isn't what you're viewing right now" last>
-                    <span className="text-xs text-muted-foreground">
-                      Use <strong>Access &amp; Sync → Server Data</strong> instead to upload a pack to the server.
-                    </span>
-                  </Row>
-                )}
                 <Row label="Refresh Product Prices" desc="Re-scrape all tracked product URLs">
                   <Btn onClick={refreshAll}><RefreshCw className="w-3.5 h-3.5" /> Refresh All</Btn>
                 </Row>
