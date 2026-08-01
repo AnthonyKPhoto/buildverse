@@ -8,6 +8,7 @@ import AdmZip from "adm-zip";
 import { isAuthEnabled } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { SQLITE_MAGIC, normalizeEntryName, findZipRoot, findEntry, attachmentsRoot } from "@/lib/transfer-pack";
+import { applySelfMigrations } from "@/lib/schema-migrations";
 
 // Additive counterpart to /api/admin/restore-db — that route does a full
 // destructive replace (admin-only, for your own primary migration onto a
@@ -79,6 +80,11 @@ export async function POST(req: NextRequest) {
   let vehiclesImported = 0, modsImported = 0, filesImported = 0, tuneLogsImported = 0;
 
   try {
+    // A transfer pack from an older app version won't have newer columns
+    // (e.g. Vehicle.createdByUserId) — without this, reading it throws
+    // "column does not exist" instead of importing anything.
+    await applySelfMigrations(source);
+
     const sourceVehicles = await source.vehicle.findMany({
       include: {
         modifications: { include: { dependencies: true } },
