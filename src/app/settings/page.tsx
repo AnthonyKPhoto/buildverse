@@ -208,7 +208,9 @@ export default function SettingsPage() {
   const [importing, setImporting] = useState(false);
   const [zipExporting, setZipExporting] = useState(false);
   const [zipImporting, setZipImporting] = useState(false);
+  const [mergeZipImporting, setMergeZipImporting] = useState(false);
   const importRef      = useRef<HTMLInputElement>(null);
+  const mergeZipRef    = useRef<HTMLInputElement>(null);
 
   const isElectron = typeof window !== "undefined" && !!window.electronAPI?.isElectron;
   const { accent, setAccent } = useCurrentAccent();
@@ -655,6 +657,32 @@ export default function SettingsPage() {
     } finally {
       setImporting(false);
       if (importRef.current) importRef.current.value = "";
+    }
+  };
+
+  // Additive zip import (server mode) — adds a second person's vehicles
+  // without touching anyone else's, unlike the admin-only destructive
+  // restore under Access & Sync → Server Data. See /api/import-zip.
+  const handleMergeZipImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMergeZipImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/import-zip", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      toast({
+        title: `Imported ${data.vehiclesImported} vehicle${data.vehiclesImported === 1 ? "" : "s"}`,
+        description: `${data.modsImported} mods, ${data.filesImported} files, ${data.tuneLogsImported} tune logs`,
+      });
+      loadStats();
+    } catch (err) {
+      toast({ title: "Import failed", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setMergeZipImporting(false);
+      if (mergeZipRef.current) mergeZipRef.current.value = "";
     }
   };
 
@@ -1320,6 +1348,15 @@ export default function SettingsPage() {
                     {importing ? "Importing…" : "Import JSON"}
                   </Btn>
                 </Row>
+                {health?.mode === "server" && currentUser && (
+                  <Row label="Add Vehicles from Transfer Pack" desc="Bring in your own vehicles (and their files/tune logs) from a .zip — adds alongside what's already here, never touches anyone else's data">
+                    <input ref={mergeZipRef} type="file" accept=".zip" className="hidden" onChange={handleMergeZipImport} />
+                    <Btn onClick={() => mergeZipRef.current?.click()} disabled={mergeZipImporting}>
+                      {mergeZipImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      {mergeZipImporting ? "Importing…" : "Import Pack"}
+                    </Btn>
+                  </Row>
+                )}
                 {isElectron && serverMode === "local" && (
                   <>
                     <Row label="Export Transfer Pack" desc="Full ZIP archive — use to move BuildVerse to another computer">

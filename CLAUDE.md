@@ -208,16 +208,23 @@ password) — `POST /api/admin/restore-db` accepts either and auto-detects which
   documents or tune logs, or those attachments become dead references on the server.
 
 Both do a full destructive replace — use this once for your own primary migration, not for adding a
-second person's cars (for that, each person exports their own JSON from Settings → Data & Backup →
-Export Data and imports it into their own account on the server — that's additive, not destructive,
-though note the JSON export/import path doesn't carry `VehicleFile`/`TuneLog` attachments either).
+second person's cars. For that (any signed-in user, not admin-only): `POST /api/import-zip`
+(Settings → Data & Backup → **Add Vehicles from Transfer Pack**) is the additive counterpart —
+same zip format, but reads the source db into a scratch copy and re-creates each vehicle (plus
+everything under it: mods, dependencies, maintenance, budgets, dyno runs, links, notes, and the
+actual file bytes for `VehicleFile`/`TuneLog`, all with freshly generated IDs) as new records owned
+by the importing user, never touching what's already on the server. Deliberately out of scope:
+`TrackedProduct`/`Receipt` (global, not per-vehicle) and `VehicleAccess` grants (reference source-
+install user IDs that don't exist here). This is what the plain JSON export/import can't do, since
+it neither carries `VehicleFile`/`TuneLog` attachments nor is a single file to hand someone.
 
 Electron's zip export (`electron/main.js`, `transfer:export-zip`) shells out to PowerShell's
 `ZipFile.CreateFromDirectory`, which on Windows stores entry names with **backslash** separators
 (`vehicle-files\veh1\photo.jpg`), not the forward slashes the ZIP format conventionally uses —
-confirmed by building one and inspecting it, not assumed. `restore-db/route.ts` normalizes every
-entry name before any path matching; don't reintroduce a raw `.startsWith("vehicle-files/")` check
-without that normalization; or it will silently match nothing on a real Windows-exported pack.
+confirmed by building one and inspecting it, not assumed. `src/lib/transfer-pack.ts` (shared by
+both `restore-db` and `import-zip`) normalizes every entry name before any path matching; don't
+reintroduce a raw `.startsWith("vehicle-files/")` check without that normalization, or it will
+silently match nothing on a real Windows-exported pack.
 
 **`BUILDVERSE_DATA_DIR` must be set for Docker** (`docker-compose.yml` sets it to `/data`, the
 mounted volume) — `vehicle-files`/`tune-logs` uploads are written under this directory (or

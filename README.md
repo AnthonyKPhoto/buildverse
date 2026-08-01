@@ -172,11 +172,15 @@ If you and someone else have each been tracking your own vehicles locally
 and want them both in the shared server:
 
 1. Each person signs in on their own PC's BuildVerse app (local mode is
-   fine) and goes to **Settings → Data & Backup → Export Data** to download
-   a JSON file.
+   fine) and goes to **Settings → Data & Backup → Export Data** (JSON) or
+   **Export Transfer Pack** (.zip) — use the zip if you've uploaded any
+   vehicle files or tune logs, since those live on disk and the JSON export
+   doesn't include them.
 2. Each person signs in to the server (their own account) and uses
-   **Settings → Data & Backup → Import Data** with that JSON file. This
-   *adds* vehicles — it doesn't touch anyone else's data.
+   **Settings → Data & Backup → Import Data** (for a JSON file) or
+   **Add Vehicles from Transfer Pack** (for a .zip). Both *add* vehicles —
+   neither touches anyone else's data, and vehicles imported this way are
+   owned by whoever's signed in when they import them.
 
 This is different from **Settings → Access & Sync → Server Data**
 (admin-only), which replaces the server's *entire* database from a backup —

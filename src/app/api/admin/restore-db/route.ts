@@ -4,6 +4,7 @@ import path from "path";
 import AdmZip from "adm-zip";
 import { verifyPassword, isAuthEnabled } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
+import { SQLITE_MAGIC, normalizeEntryName, findZipRoot, attachmentsRoot } from "@/lib/transfer-pack";
 
 // One-time migration path: seed the server with an existing local (Electron)
 // backup. Accepts either a raw .db file (SQLite only, matches Electron's own
@@ -12,39 +13,11 @@ import { prisma } from "@/lib/prisma";
 // migrating file attachments, which don't live in the SQLite file itself).
 // A single request here replaces the ENTIRE server's data, so the ambient
 // session cookie alone isn't enough — the password must be re-entered.
-
-const SQLITE_MAGIC = "SQLite format 3\0";
-
-function attachmentsRoot(): string {
-  return process.env.BUILDVERSE_DATA_DIR || path.join(process.cwd(), "data");
-}
-
-// electron/main.js creates the zip via PowerShell's ZipFile.CreateFromDirectory,
-// which on Windows stores entry names with backslash separators (e.g.
-// "vehicle-files\veh1\photo.jpg"), not the forward slashes the ZIP spec
-// conventionally uses — confirmed by actually building one and inspecting it,
-// not assumed. Every entryName touched here goes through this first.
-function normalizeEntryName(name: string): string {
-  return name.replace(/\\/g, "/");
-}
-
-// Electron's own zip export puts buildverse.db at the archive root, but a
-// re-zip through a file manager can wrap everything in one extra folder —
-// detect and unwrap that the same way electron/main.js's import does.
-function findZipRoot(zip: AdmZip): string {
-  const names = zip.getEntries().map(e => normalizeEntryName(e.entryName));
-  if (names.includes("buildverse.db")) return "";
-  const topDirs = new Set(
-    names
-      .map(n => n.split("/")[0])
-      .filter((name, i, arr) => name && arr.indexOf(name) === i)
-  );
-  if (topDirs.size === 1) {
-    const [only] = Array.from(topDirs);
-    if (names.includes(`${only}/buildverse.db`)) return `${only}/`;
-  }
-  return "";
-}
+//
+// This is a DESTRUCTIVE full replace — for bringing a second person's
+// vehicles onto a server that already has data, see POST /api/import-zip
+// instead, which merges additively (same idea as the JSON import, but for
+// zips, so it also carries over file attachments).
 
 // Prisma resolves a relative sqlite `file:` URL relative to prisma/schema.prisma's
 // directory, not process.cwd() — plain fs calls need to match that convention or
