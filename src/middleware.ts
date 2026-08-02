@@ -13,6 +13,10 @@ const PUBLIC_PATHS = new Set([
   "/api/auth/setup",
   "/api/auth/setup-status",
   "/api/health",
+  "/forgot-password",
+  "/api/auth/forgot-password",
+  "/reset-password",
+  "/api/auth/reset-password",
 ]);
 
 // Reachable even while a forced password change is pending — the page that

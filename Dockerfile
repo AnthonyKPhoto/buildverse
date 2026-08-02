@@ -35,6 +35,7 @@ COPY --from=builder --chown=buildverse:buildverse /app/node_modules/.prisma ./no
 COPY --from=builder --chown=buildverse:buildverse /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder --chown=buildverse:buildverse /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder --chown=buildverse:buildverse /app/scripts/docker-init-db.js ./scripts/docker-init-db.js
+COPY --from=builder --chown=buildverse:buildverse /app/scripts/reset-password.js ./scripts/reset-password.js
 
 RUN mkdir -p /data && chown buildverse:buildverse /data
 

@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { Lock, User, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
 
 export function LoginForm() {
@@ -99,6 +100,12 @@ export function LoginForm() {
               {error}
             </div>
           )}
+
+          <p className="text-center">
+            <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
+              Forgot password?
+            </Link>
+          </p>
         </form>
 
         <p className="text-center text-xs text-muted-foreground mt-6">

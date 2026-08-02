@@ -86,6 +86,21 @@ export async function sendMail(opts: { to: string; subject: string; text: string
   }
 }
 
+export async function sendPasswordResetEmail(to: string, username: string, resetUrl: string) {
+  return sendMail({
+    to,
+    subject: "Reset your BuildVerse password",
+    text:
+      `A password reset was requested for your BuildVerse account (${username}).\n\n` +
+      `Reset it here: ${resetUrl}\n\n` +
+      `This link expires in 30 minutes. If you didn't request this, you can ignore this email — your password won't change.`,
+    html:
+      `<p>A password reset was requested for your BuildVerse account (<strong>${username}</strong>).</p>` +
+      `<p><a href="${resetUrl}">Reset your password</a></p>` +
+      `<p>This link expires in 30 minutes. If you didn't request this, you can ignore this email — your password won't change.</p>`,
+  });
+}
+
 export async function sendTempPasswordEmail(to: string, username: string, tempPassword: string, appUrl: string) {
   return sendMail({
     to,

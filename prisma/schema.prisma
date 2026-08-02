@@ -259,6 +259,23 @@ model User {
 
   createdVehicles Vehicle[]
   vehicleAccess   VehicleAccess[]
+  resetTokens     PasswordResetToken[]
+}
+
+// Self-service "forgot password" — a hash of the emailed token, never the raw
+// token itself, so a database read alone can't be used to take over an
+// account. One-time use (usedAt) and short-lived (expiresAt).
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // Explicit "this user may edit this vehicle" grant, set by an admin. Does not
