@@ -1,15 +1,20 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# BuildVerse — Windows Release Workflow
+# BuildVerse — Release Workflow
 #
 # Triggers when you push a version tag, e.g.:
 #   git tag v1.0.0 && git push origin v1.0.0
 #
 # Produces:
-#   • BuildVerse Setup X.X.X.exe  — NSIS installer (recommended)
-#   • BuildVerse X.X.X Portable.exe — portable, no install needed
+#   • BuildVerse Setup X.X.X.exe    — Windows NSIS installer (recommended)
+#   • BuildVerse X.X.X Portable.exe — Windows portable, no install needed
+#   • BuildVerse-X.X.X.AppImage     — Linux, self-contained, no install needed
+#   • buildverse_X.X.X_amd64.deb    — Linux, Debian/Ubuntu package
+#
+# The Linux job runs after (needs:) the Windows job so it appends its
+# artifacts to the same GitHub Release instead of racing to create it.
 # ─────────────────────────────────────────────────────────────────────────────
 
-name: Build & Release (Windows)
+name: Build & Release
 
 on:
   push:
@@ -138,3 +143,89 @@ jobs:
             ### System requirements
             - Windows 10 / 11 (64-bit)
             - No other software required
+
+  release-linux:
+    name: Package Linux AppImage + deb
+    # Runs after the Windows job so it appends to the release that job
+    # creates, instead of both jobs racing to create it at the same time.
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: "file:./dev.db"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22 (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Cache Electron & electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: electron-linux-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            electron-linux-
+
+      - name: Install npm dependencies
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Create database schema
+        run: npx prisma db push
+
+      - name: Seed demo data
+        run: npx prisma db seed
+
+      - name: Build Next.js application
+        run: npx next build
+
+      - name: Bundle Electron main process
+        run: npx esbuild electron/main.js --bundle --platform=node --external:electron --outfile=electron/main.bundled.js
+
+      - name: Package Linux AppImage + deb
+        run: npx electron-builder --linux --publish never
+
+      - name: Get version from tag
+        id: version
+        run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Linux artifacts to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "BuildVerse v${{ steps.version.outputs.ver }}"
+          draft: false
+          prerelease: false
+          append_body: true
+          fail_on_unmatched_files: false
+          files: |
+            dist-electron/*.AppImage
+            dist-electron/*.deb
+          body: |
+            ---
+
+            ### Linux
+
+            | File | Description |
+            |------|-------------|
+            | `BuildVerse-${{ steps.version.outputs.ver }}.AppImage` | **AppImage (recommended)** — download, `chmod +x`, then run. No install, works on most distros |
+            | `buildverse_${{ steps.version.outputs.ver }}_amd64.deb` | **Debian/Ubuntu package** — `sudo apt install ./buildverse_${{ steps.version.outputs.ver }}_amd64.deb` |
+
+            Requires **Node.js 18+ already installed** and on your `PATH` (`node --version` to check) — unlike the Windows build, it is not bundled into the package. Install it via your distro's package manager or [nodejs.org](https://nodejs.org) first.
+
+            Your data is stored at `~/.config/BuildVerse/buildverse.db` and is never touched by updates.
+
+            ### System requirements
+            - 64-bit Linux, glibc-based (Ubuntu, Debian, Fedora, etc. — not Alpine)
+            - Node.js 18+ on PATH

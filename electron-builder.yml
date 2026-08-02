@@ -1,8 +1,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # BuildVerse — electron-builder packaging configuration
 #
-# Build locally:    npm run package:win
-# Build via CI:     push a version tag (e.g. v1.0.0) → GitHub Actions builds it
+# Build locally:    npm run package:win     (Windows)
+#                    npm run package:linux   (must run on Linux — electron-builder
+#                                             can't cross-compile the native Prisma
+#                                             query engine from Windows)
+# Build via CI:     push a version tag (e.g. v1.0.0) → GitHub Actions builds both
 # ─────────────────────────────────────────────────────────────────────────────
 
 appId: "com.buildverse.app"
@@ -107,6 +110,24 @@ nsis:
 # ── Portable (no install, run anywhere) ──────────────────────────────────────
 portable:
   artifactName: "BuildVerse-${version}-Portable.exe"
+
+# ── Linux ─────────────────────────────────────────────────────────────────────
+linux:
+  target:
+    - target: "AppImage"
+      arch: ["x64"]
+    - target: "deb"
+      arch: ["x64"]
+  icon: "build/icon.png"
+  category: "Utility"
+  synopsis: "Vehicle modification manager"
+
+appImage:
+  artifactName: "BuildVerse-${version}.AppImage"
+
+deb:
+  maintainer: "BuildVerse <noreply@buildverse.app>"
+  artifactName: "buildverse_${version}_amd64.deb"
 
 # ── Auto-update feed (electron-updater reads app-update.yml embedded in the package) ──
 publish:

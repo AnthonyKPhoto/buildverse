@@ -16,7 +16,10 @@
     "electron:bundle": "npx esbuild electron/main.js --bundle --platform=node --external:electron --outfile=electron/main.bundled.js",
     "electron:build": "npm run electron:bundle && npm run build && electron-builder --win --publish never",
     "electron:release": "npm run electron:bundle && npm run build && electron-builder --win --publish always",
+    "electron:build:linux": "npm run electron:bundle && npm run build && electron-builder --linux --publish never",
+    "electron:release:linux": "npm run electron:bundle && npm run build && electron-builder --linux --publish always",
     "package:win": "npm run electron:build",
+    "package:linux": "npm run electron:build:linux",
     "gen-icons": "node scripts/gen-icons.js"
   },
   "dependencies": {

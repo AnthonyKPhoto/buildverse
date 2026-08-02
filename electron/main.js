@@ -520,13 +520,14 @@ ipcMain.handle("update:install", () => {
 // ──────────────────────────────────────────────────────────
 
 function findNodeExecutable() {
-  // 1. Node binary bundled alongside the app (most reliable)
-  const bundled = path.join(process.resourcesPath, "node.exe");
+  const nodeName = process.platform === "win32" ? "node.exe" : "node";
+
+  // 1. Node binary bundled alongside the app (most reliable, if present)
+  const bundled = path.join(process.resourcesPath, nodeName);
   if (fs.existsSync(bundled)) return bundled;
 
   // 2. Walk PATH entries
   const sep = process.platform === "win32" ? ";" : ":";
-  const nodeName = process.platform === "win32" ? "node.exe" : "node";
   for (const dir of (process.env.PATH || "").split(sep)) {
     const candidate = path.join(dir.trim(), nodeName);
     try { if (fs.existsSync(candidate)) return candidate; } catch {}

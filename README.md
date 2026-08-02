@@ -7,6 +7,7 @@ share the same live data instead of each keeping a separate copy.
 
 Available as:
 - **Windows Desktop App** (Electron) — install from GitHub Releases, system tray, fully self-contained
+- **Linux Desktop App** (Electron) — AppImage or .deb, install from GitHub Releases, system tray
 - **Browser App** — run via Node.js / `npm run dev`
 - **Self-hosted Server** (Docker) — one shared database with real per-user accounts, reachable from the desktop app, a browser, and the Android app
 
@@ -22,9 +23,26 @@ Available as:
 3. Follow the wizard → Finish
 4. Launch from the Desktop or Start Menu shortcut
 
-**No Node.js, no npm, no prerequisites.** Everything is bundled inside the installer.
-
 > **Portable option:** Download `BuildVerse x.x.x Portable.exe` — runs from any folder without installing.
+
+---
+
+## ⬇️ Download (Linux)
+
+**Go to [Releases](../../releases) and download the latest `BuildVerse-x.x.x.AppImage` or `buildverse_x.x.x_amd64.deb`.**
+
+Requires **Node.js 18+** already installed and on your `PATH` (`node --version` to check) — unlike the Windows build, it isn't bundled into the package. Install it via your distro's package manager (`apt install nodejs`, `dnf install nodejs`, etc.) or [nodejs.org](https://nodejs.org) first.
+
+**AppImage** (works on most distros, no install):
+```bash
+chmod +x BuildVerse-x.x.x.AppImage
+./BuildVerse-x.x.x.AppImage
+```
+
+**Debian/Ubuntu (.deb)**:
+```bash
+sudo apt install ./buildverse_x.x.x_amd64.deb
+```
 
 ---
 
@@ -195,7 +213,7 @@ zip if you have any of those, or they won't come across.
 
 ## Publishing a New Release
 
-GitHub Actions automatically builds and publishes the Windows installer whenever you push a version tag.
+GitHub Actions automatically builds and publishes the Windows and Linux installers whenever you push a version tag.
 
 ```powershell
 # 1. Bump the version in package.json (edit manually or use npm version)
@@ -210,10 +228,8 @@ git push origin main --follow-tags
 ```
 
 GitHub Actions (`.github/workflows/release.yml`) will:
-1. Run on `windows-latest`
-2. Install all dependencies
-3. Build the Next.js app and package the Electron installer
-4. Create a GitHub Release with the `.exe` files attached
+1. Run the Windows job on `windows-latest`, package the installer, and create the GitHub Release
+2. Then run the Linux job on `ubuntu-latest` (after the Windows job, so it appends to the same release instead of racing to create it) and attach the AppImage + .deb
 
 > **First time?** Make sure your repository has **Actions** enabled (Settings → Actions → Allow all actions).
 > The workflow uses `GITHUB_TOKEN` which is provided automatically — no extra secrets needed.
@@ -224,6 +240,14 @@ GitHub Actions (`.github/workflows/release.yml`) will:
 npm run package:win
 # Output: dist-electron/BuildVerse Setup x.x.x.exe
 #         dist-electron/BuildVerse x.x.x Portable.exe
+```
+
+```bash
+# Linux only — must run on Linux (electron-builder can't cross-compile the
+# native Prisma query engine from Windows)
+npm run package:linux
+# Output: dist-electron/BuildVerse-x.x.x.AppImage
+#         dist-electron/buildverse_x.x.x_amd64.deb
 ```
 
 ---
@@ -241,6 +265,7 @@ npm run package:win
 | `npm run electron` | Launch Electron (requires `npm run dev` to be running) |
 | `npm run electron:dev` | Start Next.js dev server + open Electron (one command) |
 | `npm run package:win` | Build Windows installer locally |
+| `npm run package:linux` | Build Linux AppImage + .deb locally (must run on Linux) |
 
 ---
 
@@ -331,7 +356,7 @@ buildverse/
 │       ├── prisma.ts     # Prisma client singleton
 │       ├── scraper.ts    # Product URL scraper (Cheerio)
 │       └── utils.ts      # Helpers, constants, formatters
-├── electron-builder.yml  # Windows packaging config
+├── electron-builder.yml  # Windows + Linux packaging config
 ├── next.config.mjs       # Next.js config (standalone output)
 └── package.json
 ```
