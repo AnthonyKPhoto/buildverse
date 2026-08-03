@@ -23,6 +23,8 @@ Available as:
 3. Follow the wizard → Finish
 4. Launch from the Desktop or Start Menu shortcut
 
+**No Node.js, no npm, no prerequisites.** Everything is bundled inside the installer.
+
 > **Portable option:** Download `BuildVerse x.x.x Portable.exe` — runs from any folder without installing.
 
 ---
@@ -31,7 +33,7 @@ Available as:
 
 **Go to [Releases](../../releases) and download the latest `BuildVerse-x.x.x.AppImage` or `buildverse_x.x.x_amd64.deb`.**
 
-Requires **Node.js 18+** already installed and on your `PATH` (`node --version` to check) — unlike the Windows build, it isn't bundled into the package. Install it via your distro's package manager (`apt install nodejs`, `dnf install nodejs`, etc.) or [nodejs.org](https://nodejs.org) first.
+**No Node.js, no prerequisites.** Everything is bundled inside the package.
 
 **AppImage** (works on most distros, no install):
 ```bash

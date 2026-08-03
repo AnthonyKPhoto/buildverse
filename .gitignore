@@ -19,6 +19,7 @@ prisma/buildverse.db-journal
 
 # Electron build output
 dist-electron/
+resources-extra/
 electron-dist/
 build/
 !build/icon.ico

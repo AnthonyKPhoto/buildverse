@@ -68,6 +68,12 @@ extraResources:
   # Template database — copied to %APPDATA%\BuildVerse on first launch
   - from: "prisma/dev.db"
     to: "prisma/dev.db"
+  # Bundled Node.js runtime — see scripts/fetch-node-runtime.js, which
+  # populates resources-extra/ before packaging (npm run electron:build /
+  # electron:build:linux). Split win/linux below since the source filename
+  # and content differ per platform and only one is ever fetched per build.
+  # electron/main.js's findNodeExecutable() checks process.resourcesPath
+  # for this before falling back to a system install.
 
 # ── Native module handling ────────────────────────────────────────────────────
 # Unpack .node binaries (Prisma query engine) from the asar so Node.js can load them.
@@ -87,6 +93,9 @@ win:
   # Per-user install — does NOT require UAC / admin rights.
   # Installs to %LOCALAPPDATA%\Programs\BuildVerse  (same as Chrome, VS Code)
   requestedExecutionLevel: "asInvoker"
+  extraResources:
+    - from: "resources-extra/node.exe"
+      to: "node.exe"
   #
   # ── Code signing (removes the SmartScreen warning) ───────────────────────
   # Uncomment and configure once you have a code-signing certificate:
@@ -121,6 +130,9 @@ linux:
   icon: "build/icon.png"
   category: "Utility"
   synopsis: "Vehicle modification manager"
+  extraResources:
+    - from: "resources-extra/node"
+      to: "node"
 
 appImage:
   artifactName: "BuildVerse-${version}.AppImage"

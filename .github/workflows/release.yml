@@ -89,8 +89,21 @@ jobs:
       - name: Bundle Electron main process
         run: npx esbuild electron/main.js --bundle --platform=node --external:electron --outfile=electron/main.bundled.js
 
+      # Bundles a real node.exe into resources-extra/ so the packaged app
+      # never depends on the end user having Node.js installed — see
+      # scripts/fetch-node-runtime.js.
+      - name: Fetch Node.js runtime for bundling
+        run: npm run fetch-node-runtime
+
       - name: Package Windows installer
         run: npx electron-builder --win --publish never
+
+      - name: Verify Node.js runtime was bundled
+        shell: pwsh
+        run: |
+          $nodePath = "dist-electron/win-unpacked/resources/node.exe"
+          if (!(Test-Path $nodePath)) { throw "node.exe missing from packaged resources — the app would depend on the user's own Node.js install" }
+          Write-Host "Bundled $nodePath ($((Get-Item $nodePath).Length) bytes)"
 
       # ── 8. Create GitHub Release and upload artifacts ─────────────────────
       - name: Get version from tag
@@ -194,8 +207,23 @@ jobs:
       - name: Bundle Electron main process
         run: npx esbuild electron/main.js --bundle --platform=node --external:electron --outfile=electron/main.bundled.js
 
+      # Bundles a real `node` binary into resources-extra/ so the packaged
+      # app never depends on the end user having Node.js installed — see
+      # scripts/fetch-node-runtime.js.
+      - name: Fetch Node.js runtime for bundling
+        run: npm run fetch-node-runtime
+
       - name: Package Linux AppImage + deb
         run: npx electron-builder --linux --publish never
+
+      - name: Verify Node.js runtime was bundled
+        run: |
+          NODE_PATH="dist-electron/linux-unpacked/resources/node"
+          if [ ! -f "$NODE_PATH" ]; then
+            echo "node binary missing from packaged resources — the app would depend on the user's own Node.js install"
+            exit 1
+          fi
+          echo "Bundled $NODE_PATH ($(stat -c%s "$NODE_PATH") bytes)"
 
       - name: Get version from tag
         id: version
@@ -219,13 +247,13 @@ jobs:
 
             | File | Description |
             |------|-------------|
-            | `BuildVerse-${{ steps.version.outputs.ver }}.AppImage` | **AppImage (recommended)** — download, `chmod +x`, then run. No install, works on most distros |
+            | `BuildVerse-${{ steps.version.outputs.ver }}.AppImage` | **AppImage (recommended)** — download, `chmod +x`, then run. No install needed |
             | `buildverse_${{ steps.version.outputs.ver }}_amd64.deb` | **Debian/Ubuntu package** — `sudo apt install ./buildverse_${{ steps.version.outputs.ver }}_amd64.deb` |
 
-            Requires **Node.js 18+ already installed** and on your `PATH` (`node --version` to check) — unlike the Windows build, it is not bundled into the package. Install it via your distro's package manager or [nodejs.org](https://nodejs.org) first.
+            **No prerequisites** — Node.js and all dependencies are bundled inside the package.
 
             Your data is stored at `~/.config/BuildVerse/buildverse.db` and is never touched by updates.
 
             ### System requirements
             - 64-bit Linux, glibc-based (Ubuntu, Debian, Fedora, etc. — not Alpine)
-            - Node.js 18+ on PATH
+            - No other software required
