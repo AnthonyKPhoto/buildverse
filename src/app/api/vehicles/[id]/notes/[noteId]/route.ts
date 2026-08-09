@@ -7,14 +7,15 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string; 
     return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
   }
   try {
-    const { title, content, color, importance } = await req.json();
+    const { title, content, entryDate, mileage, pinned } = await req.json();
     const note = await prisma.vehicleNote.update({
       where: { id: params.noteId, vehicleId: params.id },
       data: {
         ...(title !== undefined && { title }),
         ...(content !== undefined && { content }),
-        ...(color !== undefined && { color }),
-        ...(importance !== undefined && { importance }),
+        ...(entryDate !== undefined && { entryDate: new Date(entryDate) }),
+        ...(mileage !== undefined && { mileage: mileage != null ? Number(mileage) : null }),
+        ...(pinned !== undefined && { pinned }),
       },
     });
     return NextResponse.json(note);

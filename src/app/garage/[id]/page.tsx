@@ -27,7 +27,7 @@ import { VehicleFilesTab } from "@/components/vehicles/VehicleFilesTab";
 import { DynoTab } from "@/components/vehicles/DynoTab";
 import { KanbanView } from "@/components/vehicles/KanbanView";
 import { TuneLogsTab } from "@/components/vehicles/TuneLogsTab";
-import { NoteBoard } from "@/components/vehicles/NoteBoard";
+import { BuildLog } from "@/components/vehicles/BuildLog";
 import { LinksTab } from "@/components/vehicles/LinksTab";
 import { CSVImportDialog } from "@/components/modifications/CSVImportDialog";
 import {
@@ -997,7 +997,7 @@ export default function VehicleDetailPage() {
 
         {/* ===== JOURNAL TAB ===== */}
         <TabsContent value="journal" className="mt-4">
-          <NoteBoard vehicleId={id} />
+          <BuildLog vehicleId={id} />
         </TabsContent>
 
         {/* ===== LINKS TAB ===== */}

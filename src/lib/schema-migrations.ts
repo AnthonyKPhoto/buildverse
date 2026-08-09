@@ -166,10 +166,34 @@ export async function applySelfMigrations(client: PrismaClient): Promise<void> {
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS "PasswordResetToken_tokenHash_key" ON "PasswordResetToken"("tokenHash")`,
     `CREATE INDEX IF NOT EXISTS "PasswordResetToken_userId_idx" ON "PasswordResetToken"("userId")`,
+    // VehicleNote → build log rework (v1.11.0): entryDate/mileage/pinned are
+    // the new fields the UI reads; color/importance are kept untouched below
+    // for data safety, just no longer surfaced.
+    `ALTER TABLE "VehicleNote" ADD COLUMN "entryDate" DATETIME`,
+    `ALTER TABLE "VehicleNote" ADD COLUMN "mileage" INTEGER`,
+    `ALTER TABLE "VehicleNote" ADD COLUMN "pinned" BOOLEAN NOT NULL DEFAULT 0`,
   ];
   for (const sql of stmts) {
     await client.$executeRawUnsafe(sql).catch(() => {});
   }
   // Migrate legacy MEDIUM priority → NONE (one-time, idempotent)
   await client.$executeRaw`UPDATE "Modification" SET "priority" = 'NONE' WHERE "priority" = 'MEDIUM'`.catch(() => {});
+
+  // Backfill entryDate for any note that predates the column (or was just
+  // added by the ALTER TABLE above) — always safe to rerun, only ever
+  // touches rows that don't have a value yet.
+  await client.$executeRaw`UPDATE "VehicleNote" SET "entryDate" = "createdAt" WHERE "entryDate" IS NULL`.catch(() => {});
+
+  // One-time backfill: a note that had a priority star under the old
+  // sticky-note UI becomes pinned in the new build-log timeline. Guarded by
+  // a Setting flag so it only ever runs once — otherwise it would re-pin a
+  // note someone deliberately unpinned after this shipped.
+  const PIN_BACKFILL_KEY = "vehicleNotePinBackfillDone";
+  const pinBackfillDone = await client.setting.findUnique({ where: { key: PIN_BACKFILL_KEY } }).catch(() => null);
+  if (!pinBackfillDone) {
+    await client.$executeRaw`UPDATE "VehicleNote" SET "pinned" = 1 WHERE "importance" > 0`.catch(() => {});
+    await client.setting
+      .upsert({ where: { key: PIN_BACKFILL_KEY }, update: { value: "true" }, create: { key: PIN_BACKFILL_KEY, value: "true" } })
+      .catch(() => {});
+  }
 }

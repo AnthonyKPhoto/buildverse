@@ -6,7 +6,7 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   try {
     const notes = await prisma.vehicleNote.findMany({
       where: { vehicleId: params.id },
-      orderBy: { createdAt: "desc" },
+      orderBy: { entryDate: "desc" },
     });
     return NextResponse.json(notes);
   } catch {
@@ -19,14 +19,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
   }
   try {
-    const { title, content, color, importance } = await req.json();
+    const { title, content, entryDate, mileage, pinned } = await req.json();
     const note = await prisma.vehicleNote.create({
       data: {
         vehicleId: params.id,
         title: title ?? "",
         content: content ?? "",
-        color: color ?? "yellow",
-        importance: importance ?? 0,
+        entryDate: entryDate ? new Date(entryDate) : new Date(),
+        mileage: mileage != null ? Number(mileage) : null,
+        pinned: pinned ?? false,
       },
     });
     return NextResponse.json(note);

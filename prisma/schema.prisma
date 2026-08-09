@@ -219,15 +219,22 @@ model Receipt {
   createdAt   DateTime @default(now())
 }
 
+// Build log — a chronological timeline of entries about a vehicle's build
+// (v1.11.0 reworked this from a sticky-note board into a dated log; color/
+// importance are the old note-board fields, kept only so existing data is
+// never lost — the current UI reads entryDate/mileage/pinned instead).
 model VehicleNote {
-  id        String   @id @default(cuid())
-  vehicleId String
+  id         String   @id @default(cuid())
+  vehicleId  String
   title      String   @default("")
   content    String   @default("")
-  color      String   @default("yellow")
-  importance Int      @default(0)
+  color      String   @default("yellow") // legacy — no longer shown in the UI
+  importance Int      @default(0)        // legacy — superseded by `pinned`
+  entryDate  DateTime @default(now())    // when the entry is "about", editable, distinct from createdAt
+  mileage    Int?
+  pinned     Boolean  @default(false)
   createdAt  DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt  DateTime @updatedAt
 
   vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
 
