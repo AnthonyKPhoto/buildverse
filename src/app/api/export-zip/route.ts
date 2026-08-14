@@ -61,7 +61,7 @@ export async function GET() {
     const timestamp = new Date().toISOString().slice(0, 10);
     const filename = `buildverse-${timestamp}.zip`;
 
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="${filename}"`,
