@@ -83,6 +83,9 @@ export function LubeLoggerSettings() {
     } catch {}
   }, []);
 
+  // Load on mount so the header subtitle reflects the saved config immediately
+  useEffect(() => { loadConfig(); }, [loadConfig]);
+
   useEffect(() => {
     if (open) loadConfig();
   }, [open, loadConfig]);

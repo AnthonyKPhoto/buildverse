@@ -583,15 +583,41 @@ export default function SettingsPage() {
   };
 
   const handleExportZip = async () => {
-    if (!isElectron) return;
-    setZipExporting(true);
-    try {
-      const result = await window.electronAPI!.transfer?.exportZip();
-      if (!result || result.canceled) return;
-      if (result.success) toast({ title: "Transfer pack exported!", description: result.filePath });
-      else toast({ title: "Export failed", description: result.error, variant: "destructive" });
-    } catch { toast({ title: "Export failed", variant: "destructive" }); }
-    finally { setZipExporting(false); }
+    if (isElectron) {
+      setZipExporting(true);
+      try {
+        const result = await window.electronAPI!.transfer?.exportZip();
+        if (!result || result.canceled) return;
+        if (result.success) toast({ title: "Transfer pack exported!", description: result.filePath });
+        else toast({ title: "Export failed", description: result.error, variant: "destructive" });
+      } catch { toast({ title: "Export failed", variant: "destructive" }); }
+      finally { setZipExporting(false); }
+    } else {
+      // Server/Docker: download via the API route
+      setZipExporting(true);
+      try {
+        const res = await fetch("/api/export-zip");
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: "Export failed" }));
+          throw new Error(err.error ?? "Export failed");
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const disposition = res.headers.get("Content-Disposition") ?? "";
+        const match = disposition.match(/filename="?([^"]+)"?/);
+        a.download = match?.[1] ?? "buildverse-export.zip";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        toast({ title: "Transfer pack downloaded!" });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast({ title: "Export failed", description: msg, variant: "destructive" });
+      } finally { setZipExporting(false); }
+    }
   };
 
   const handleImportZip = async () => {
@@ -1357,21 +1383,21 @@ export default function SettingsPage() {
                     </Btn>
                   </Row>
                 )}
+                {(isElectron && serverMode === "local") || !isElectron ? (
+                  <Row label="Export Transfer Pack" desc="Full ZIP archive — use to move BuildVerse to another computer">
+                    <Btn onClick={handleExportZip} disabled={zipExporting}>
+                      {zipExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                      {zipExporting ? "Exporting…" : "Export Pack"}
+                    </Btn>
+                  </Row>
+                ) : null}
                 {isElectron && serverMode === "local" && (
-                  <>
-                    <Row label="Export Transfer Pack" desc="Full ZIP archive — use to move BuildVerse to another computer">
-                      <Btn onClick={handleExportZip} disabled={zipExporting}>
-                        {zipExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
-                        {zipExporting ? "Exporting…" : "Export Pack"}
-                      </Btn>
-                    </Row>
-                    <Row label="Import Transfer Pack" desc="Restore from a .zip transfer pack — replaces all data and restarts">
-                      <Btn onClick={handleImportZip} disabled={zipImporting}>
-                        {zipImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                        {zipImporting ? "Importing…" : "Import Pack"}
-                      </Btn>
-                    </Row>
-                  </>
+                  <Row label="Import Transfer Pack" desc="Restore from a .zip transfer pack — replaces all data and restarts">
+                    <Btn onClick={handleImportZip} disabled={zipImporting}>
+                      {zipImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      {zipImporting ? "Importing…" : "Import Pack"}
+                    </Btn>
+                  </Row>
                 )}
                 <Row label="Refresh Product Prices" desc="Re-scrape all tracked product URLs">
                   <Btn onClick={refreshAll}><RefreshCw className="w-3.5 h-3.5" /> Refresh All</Btn>
