@@ -132,9 +132,19 @@ function DepPicker({
   const toggle = (id: string, checked: boolean) =>
     onChange(checked ? [...dependsOn, id] : dependsOn.filter((x) => x !== id));
 
-  const filtered = vehicleMods.filter((m) =>
-    !search.trim() || m.name.toLowerCase().includes(search.toLowerCase()) || m.category.toLowerCase().includes(search.toLowerCase())
-  );
+  const selectedMods = vehicleMods.filter((m) => dependsOn.includes(m.id));
+  const filtered = vehicleMods
+    .filter((m) =>
+      !search.trim() ||
+      m.name.toLowerCase().includes(search.toLowerCase()) ||
+      m.category.toLowerCase().includes(search.toLowerCase())
+    )
+    // Float selected items to the top of the list
+    .sort((a, b) => {
+      const asel = dependsOn.includes(a.id) ? 0 : 1;
+      const bsel = dependsOn.includes(b.id) ? 0 : 1;
+      return asel - bsel;
+    });
 
   return (
     <details className="group">
@@ -147,6 +157,31 @@ function DepPicker({
           </span>
         )}
       </summary>
+
+      {/* Selected chips — visible even when the list is collapsed */}
+      {selectedMods.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {selectedMods.map((m) => (
+            <span
+              key={m.id}
+              className="inline-flex items-center gap-1 text-xs bg-theme/10 text-theme border border-theme/25 rounded-full px-2.5 py-1 font-medium"
+            >
+              {m.name}
+              <button
+                type="button"
+                className="ml-0.5 hover:text-destructive transition-colors"
+                onClick={() => toggle(m.id, false)}
+                title="Remove"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="mt-2 border border-input rounded-xl overflow-hidden">
         {/* Search bar */}
         <div className="px-2 pt-2 pb-1">
@@ -169,25 +204,35 @@ function DepPicker({
         <div className="space-y-0.5 max-h-44 overflow-y-auto px-2 pb-2">
           {filtered.length === 0 ? (
             <p className="text-xs text-muted-foreground px-2 py-3 text-center">No mods match</p>
-          ) : filtered.map((m) => (
-            <label key={m.id} className="flex items-center gap-2 cursor-pointer hover:bg-secondary/40 px-2 py-1.5 rounded-lg transition-colors">
-              <input
-                type="checkbox"
-                className="rounded border-input accent-theme"
-                checked={dependsOn.includes(m.id)}
-                onChange={(e) => toggle(m.id, e.target.checked)}
-              />
-              <span className="text-sm flex-1 truncate">{m.name}</span>
-              <span className="text-xs text-muted-foreground shrink-0">{m.category}</span>
-              <span className={`text-xs px-1.5 py-0.5 rounded-full border shrink-0 ${
-                m.status === "INSTALLED" ? "bg-green-500/15 text-green-400 border-green-500/25" :
-                m.status === "PLANNED"   ? "bg-slate-500/15 text-slate-400 border-slate-500/25" :
-                "bg-yellow-500/15 text-yellow-400 border-yellow-500/25"
-              }`}>
-                {m.status.charAt(0) + m.status.slice(1).toLowerCase()}
-              </span>
-            </label>
-          ))}
+          ) : filtered.map((m) => {
+            const selected = dependsOn.includes(m.id);
+            return (
+              <label
+                key={m.id}
+                className={`flex items-center gap-2 cursor-pointer px-2 py-1.5 rounded-lg transition-colors ${
+                  selected ? "bg-theme/8 hover:bg-theme/12" : "hover:bg-secondary/40"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  className="rounded border-input accent-theme"
+                  checked={selected}
+                  onChange={(e) => toggle(m.id, e.target.checked)}
+                />
+                <span className={`text-sm flex-1 truncate ${selected ? "font-medium text-theme" : ""}`}>
+                  {m.name}
+                </span>
+                <span className="text-xs text-muted-foreground shrink-0">{m.category}</span>
+                <span className={`text-xs px-1.5 py-0.5 rounded-full border shrink-0 ${
+                  m.status === "INSTALLED" ? "bg-green-500/15 text-green-400 border-green-500/25" :
+                  m.status === "PLANNED"   ? "bg-slate-500/15 text-slate-400 border-slate-500/25" :
+                  "bg-yellow-500/15 text-yellow-400 border-yellow-500/25"
+                }`}>
+                  {m.status.charAt(0) + m.status.slice(1).toLowerCase()}
+                </span>
+              </label>
+            );
+          })}
         </div>
       </div>
     </details>
