@@ -382,10 +382,13 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl flex flex-col max-h-[92vh] p-0 gap-0">
+        <DialogHeader className="px-6 pt-5 pb-4 border-b border-border flex-shrink-0">
           <DialogTitle>{editMod ? "Edit Modification" : "Add Modification"}</DialogTitle>
         </DialogHeader>
+
+        {/* ── Scrollable body ───────────────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
 
         {/* ── Step 0: URL entry ─────────────────────────────────────────── */}
         {step === "url" && !editMod && (
@@ -452,7 +455,7 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
 
         {/* ── Step 1: Form ──────────────────────────────────────────────── */}
         {step === "form" && (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form id="mod-form" onSubmit={handleSubmit} className="space-y-4">
 
             {/* Auto-fill banner */}
             {autoFilled.length > 0 && (
@@ -660,14 +663,20 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
               />
             </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving || fetchingImage}>
-                {saving ? "Saving…" : editMod ? "Save Changes" : "Add Modification"}
-              </Button>
-            </DialogFooter>
           </form>
         )}
+
+        </div>{/* end scrollable body */}
+
+        {/* ── Sticky footer ─────────────────────────────────────────────── */}
+        <div className="px-6 py-4 border-t border-border flex-shrink-0 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          {step === "form" && (
+            <Button type="submit" form="mod-form" disabled={saving || fetchingImage}>
+              {saving ? "Saving…" : editMod ? "Save Changes" : "Add Modification"}
+            </Button>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
