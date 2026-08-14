@@ -1,0 +1,41 @@
+services:
+  buildverse:
+    image: ghcr.io/anthonykphoto/buildverse:latest
+    # Building locally instead of pulling the published image:
+    #   build: .
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "file:/data/buildverse.db"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}
+      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET}
+    volumes:
+      - buildverse_data:/data
+    # Not published to the host — only Caddy talks to it directly, over the
+    # compose network. If you're running your own reverse proxy instead of
+    # the caddy service below, add `ports: ["3456:3456"]` here and delete caddy.
+    expose:
+      - "3456"
+
+  # Automatic HTTPS via Let's Encrypt for your own domain. If you already run
+  # a reverse proxy at home (Nginx Proxy Manager, an existing Caddy/Traefik,
+  # etc.), delete this service and point your existing proxy at
+  # buildverse:3456 on this compose network instead.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      buildverse:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  buildverse_data:
+  caddy_data:
+  caddy_config:

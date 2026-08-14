@@ -739,7 +739,7 @@ export default function VendorsPage() {
       {/* Vendor grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map((vendor) => (
-          <Card key={vendor.domain} className="hover:border-theme/30 transition-all duration-200 flex flex-col">
+          <Card key={vendor.url} className="hover:border-theme/30 transition-all duration-200 flex flex-col">
             <CardContent className="p-5 flex flex-col flex-1">
               {/* Header */}
               <div className="flex items-start justify-between mb-3">

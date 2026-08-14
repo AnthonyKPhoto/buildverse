@@ -1,17 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { MOD_CATEGORIES, INSTALL_DIFFICULTIES } from "@/lib/utils";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
+import { X, Link2 } from "lucide-react";
 
 interface Suggestions { brands: string[]; vendors: string[]; names: string[]; }
+interface DepMod { id: string; name: string; category: string; status: string; }
 
 interface Modification {
   id: string; vehicleId: string; name: string; category: string; vendor?: string; brand?: string;
@@ -68,6 +71,13 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(formFromMod(editMod));
   const [suggestions, setSuggestions] = useState<Suggestions>({ brands: [], vendors: [], names: [] });
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  // Dependencies state (edit mode only)
+  const [deps, setDeps] = useState<DepMod[]>([]);
+  const [allVehicleMods, setAllVehicleMods] = useState<DepMod[]>([]);
+  const [depSearch, setDepSearch] = useState("");
+  const [depOpen, setDepOpen] = useState(false);
 
   // Load suggestions once on mount
   useEffect(() => {
@@ -77,11 +87,58 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
       .catch(() => {});
   }, []);
 
-  // Reset form every time the dialog opens — catches both editMod changes
-  // AND cases where the dialog reopens with the same editMod value (e.g. null→null)
+  // Reset form + deps every time the dialog opens
   useEffect(() => {
-    if (open) setForm(formFromMod(editMod));
-  }, [open, editMod]);
+    if (open) {
+      setForm(formFromMod(editMod));
+      setDepSearch("");
+      setDepOpen(false);
+      if (editMod) {
+        // Load existing dependencies for this mod
+        fetch(`/api/modifications/${editMod.id}/dependencies`)
+          .then((r) => r.json())
+          .then((d) => setDeps(Array.isArray(d) ? d : []))
+          .catch(() => {});
+        // Load all other mods on this vehicle for the picker
+        fetch(`/api/vehicles/${vehicleId}/modifications`)
+          .then((r) => r.json())
+          .then((d) => setAllVehicleMods(Array.isArray(d) ? d.filter((m: DepMod) => m.id !== editMod.id) : []))
+          .catch(() => {});
+      } else {
+        setDeps([]);
+        setAllVehicleMods([]);
+      }
+    }
+  }, [open, editMod, vehicleId]);
+
+  // Auto-grow notes textarea
+  const autoGrow = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = el.scrollHeight + "px";
+  };
+
+  const addDep = async (dep: DepMod) => {
+    if (!editMod || deps.some((d) => d.id === dep.id)) return;
+    await fetch(`/api/modifications/${editMod.id}/dependencies`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dependsOnId: dep.id }),
+    });
+    setDeps((prev) => [...prev, dep]);
+    setDepSearch("");
+    setDepOpen(false);
+  };
+
+  const removeDep = async (depId: string) => {
+    if (!editMod) return;
+    await fetch(`/api/modifications/${editMod.id}/dependencies`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dependsOnId: depId }),
+    });
+    setDeps((prev) => prev.filter((d) => d.id !== depId));
+  };
 
   const set = (k: string, v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -291,14 +348,84 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
             <Label htmlFor="diyInstall" className="cursor-pointer">DIY Install</Label>
           </div>
 
+          {/* Dependencies (edit mode only) */}
+          {editMod && (
+            <div>
+              <Label className="flex items-center gap-1.5 mb-1.5">
+                <Link2 className="w-3.5 h-3.5" />
+                Dependencies
+                <span className="text-xs font-normal text-muted-foreground">(mods that must be done first)</span>
+              </Label>
+
+              {/* Current deps */}
+              {deps.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {deps.map((d) => (
+                    <Badge key={d.id} variant="secondary" className="gap-1 pr-1 text-xs">
+                      {d.name}
+                      <button
+                        type="button"
+                        className="ml-0.5 rounded hover:text-destructive"
+                        onClick={() => removeDep(d.id)}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {/* Search picker */}
+              <div className="relative">
+                <Input
+                  placeholder="Search mods to add as dependency…"
+                  value={depSearch}
+                  onChange={(e) => { setDepSearch(e.target.value); setDepOpen(true); }}
+                  onFocus={() => setDepOpen(true)}
+                  onBlur={() => setTimeout(() => setDepOpen(false), 150)}
+                  className="text-sm"
+                />
+                {depOpen && depSearch && (
+                  <div className="absolute z-50 w-full mt-1 rounded-md border border-border bg-popover shadow-md max-h-48 overflow-y-auto">
+                    {allVehicleMods
+                      .filter((m) =>
+                        !deps.some((d) => d.id === m.id) &&
+                        m.name.toLowerCase().includes(depSearch.toLowerCase())
+                      )
+                      .slice(0, 10)
+                      .map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center justify-between gap-2"
+                          onMouseDown={(e) => { e.preventDefault(); addDep(m); }}
+                        >
+                          <span>{m.name}</span>
+                          <span className="text-xs text-muted-foreground">{m.category}</span>
+                        </button>
+                      ))}
+                    {allVehicleMods.filter((m) =>
+                      !deps.some((d) => d.id === m.id) &&
+                      m.name.toLowerCase().includes(depSearch.toLowerCase())
+                    ).length === 0 && (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">No mods found</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Notes */}
           <div>
             <Label>Notes</Label>
             <textarea
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-none"
+              ref={notesRef}
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-none overflow-hidden"
               placeholder="Any notes, fitment info, install tips…"
               value={form.notes}
-              onChange={(e) => set("notes", e.target.value)}
+              onChange={(e) => { set("notes", e.target.value); autoGrow(e.target); }}
+              onFocus={(e) => autoGrow(e.target)}
             />
           </div>
 

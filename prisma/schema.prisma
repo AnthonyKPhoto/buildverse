@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./buildverse.db"
+  url      = env("DATABASE_URL")
 }
 
 model Vehicle {
@@ -143,4 +143,15 @@ model Receipt {
   imageUrl    String?
   items       String?
   createdAt   DateTime @default(now())
+}
+
+// Server deployments only (see src/lib/auth) — inert/unused in local/Electron
+// mode. Everyone shares the same garage data; this is just per-person login
+// identity plus an admin/member role for account management.
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  role         String   @default("member") // "admin" | "member"
+  createdAt    DateTime @default(now())
 }

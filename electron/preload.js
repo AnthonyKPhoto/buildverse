@@ -29,4 +29,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
       return () => ipcRenderer.removeListener("update:status", handler);
     },
   },
+
+  app: {
+    relaunch: () => ipcRenderer.invoke("app:relaunch"),
+  },
+
+  server: {
+    testConnection: (url) => ipcRenderer.invoke("server:testConnection", url),
+  },
 });

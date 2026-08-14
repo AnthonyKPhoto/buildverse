@@ -25,6 +25,7 @@ const APP_NAME = "BuildVerse";
 let mainWindow = null;
 let tray = null;
 let serverProcess = null;
+let currentTargetUrl = null;
 
 app.isQuitting = false;
 
@@ -388,7 +389,10 @@ async function startServer(dbPath) {
 // Browser window
 // ──────────────────────────────────────────────────────────
 
-function createWindow() {
+function createWindow(targetUrl) {
+  currentTargetUrl = targetUrl;
+  const targetOrigin = new URL(targetUrl).origin;
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -407,10 +411,10 @@ function createWindow() {
     show: false,
   });
 
-  mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
+  mainWindow.loadURL(targetUrl);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(`http://127.0.0.1:${PORT}`)) {
+    if (!url.startsWith(targetOrigin)) {
       shell.openExternal(url);
       return { action: "deny" };
     }
@@ -418,7 +422,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(`http://127.0.0.1:${PORT}`)) {
+    if (!url.startsWith(targetOrigin)) {
       event.preventDefault();
       shell.openExternal(url);
     }
@@ -524,6 +528,41 @@ function getCloseMode() {
 ipcMain.handle("prefs:get", () => loadPrefs());
 ipcMain.handle("prefs:set", (_, obj) => { savePrefs(obj); return { success: true }; });
 
+// ── Server connection mode ─────────────────────────────────────────────────
+// Stored in the same prefs.json:  { "serverMode": "local" | "remote", "serverUrl": "https://..." }
+// "local" (or unset) is today's behaviour unchanged: spawn the bundled Next.js
+// server against the per-user local database. "remote" skips all of that and
+// just points the window at a server elsewhere — every fetch() in the app
+// already uses relative URLs, so no data-layer changes are needed for this.
+
+function getServerTarget() {
+  const { serverMode, serverUrl } = loadPrefs();
+  const isRemote = serverMode === "remote" && typeof serverUrl === "string" && /^https?:\/\//i.test(serverUrl);
+  return isRemote ? { remote: true, url: serverUrl } : { remote: false, url: `http://127.0.0.1:${PORT}` };
+}
+
+ipcMain.handle("app:relaunch", () => {
+  app.relaunch();
+  app.isQuitting = true;
+  app.quit();
+});
+
+// Run from the main process (Node), not the renderer — a renderer-side
+// fetch() to an arbitrary remote origin would be blocked by CORS since the
+// server has no CORS headers (it doesn't need them for its own same-origin
+// requests). Main-process fetch isn't a browser context, so this sidesteps
+// that entirely.
+ipcMain.handle("server:testConnection", async (_, url) => {
+  try {
+    const res = await fetch(`${url.replace(/\/$/, "")}/api/health`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json();
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 // ── Single-instance lock — prevents a second copy from launching ──────────────
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -540,10 +579,17 @@ app.on("second-instance", () => {
 
 app.whenReady().then(async () => {
   try {
-    const dbPath = ensureDatabase();
-    autoBackupOnStartup(dbPath);
-    await startServer(dbPath);
-    createWindow();
+    const target = getServerTarget();
+    if (!target.remote) {
+      // Local mode (default): unchanged from before — bootstrap and spawn
+      // the bundled server against the per-user local database.
+      const dbPath = ensureDatabase();
+      autoBackupOnStartup(dbPath);
+      await startServer(dbPath);
+    }
+    // Remote mode: no local database, no spawned server — the window just
+    // loads the configured server URL directly, same as a phone browser would.
+    createWindow(target.url);
     createTray();
     initAutoUpdater();
   } catch (err) {
@@ -561,7 +607,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  if (!mainWindow) createWindow();
+  if (!mainWindow) createWindow(currentTargetUrl || getServerTarget().url);
 });
 
 app.on("before-quit", () => {

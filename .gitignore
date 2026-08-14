@@ -12,8 +12,12 @@ out/
 # Prisma
 prisma/dev.db
 prisma/dev.db-journal
+prisma/dev.db-wal
+prisma/dev.db-shm
 prisma/buildverse.db
 prisma/buildverse.db-journal
+prisma/build-placeholder.db*
+build-placeholder.db*
 
 # Electron build output
 dist-electron/

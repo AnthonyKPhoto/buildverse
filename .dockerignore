@@ -1,0 +1,12 @@
+node_modules
+.next
+dist-electron
+electron
+build
+*.log
+.env
+.env.local
+.git
+.claude
+prisma/dev.db
+prisma/buildverse.db

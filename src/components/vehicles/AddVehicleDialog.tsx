@@ -221,10 +221,20 @@ export function AddVehicleDialog({ open, onOpenChange, onCreated, editVehicle }:
           <div>
             <Label>Notes</Label>
             <textarea
-              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-none"
+              className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-none overflow-hidden"
               placeholder="Any additional notes about this build…"
               value={form.notes}
-              onChange={(e) => set("notes", e.target.value)}
+              onChange={(e) => {
+                set("notes", e.target.value);
+                const t = e.target;
+                t.style.height = "auto";
+                t.style.height = t.scrollHeight + "px";
+              }}
+              onFocus={(e) => {
+                const t = e.target;
+                t.style.height = "auto";
+                t.style.height = t.scrollHeight + "px";
+              }}
             />
           </div>
 

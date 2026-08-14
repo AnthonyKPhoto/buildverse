@@ -6,8 +6,10 @@ import {
   Info, Zap, Monitor, Palette,
   Archive, RotateCcw, Trash2, ArrowUpCircle,
   CheckCircle2, AlertCircle, Loader2, X, Power, Save, ShoppingBag,
+  Server, Cloud, UploadCloud, Users as UsersIcon, LogOut, Shield, UserPlus, KeyRound,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   ACCENT_PRESETS, RADIUS_PRESETS,
@@ -19,6 +21,9 @@ interface Stats { vehicleCount: number; modCount: number; productCount: number; 
 interface VehicleItem { _count: { modifications: number } }
 interface AppInfo { version: string; userDataPath: string; dbPath: string; isDev: boolean; }
 interface BackupEntry { name: string; filePath: string; size: number; createdAt: string; }
+interface HealthInfo { status: string; version: string; mode: "local" | "server"; }
+interface CurrentUser { id: string; username: string; role: "admin" | "member"; }
+interface ManagedUser { id: string; username: string; role: "admin" | "member"; createdAt: string; }
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
   | { status: "available"; version: string }
@@ -34,6 +39,8 @@ declare global {
       prefs: { get: () => Promise<Record<string,unknown>>; set: (o: Record<string,unknown>) => Promise<void>; };
       backup: { create: () => Promise<{success:boolean;filePath:string}>; list: () => Promise<BackupEntry[]>; restore: (f:string) => Promise<{success:boolean}>; delete: (f:string) => Promise<{success:boolean}>; };
       update:  { check: () => Promise<void>; install: () => Promise<void>; onStatus: (cb: (s:UpdateStatus) => void) => () => void; };
+      app: { relaunch: () => Promise<void>; };
+      server: { testConnection: (url: string) => Promise<{ ok: true; data: HealthInfo } | { ok: false; error: string }>; };
     };
   }
 }
@@ -134,6 +141,24 @@ export default function SettingsPage() {
   const [autoTrackProducts, setAutoTrackProducts] = useState(true);
   const [importing, setImporting] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
+  const [health, setHealth] = useState<HealthInfo | null>(null);
+  const [restorePassword, setRestorePassword] = useState("");
+  const [restoring, setRestoring] = useState(false);
+  const restoreDbRef = useRef<HTMLInputElement>(null);
+  const [serverMode, setServerMode] = useState<"local" | "remote">("local");
+  const [serverUrl, setServerUrl] = useState("");
+  const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
+  const [testError, setTestError] = useState<string | null>(null);
+  const [savingConnection, setSavingConnection] = useState(false);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"admin" | "member">("member");
+  const [addingUser, setAddingUser] = useState(false);
+  const [resetTarget, setResetTarget] = useState<string | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState("");
 
   const isElectron = typeof window !== "undefined" && !!window.electronAPI?.isElectron;
   const { accent, setAccent } = useCurrentAccent();
@@ -161,6 +186,15 @@ export default function SettingsPage() {
     finally { setLoadingBkp(false); }
   }, [isElectron]);
 
+  const loadUsers = useCallback(async () => {
+    setLoadingUsers(true);
+    try {
+      const res = await fetch("/api/admin/users");
+      if (res.ok) setUsers(await res.json());
+    } catch {}
+    finally { setLoadingUsers(false); }
+  }, []);
+
   useEffect(() => {
     // Load auto-track setting from localStorage
     const stored = localStorage.getItem("bv_autoTrackProducts");
@@ -168,16 +202,23 @@ export default function SettingsPage() {
 
     // Compute stats from /api/vehicles
     loadStats();
+    fetch("/api/health").then(r => r.json()).then(setHealth).catch(() => {});
+    fetch("/api/auth/me").then(r => r.json()).then(({ user }) => {
+      setCurrentUser(user);
+      if (user?.role === "admin") loadUsers();
+    }).catch(() => {});
     if (isElectron) {
       window.electronAPI!.getAppInfo().then(setAppInfo).catch(() => {});
       loadBackups();
       window.electronAPI!.prefs.get().then(p => {
         setCloseModeState((p.closeMode as "background" | "quit") ?? "quit");
+        setServerMode((p.serverMode as "local" | "remote") ?? "local");
+        setServerUrl((p.serverUrl as string) ?? "");
       }).catch(() => {});
       const unsub = window.electronAPI!.update.onStatus(setUpdateStatus);
       return unsub;
     }
-  }, [isElectron, loadBackups]);
+  }, [isElectron, loadBackups, loadUsers]);
 
   const saveSettings = async () => {
     // Persist close mode
@@ -194,10 +235,18 @@ export default function SettingsPage() {
 
   const handleExport = async () => {
     try {
-      const [vehicles, products] = await Promise.all([
+      const [vehicleList, products] = await Promise.all([
         fetch("/api/vehicles").then(r => r.json()),
         fetch("/api/products").then(r => r.json()),
       ]);
+      // The list endpoint is deliberately slim (no maintenanceLogs — it's used
+      // by the dashboard/garage grid) so fetch each vehicle's full detail for
+      // export, otherwise maintenance history silently gets dropped on import.
+      const vehicles = Array.isArray(vehicleList)
+        ? await Promise.all(
+            vehicleList.map((v: { id: string }) => fetch(`/api/vehicles/${v.id}`).then(r => r.json()))
+          )
+        : [];
       const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), version: "1.0", vehicles, products }, null, 2)], { type: "application/json" });
       const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `buildverse-export-${new Date().toISOString().slice(0,10)}.json` });
       a.click(); URL.revokeObjectURL(a.href);
@@ -241,6 +290,17 @@ export default function SettingsPage() {
     } catch { toast({ title: "Wipe failed", variant: "destructive" }); }
   };
 
+  // Exported records have `null` for unset optional fields (that's what Prisma
+  // returns), but the create-endpoint Zod schemas only accept `undefined` —
+  // without this, importing any vehicle/mod/log with an empty field 400s.
+  const stripNulls = <T extends Record<string, unknown>>(obj: T): Partial<T> => {
+    const out: Partial<T> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v !== null) out[k as keyof T] = v as T[keyof T];
+    }
+    return out;
+  };
+
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -258,7 +318,7 @@ export default function SettingsPage() {
         const res = await fetch("/api/vehicles", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+          body: JSON.stringify(stripNulls({
             name: vehicleData.name,
             year: vehicleData.year,
             make: vehicleData.make,
@@ -273,7 +333,7 @@ export default function SettingsPage() {
             color: vehicleData.color,
             photoUrl: vehicleData.photoUrl,
             notes: vehicleData.notes,
-          }),
+          })),
         });
         if (!res.ok) continue;
         const newVehicle = await res.json();
@@ -284,7 +344,7 @@ export default function SettingsPage() {
           const modRes = await fetch(`/api/vehicles/${newVehicle.id}/modifications`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+            body: JSON.stringify(stripNulls({
               name: m.name, category: m.category, brand: m.brand, vendor: m.vendor,
               price: m.price, actualPrice: m.actualPrice, status: m.status,
               priority: m.priority, difficulty: m.difficulty, link: m.link,
@@ -292,7 +352,7 @@ export default function SettingsPage() {
               orderNumber: m.orderNumber, installDate: m.installDate,
               installMileage: m.installMileage, laborCost: m.laborCost,
               diyInstall: m.diyInstall,
-            }),
+            })),
           });
           if (modRes.ok) modsImported++;
         }
@@ -302,11 +362,11 @@ export default function SettingsPage() {
           const logRes = await fetch(`/api/vehicles/${newVehicle.id}/maintenance`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+            body: JSON.stringify(stripNulls({
               service: log.service, mileage: log.mileage, date: log.date,
               cost: log.cost, notes: log.notes, shop: log.shop,
               diy: log.diy, nextDue: log.nextDue, nextMiles: log.nextMiles,
-            }),
+            })),
           });
           if (logRes.ok) logsImported++;
         }
@@ -368,6 +428,141 @@ export default function SettingsPage() {
       setBackups(p => p.filter(b => b.filePath !== filePath));
       toast({ title: "Backup deleted" });
     } catch { toast({ title: "Delete failed", variant: "destructive" }); }
+  };
+
+  const handleRestoreDb = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!restorePassword) {
+      toast({ title: "Enter the server password first", variant: "destructive" });
+      if (restoreDbRef.current) restoreDbRef.current.value = "";
+      return;
+    }
+    if (!confirm(`Replace the server's entire database with "${file.name}"? This cannot be undone.`)) {
+      if (restoreDbRef.current) restoreDbRef.current.value = "";
+      return;
+    }
+    setRestoring(true);
+    try {
+      const formData = new FormData();
+      formData.append("password", restorePassword);
+      formData.append("file", file);
+      const res = await fetch("/api/admin/restore-db", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Restore failed");
+      toast({ title: "Database restored", description: "The server is restarting — reload in a few seconds." });
+      setRestorePassword("");
+    } catch (err) {
+      toast({ title: "Restore failed", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setRestoring(false);
+      if (restoreDbRef.current) restoreDbRef.current.value = "";
+    }
+  };
+
+  const testServerConnection = async () => {
+    if (!serverUrl) return;
+    setTestStatus("testing");
+    setTestError(null);
+    const result = await window.electronAPI!.server.testConnection(serverUrl);
+    if (result.ok) {
+      setTestStatus("ok");
+    } else {
+      setTestStatus("error");
+      setTestError(result.error);
+    }
+  };
+
+  const applyServerConnection = async (mode: "local" | "remote") => {
+    if (mode === "remote" && !serverUrl) {
+      toast({ title: "Enter a server URL first", variant: "destructive" });
+      return;
+    }
+    if (!confirm(`Switch to ${mode === "remote" ? `"${serverUrl}"` : "local mode"}? BuildVerse will restart.`)) return;
+    setSavingConnection(true);
+    try {
+      await window.electronAPI!.prefs.set({ serverMode: mode, serverUrl });
+      await window.electronAPI!.app.relaunch();
+    } catch {
+      toast({ title: "Failed to switch modes", variant: "destructive" });
+      setSavingConnection(false);
+    }
+  };
+
+  const signOut = async () => {
+    try { await fetch("/api/auth/logout", { method: "POST" }); }
+    finally { window.location.href = "/login"; }
+  };
+
+  const addUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddingUser(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: newUsername, password: newPassword, role: newRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(Array.isArray(data.error) ? data.error[0]?.message : data.error);
+      toast({ title: `User "${newUsername}" created` });
+      setNewUsername(""); setNewPassword(""); setNewRole("member");
+      await loadUsers();
+    } catch (err) {
+      toast({ title: "Couldn't add user", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    } finally {
+      setAddingUser(false);
+    }
+  };
+
+  const deleteUser = async (user: ManagedUser) => {
+    if (!confirm(`Remove "${user.username}"? They'll be signed out and won't be able to log back in.`)) return;
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({ title: `"${user.username}" removed` });
+      setUsers(prev => prev.filter(u => u.id !== user.id));
+    } catch (err) {
+      toast({ title: "Couldn't remove user", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    }
+  };
+
+  const toggleUserRole = async (user: ManagedUser) => {
+    const role = user.role === "admin" ? "member" : "admin";
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setUsers(prev => prev.map(u => (u.id === user.id ? { ...u, role } : u)));
+    } catch (err) {
+      toast({ title: "Couldn't change role", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    }
+  };
+
+  const resetUserPassword = async (user: ManagedUser) => {
+    if (resetPasswordValue.length < 8) {
+      toast({ title: "Password must be at least 8 characters", variant: "destructive" });
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: resetPasswordValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      toast({ title: `Password reset for "${user.username}"` });
+      setResetTarget(null);
+      setResetPasswordValue("");
+    } catch (err) {
+      toast({ title: "Couldn't reset password", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    }
   };
 
   return (
@@ -444,6 +639,164 @@ export default function SettingsPage() {
         </Section>
       )}
 
+      {/* ── Server Connection (Electron only) ────────────────────────────────── */}
+      {isElectron && (
+        <Section title="Server Connection" icon={Cloud}>
+          <p className="text-xs text-muted-foreground mb-3">
+            Point BuildVerse at a self-hosted server so this PC and your phone share
+            the same live data. Leave disconnected to keep everything local to this PC.
+          </p>
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={serverUrl}
+                onChange={e => { setServerUrl(e.target.value); setTestStatus("idle"); }}
+                placeholder="https://buildverse.yourdomain.com"
+                className="flex h-9 flex-1 rounded-lg border border-border bg-secondary px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <Btn onClick={testServerConnection} disabled={!serverUrl || testStatus === "testing"}>
+                {testStatus === "testing" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Test"}
+              </Btn>
+            </div>
+
+            {testStatus === "ok" && (
+              <p className="text-xs text-green-400 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Reachable</p>
+            )}
+            {testStatus === "error" && (
+              <p className="text-xs text-red-400 flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" /> {testError || "Could not connect"}</p>
+            )}
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs text-muted-foreground">
+                Currently: <strong className="text-foreground">{serverMode === "remote" ? "Connected to server" : "Local"}</strong>
+              </span>
+              <div className="flex gap-2">
+                {serverMode === "remote" && (
+                  <Btn onClick={() => applyServerConnection("local")} disabled={savingConnection}>
+                    Disconnect
+                  </Btn>
+                )}
+                <Btn
+                  variant="primary"
+                  onClick={() => applyServerConnection("remote")}
+                  disabled={savingConnection || !serverUrl}
+                >
+                  {savingConnection ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />}
+                  Connect &amp; Restart
+                </Btn>
+              </div>
+            </div>
+          </div>
+        </Section>
+      )}
+
+      {/* ── Account (server mode only) ───────────────────────────────────────── */}
+      {health?.mode === "server" && currentUser && (
+        <Section title="Account" icon={Shield}>
+          <Row label="Signed in as" last>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium">{currentUser.username}</span>
+              <Badge variant={currentUser.role === "admin" ? "default" : "secondary"} className="text-2xs capitalize">
+                {currentUser.role}
+              </Badge>
+              <Btn variant="ghost" onClick={signOut}>
+                <LogOut className="w-3.5 h-3.5" /> Sign Out
+              </Btn>
+            </div>
+          </Row>
+        </Section>
+      )}
+
+      {/* ── Users (admin only) ───────────────────────────────────────────────── */}
+      {health?.mode === "server" && currentUser?.role === "admin" && (
+        <Section title="Users" icon={UsersIcon}>
+          <p className="text-xs text-muted-foreground mb-3">
+            Everyone shares the same garage — accounts are just for individual sign-in.
+          </p>
+
+          {loadingUsers ? (
+            <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+            </div>
+          ) : (
+            <div className="space-y-1 mb-4">
+              {users.map(u => (
+                <div key={u.id} className="rounded-xl hover:bg-secondary transition-colors">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm font-medium truncate">{u.username}</span>
+                      <Badge
+                        variant={u.role === "admin" ? "default" : "secondary"}
+                        className="text-2xs capitalize cursor-pointer"
+                        onClick={() => toggleUserRole(u)}
+                        title="Click to toggle admin/member"
+                      >
+                        {u.role}
+                      </Badge>
+                      {u.id === currentUser.id && <span className="text-2xs text-muted-foreground">(you)</span>}
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Btn size="xs" onClick={() => { setResetTarget(u.id); setResetPasswordValue(""); }}>
+                        <KeyRound className="w-3 h-3" /> Reset Password
+                      </Btn>
+                      <Btn size="xs" variant="danger" onClick={() => deleteUser(u)} disabled={u.id === currentUser.id}>
+                        <Trash2 className="w-3 h-3" />
+                      </Btn>
+                    </div>
+                  </div>
+                  {resetTarget === u.id && (
+                    <div className="flex items-center gap-2 px-3 pb-3">
+                      <input
+                        type="password"
+                        autoFocus
+                        value={resetPasswordValue}
+                        onChange={e => setResetPasswordValue(e.target.value)}
+                        placeholder="New password (min 8 characters)"
+                        className="flex h-8 flex-1 rounded-lg border border-border bg-secondary px-3 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                      <Btn size="xs" onClick={() => setResetTarget(null)}>Cancel</Btn>
+                      <Btn size="xs" variant="primary" onClick={() => resetUserPassword(u)}>Save</Btn>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <form onSubmit={addUser} className="flex flex-wrap items-center gap-2 pt-3 border-t border-border/60">
+            <input
+              type="text"
+              required
+              value={newUsername}
+              onChange={e => setNewUsername(e.target.value)}
+              placeholder="Username"
+              className="flex h-9 w-32 rounded-lg border border-border bg-secondary px-3 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <input
+              type="password"
+              required
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              placeholder="Password"
+              className="flex h-9 w-32 rounded-lg border border-border bg-secondary px-3 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <select
+              value={newRole}
+              onChange={e => setNewRole(e.target.value as "admin" | "member")}
+              className="flex h-9 rounded-lg border border-border bg-secondary px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+            <Btn variant="primary" disabled={addingUser}>
+              {addingUser ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
+              Add User
+            </Btn>
+          </form>
+        </Section>
+      )}
+
       {/* ── About ───────────────────────────────────────────────────────────── */}
       <Section title="About BuildVerse" icon={Zap}>
         <Row label="Version">
@@ -461,10 +814,17 @@ export default function SettingsPage() {
           }
         </Row>
         <Row label="Mode" last>
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-1 rounded-lg">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            Local / Offline
-          </span>
+          {health?.mode === "server" ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-1 rounded-lg">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+              Connected to Server
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-1 rounded-lg">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              Local / Offline
+            </span>
+          )}
         </Row>
       </Section>
 
@@ -562,6 +922,34 @@ export default function SettingsPage() {
         </Row>
       </Section>
 
+      {/* ── Server Data (server deployments only) ────────────────────────────── */}
+      {health?.mode === "server" && (
+        <Section title="Server Data" icon={Server}>
+          <p className="text-xs text-muted-foreground mb-3">
+            One-time migration: on the desktop app, use Settings → Backups → New Backup
+            to produce a <code>.db</code> file, then upload it here to seed this server.
+            This replaces everything currently on the server.
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Server password (confirm)</label>
+              <input
+                type="password"
+                value={restorePassword}
+                onChange={e => setRestorePassword(e.target.value)}
+                placeholder="••••••••"
+                className="flex h-9 w-full max-w-xs rounded-lg border border-border bg-secondary px-3 py-1 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+            <input ref={restoreDbRef} type="file" accept=".db" className="hidden" onChange={handleRestoreDb} />
+            <Btn variant="danger" onClick={() => restoreDbRef.current?.click()} disabled={restoring || !restorePassword}>
+              {restoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UploadCloud className="w-3.5 h-3.5" />}
+              {restoring ? "Restoring…" : "Upload & Restore Database"}
+            </Btn>
+          </div>
+        </Section>
+      )}
+
       {/* ── Backups ──────────────────────────────────────────────────────────── */}
       {isElectron && (
         <Section
@@ -621,7 +1009,9 @@ export default function SettingsPage() {
       )}
 
       <p className="text-xs text-center text-muted-foreground/50">
-        All data is stored locally — no cloud, no accounts
+        {health?.mode === "server"
+          ? "Connected to a self-hosted server — data is shared with everyone signed in"
+          : "All data is stored locally — no cloud, no accounts"}
       </p>
 
       {/* ── Sticky Save Button ───────────────────────────────────────────────── */}

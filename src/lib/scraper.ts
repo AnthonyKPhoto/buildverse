@@ -1,4 +1,7 @@
 import dns from "dns/promises";
+import net from "net";
+import type { LookupOptions, LookupAddress } from "dns";
+import { fetch as undiciFetch, Agent } from "undici";
 
 interface ScrapedProduct {
   title: string;
@@ -83,19 +86,22 @@ function isPrivateIP(ip: string): boolean {
 }
 
 /**
- * Validates that a URL is safe to fetch externally.
+ * Validates that a URL is safe to fetch externally, and returns the
+ * DNS-resolved addresses that passed validation so the caller can pin the
+ * actual fetch to them (see `pinnedLookup` below).
  *
  * Checks:
  *  1. Protocol must be http or https (blocks file://, ftp://, etc.)
  *  2. Hostname must not be a private/loopback IP literal
  *  3. DNS pre-resolution must not resolve to a private/loopback IP
  *
- * Limitation: DNS rebinding attacks (where DNS TTL expires between this check
- * and the actual fetch) are not fully mitigated without binding the TCP
- * connection directly to the resolved IP.  For a local desktop app this risk
- * is negligible, but worth noting for any future server deployment.
+ * The caller MUST fetch using only the returned `addresses` (never re-resolve
+ * the hostname) — otherwise a DNS-rebinding attacker can flip the record
+ * between this check and the fetch itself. Pinning the connection closes that
+ * gap, which matters now that this server is reachable from the public
+ * internet rather than only trusted local processes.
  */
-export async function validateScrapingUrl(rawUrl: string): Promise<void> {
+export async function validateScrapingUrl(rawUrl: string): Promise<{ hostname: string; addresses: string[] }> {
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -115,15 +121,10 @@ export async function validateScrapingUrl(rawUrl: string): Promise<void> {
   }
 
   // DNS pre-resolution — catches hostnames that map to private IPs
+  let addresses: string[];
   try {
-    const addresses = await dns.resolve(hostname);
-    for (const addr of addresses) {
-      if (isPrivateIP(addr)) {
-        throw new Error("URL resolves to a private or loopback address");
-      }
-    }
+    addresses = await dns.resolve(hostname);
   } catch (err) {
-    // Re-throw our own SSRF errors unchanged
     if (
       err instanceof Error &&
       (err.message.includes("private") || err.message.includes("loopback"))
@@ -133,6 +134,35 @@ export async function validateScrapingUrl(rawUrl: string): Promise<void> {
     // Unresolvable hostname — fail closed (safer than allowing unknown destinations)
     throw new Error("Unable to resolve URL hostname — request blocked");
   }
+
+  for (const addr of addresses) {
+    if (isPrivateIP(addr)) {
+      throw new Error("URL resolves to a private or loopback address");
+    }
+  }
+
+  return { hostname, addresses };
+}
+
+/**
+ * Builds a `dns.lookup`-compatible function that always answers with the
+ * pre-validated addresses, regardless of what a fresh DNS query would return.
+ * Passed to an undici Agent so the real TCP connection can never land
+ * anywhere other than the address `validateScrapingUrl` already vetted.
+ */
+function pinnedLookup(addresses: string[]) {
+  const family = net.isIP(addresses[0]) === 6 ? 6 : 4;
+  return (
+    _hostname: string,
+    options: LookupOptions,
+    callback: (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void
+  ) => {
+    if (options && options.all) {
+      callback(null, addresses.map((address) => ({ address, family })));
+    } else {
+      callback(null, addresses[0], family);
+    }
+  };
 }
 
 // ── URL sanitizer ─────────────────────────────────────────────────────────────
@@ -151,19 +181,24 @@ function sanitizeImageUrl(url: string | null | undefined): string | null {
 
 export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   // SSRF guard — must be called before any fetch; throws on disallowed targets
-  await validateScrapingUrl(url);
+  const { addresses } = await validateScrapingUrl(url);
 
   const domain = extractDomain(url);
   const vendor = vendorFromDomain(domain);
 
+  // Pin the actual connection to the addresses we just validated, so a DNS
+  // rebind between the check above and this fetch can't redirect us.
+  const agent = new Agent({ connect: { lookup: pinnedLookup(addresses) } });
+
   try {
-    const res = await fetch(url, {
+    const res = await undiciFetch(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Accept: "text/html,application/xhtml+xml",
       },
       signal: AbortSignal.timeout(10000),
+      dispatcher: agent,
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -262,5 +297,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
       vendor,
       sku: null,
     };
+  } finally {
+    await agent.close();
   }
 }
