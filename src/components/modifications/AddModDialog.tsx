@@ -116,6 +116,84 @@ function ScrapingView({ url }: { url: string }) {
   );
 }
 
+// ── Dependency picker ─────────────────────────────────────────────────────────
+
+function DepPicker({
+  vehicleMods,
+  dependsOn,
+  onChange,
+}: {
+  vehicleMods: VehicleMod[];
+  dependsOn: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [search, setSearch] = useState("");
+
+  const toggle = (id: string, checked: boolean) =>
+    onChange(checked ? [...dependsOn, id] : dependsOn.filter((x) => x !== id));
+
+  const filtered = vehicleMods.filter((m) =>
+    !search.trim() || m.name.toLowerCase().includes(search.toLowerCase()) || m.category.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <details className="group">
+      <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground list-none select-none">
+        <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90 shrink-0" />
+        Dependencies
+        {dependsOn.length > 0 && (
+          <span className="ml-1 text-xs bg-theme/15 text-theme px-1.5 py-0.5 rounded-full">
+            {dependsOn.length} required
+          </span>
+        )}
+      </summary>
+      <div className="mt-2 border border-input rounded-xl overflow-hidden">
+        {/* Search bar */}
+        <div className="px-2 pt-2 pb-1">
+          <div className="relative">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Search mods…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-secondary/40 rounded-lg border-0 outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground px-3 pb-1.5">Mods that must be installed before this one</p>
+        <div className="space-y-0.5 max-h-44 overflow-y-auto px-2 pb-2">
+          {filtered.length === 0 ? (
+            <p className="text-xs text-muted-foreground px-2 py-3 text-center">No mods match</p>
+          ) : filtered.map((m) => (
+            <label key={m.id} className="flex items-center gap-2 cursor-pointer hover:bg-secondary/40 px-2 py-1.5 rounded-lg transition-colors">
+              <input
+                type="checkbox"
+                className="rounded border-input accent-theme"
+                checked={dependsOn.includes(m.id)}
+                onChange={(e) => toggle(m.id, e.target.checked)}
+              />
+              <span className="text-sm flex-1 truncate">{m.name}</span>
+              <span className="text-xs text-muted-foreground shrink-0">{m.category}</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full border shrink-0 ${
+                m.status === "INSTALLED" ? "bg-green-500/15 text-green-400 border-green-500/25" :
+                m.status === "PLANNED"   ? "bg-slate-500/15 text-slate-400 border-slate-500/25" :
+                "bg-yellow-500/15 text-yellow-400 border-yellow-500/25"
+              }`}>
+                {m.status.charAt(0) + m.status.slice(1).toLowerCase()}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }: AddModDialogProps) {
@@ -558,53 +636,27 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
 
             {/* Dependencies */}
             {vehicleMods.length > 0 && (
-              <details className="group">
-                <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground list-none select-none">
-                  <ChevronRight className="w-3.5 h-3.5 transition-transform group-open:rotate-90 shrink-0" />
-                  Dependencies
-                  {dependsOn.length > 0 && (
-                    <span className="ml-1 text-xs bg-theme/15 text-theme px-1.5 py-0.5 rounded-full">
-                      {dependsOn.length} required
-                    </span>
-                  )}
-                </summary>
-                <div className="mt-2 space-y-0.5 max-h-40 overflow-y-auto border border-input rounded-xl p-2">
-                  <p className="text-xs text-muted-foreground px-2 pb-1.5">Select mods that must be installed before this one</p>
-                  {vehicleMods.map((m) => (
-                    <label key={m.id} className="flex items-center gap-2 cursor-pointer hover:bg-secondary/40 px-2 py-1.5 rounded-lg transition-colors">
-                      <input
-                        type="checkbox"
-                        className="rounded border-input accent-theme"
-                        checked={dependsOn.includes(m.id)}
-                        onChange={(e) => {
-                          setDependsOn((prev) =>
-                            e.target.checked ? [...prev, m.id] : prev.filter((id) => id !== m.id)
-                          );
-                        }}
-                      />
-                      <span className="text-sm flex-1 truncate">{m.name}</span>
-                      <span className="text-xs text-muted-foreground shrink-0">{m.category}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full border shrink-0 ${
-                        m.status === "INSTALLED" ? "bg-green-500/15 text-green-400 border-green-500/25" :
-                        m.status === "PLANNED" ? "bg-slate-500/15 text-slate-400 border-slate-500/25" :
-                        "bg-yellow-500/15 text-yellow-400 border-yellow-500/25"
-                      }`}>
-                        {m.status.charAt(0) + m.status.slice(1).toLowerCase()}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </details>
+              <DepPicker
+                vehicleMods={vehicleMods}
+                dependsOn={dependsOn}
+                onChange={setDependsOn}
+              />
             )}
 
             {/* Notes */}
             <div>
               <Label>Notes</Label>
               <textarea
-                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-none"
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-none overflow-hidden"
                 placeholder="Any notes, fitment info, install tips…"
                 value={form.notes}
-                onChange={(e) => set("notes", e.target.value)}
+                onChange={(e) => {
+                  set("notes", e.target.value);
+                  const t = e.target; t.style.height = "auto"; t.style.height = t.scrollHeight + "px";
+                }}
+                onFocus={(e) => {
+                  const t = e.target; t.style.height = "auto"; t.style.height = t.scrollHeight + "px";
+                }}
               />
             </div>
 
