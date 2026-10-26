@@ -181,12 +181,13 @@ export function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+                "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
                 active
-                  ? "bg-theme/12 text-theme"
+                  ? "bg-theme/10 text-theme"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}
             >
+              {active && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-[2px] h-5 bg-theme rounded-full" />}
               <Icon
                 className={cn(
                   "w-[18px] h-[18px] shrink-0 transition-colors",
@@ -271,12 +272,13 @@ export function Sidebar() {
         <Link
           href="/settings"
           className={cn(
-            "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+            "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
             pathname === "/settings"
-              ? "bg-theme/12 text-theme"
+              ? "bg-theme/10 text-theme"
               : "text-muted-foreground hover:text-foreground hover:bg-secondary"
           )}
         >
+          {pathname === "/settings" && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-[2px] h-5 bg-theme rounded-full" />}
           <Settings
             className={cn(
               "w-[18px] h-[18px] shrink-0",

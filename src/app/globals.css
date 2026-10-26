@@ -72,8 +72,8 @@
   }
   html { scroll-behavior: smooth; }
 
-  h1 { @apply text-2xl font-semibold tracking-tight; }
-  h2 { @apply text-xl font-semibold tracking-tight; }
+  h1 { @apply text-2xl font-semibold tracking-tight; font-family: 'Space Grotesk', var(--font-body); }
+  h2 { @apply text-xl font-semibold tracking-tight; font-family: 'Space Grotesk', var(--font-body); }
   h3 { @apply text-base font-semibold; }
 }
 
@@ -98,8 +98,8 @@ html.light ::-webkit-scrollbar-thumb:hover { background: hsl(213, 20%, 58%); }
     @apply transition-all duration-200;
   }
   .card-hover:hover {
-    @apply border-border/80;
-    box-shadow: 0 0 0 1px hsl(var(--border) / 0.5);
+    @apply border-border/70 -translate-y-px;
+    box-shadow: 0 8px 24px hsl(0 0% 0% / 0.25);
   }
 
   .surface-inset {

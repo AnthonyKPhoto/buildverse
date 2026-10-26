@@ -18,6 +18,7 @@ import {
   TrendingUp, Gauge, ArrowUpDown, LayoutList, Grid2X2, BookOpen, FileDown, FolderOpen,
   Kanban, FileSpreadsheet, Activity, CalendarDays, Images, X, ChevronLeft, ChevronRight,
   Share2, Link2 as LinkIcon, ShieldAlert, Instagram, Facebook, Tag, Download,
+  MoreHorizontal, ChevronDown,
 } from "lucide-react";
 import { AddModDialog } from "@/components/modifications/AddModDialog";
 import { AddMaintenanceDialog } from "@/components/maintenance/AddMaintenanceDialog";
@@ -95,6 +96,14 @@ const PRIORITY_BADGE: Record<string, string> = {
   HIGH:     "bg-orange-500/15 text-orange-400 border-orange-500/25",
   CRITICAL: "bg-red-500/20 text-red-400 border-red-400/40",
 };
+const STATUS_STRIPE: Record<string, string> = {
+  PLANNED:    "bg-slate-400/40",
+  RESEARCHING:"bg-blue-400/70",
+  ORDERED:    "bg-yellow-400/70",
+  PURCHASED:  "bg-purple-400/70",
+  INSTALLED:  "bg-green-400/80",
+  REMOVED:    "bg-red-400/60",
+};
 
 export default function VehicleDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -117,6 +126,11 @@ export default function VehicleDetailPage() {
   const [budgetForm, setBudgetForm] = useState({ category: "", planned: "", actual: "" });
   const [savingBudget, setSavingBudget] = useState(false);
   const imageFetchQueue = useRef<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState("mods");
+  const [heroMoreOpen, setHeroMoreOpen] = useState(false);
+  const [moreTabOpen, setMoreTabOpen] = useState(false);
+  const heroMoreRef = useRef<HTMLDivElement>(null);
+  const moreTabRef = useRef<HTMLDivElement>(null);
 
   // Silently fetches images for mods that have a link but no imageUrl,
   // saving results to the DB and updating local state as each completes.
@@ -192,6 +206,15 @@ export default function VehicleDetailPage() {
   useEffect(() => {
     const saved = localStorage.getItem("bv-mod-view");
     if (saved === "compact" || saved === "normal" || saved === "kanban" || saved === "timeline" || saved === "gallery") setModView(saved);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (heroMoreRef.current && !heroMoreRef.current.contains(e.target as Node)) setHeroMoreOpen(false);
+      if (moreTabRef.current && !moreTabRef.current.contains(e.target as Node)) setMoreTabOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   const deleteMod = async (modId: string) => {
@@ -369,105 +392,113 @@ export default function VehicleDetailPage() {
         </div>
       </div>
     ) : (
-      <Card key={mod.id} className="hover:border-border/60 transition-colors">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            {mod.imageUrl ? (
-              <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-secondary">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={mod.imageUrl} alt={mod.name} className="object-cover w-full h-full" />
-              </div>
-            ) : (
-              <div className="w-14 h-14 rounded-lg bg-secondary flex items-center justify-center flex-shrink-0">
-                <Package className="w-6 h-6 text-muted-foreground/40" />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-medium text-sm">{mod.name}</p>
-                  <p className="text-xs text-muted-foreground">{[mod.brand, mod.vendor].filter(Boolean).join(" · ")}</p>
-                </div>
-                <button
-                  onClick={() => cycleStatus(mod)}
-                  className={`text-xs px-2 py-0.5 rounded-full border font-medium hover:opacity-75 transition-opacity flex-shrink-0 ${STATUS_COLORS[mod.status] || STATUS_COLORS.PLANNED}`}
-                  title="Click to cycle status"
-                >
-                  {mod.status.charAt(0) + mod.status.slice(1).toLowerCase()}
-                </button>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 mt-2">
-                {mod.price != null && <span className="text-sm font-semibold">{formatCurrency(mod.price)}</span>}
-                {mod.priority !== "NONE" && PRIORITY_BADGE[mod.priority] && (
-                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${PRIORITY_BADGE[mod.priority]}`}>
-                    {mod.priority === "CRITICAL" ? "⚠ Critical" : mod.priority.charAt(0) + mod.priority.slice(1).toLowerCase()}
-                  </span>
-                )}
-                {mod.difficulty && <span className="text-xs text-muted-foreground">{mod.difficulty.charAt(0) + mod.difficulty.slice(1).toLowerCase()} install</span>}
-                {mod.installDate && <span className="text-xs text-muted-foreground">Installed {formatDate(mod.installDate)}</span>}
-              </div>
-              {mod.notes && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{mod.notes}</p>}
-              {/* Price tracking badge */}
-              {mod.link && (() => {
-                const tracked = priceCache[mod.link];
-                if (tracked === undefined && mod.link) {
-                  // Trigger lazy lookup on first render of this mod card
-                  setTimeout(() => lookupPrice(mod.link!), 0);
-                }
-                if (!tracked) return null;
-                return (
-                  <div className="flex items-center gap-1.5 mt-1.5">
-                    <Tag className="w-3 h-3 text-theme" />
-                    <span className="text-xs text-theme font-medium">
-                      Tracking: {tracked.currentPrice != null ? `$${tracked.currentPrice.toFixed(2)}` : "No price"}
-                    </span>
-                    {tracked.lowestPrice != null && tracked.currentPrice != null && tracked.currentPrice <= tracked.lowestPrice && (
-                      <span className="text-xs text-green-400">· Lowest ever!</span>
-                    )}
-                    {tracked.highestPrice != null && tracked.currentPrice != null && tracked.currentPrice < tracked.highestPrice && (
-                      <span className="text-xs text-blue-400">· {Math.round((tracked.highestPrice - tracked.currentPrice) / tracked.highestPrice * 100)}% off peak</span>
-                    )}
-                  </div>
-                );
-              })()}
-              {mod.dependencies && mod.dependencies.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {mod.dependencies.map((dep) => (
-                    <span
-                      key={dep.id}
-                      title={`Requires: ${dep.dependsOn.name} (${dep.dependsOn.status})`}
-                      className={`text-xs px-1.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
-                        dep.dependsOn.status === "INSTALLED"
-                          ? "bg-green-500/10 text-green-400/70 border-green-500/20"
-                          : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                      }`}
-                    >
-                      {dep.dependsOn.status !== "INSTALLED" && "⚠ "}Requires: {dep.dependsOn.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex gap-1 flex-shrink-0">
-              {mod.link && (
-                <a href={mod.link} target="_blank" rel="noopener noreferrer">
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><ExternalLink className="w-3.5 h-3.5" /></Button>
-                </a>
-              )}
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditMod(mod)}><Edit2 className="w-3.5 h-3.5" /></Button>
-              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:text-destructive" onClick={() => deleteMod(mod.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-            </div>
+      <div key={mod.id} className="group relative flex gap-3.5 p-4 rounded-xl border border-border/60 bg-card hover:bg-secondary/20 hover:-translate-y-px hover:shadow-lg hover:shadow-black/25 transition-all duration-200 overflow-hidden">
+        {/* Left status stripe */}
+        <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${STATUS_STRIPE[mod.status] || "bg-slate-400/40"}`} />
+
+        {/* Image */}
+        {mod.imageUrl ? (
+          <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-secondary self-start">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={mod.imageUrl} alt={mod.name} className="object-cover w-full h-full" />
           </div>
-        </CardContent>
-      </Card>
+        ) : (
+          <div className="w-14 h-14 rounded-lg bg-secondary/60 border border-border/30 flex items-center justify-center flex-shrink-0 self-start">
+            <Package className="w-5 h-5 text-muted-foreground/30" />
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="flex-1 min-w-0 pl-0.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-semibold text-sm leading-snug">{mod.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{[mod.brand, mod.vendor].filter(Boolean).join(" · ")}</p>
+            </div>
+            <button
+              onClick={() => cycleStatus(mod)}
+              className={`text-xs px-2.5 py-1 rounded-full border font-medium hover:opacity-80 transition-opacity flex-shrink-0 inline-flex items-center gap-1.5 ${STATUS_COLORS[mod.status] || STATUS_COLORS.PLANNED}`}
+              title="Click to cycle status"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70 shrink-0" />
+              {mod.status.charAt(0) + mod.status.slice(1).toLowerCase()}
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
+            {mod.price != null && <span className="text-sm font-bold tabular-nums">{formatCurrency(mod.price)}</span>}
+            {mod.priority !== "NONE" && PRIORITY_BADGE[mod.priority] && (
+              <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${PRIORITY_BADGE[mod.priority]}`}>
+                {mod.priority === "CRITICAL" ? "⚠ Critical" : mod.priority.charAt(0) + mod.priority.slice(1).toLowerCase()}
+              </span>
+            )}
+            {mod.difficulty && <span className="text-xs text-muted-foreground">{mod.difficulty.charAt(0) + mod.difficulty.slice(1).toLowerCase()} install</span>}
+            {mod.installDate && <span className="text-xs text-muted-foreground">Installed {formatDate(mod.installDate)}</span>}
+          </div>
+          {mod.notes && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">{mod.notes}</p>}
+          {/* Price tracking badge */}
+          {mod.link && (() => {
+            const tracked = priceCache[mod.link];
+            if (tracked === undefined && mod.link) {
+              // Trigger lazy lookup on first render of this mod card
+              setTimeout(() => lookupPrice(mod.link!), 0);
+            }
+            if (!tracked) return null;
+            return (
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <Tag className="w-3 h-3 text-theme" />
+                <span className="text-xs text-theme font-medium">
+                  Tracking: {tracked.currentPrice != null ? `$${tracked.currentPrice.toFixed(2)}` : "No price"}
+                </span>
+                {tracked.lowestPrice != null && tracked.currentPrice != null && tracked.currentPrice <= tracked.lowestPrice && (
+                  <span className="text-xs text-green-400">· Lowest ever!</span>
+                )}
+                {tracked.highestPrice != null && tracked.currentPrice != null && tracked.currentPrice < tracked.highestPrice && (
+                  <span className="text-xs text-blue-400">· {Math.round((tracked.highestPrice - tracked.currentPrice) / tracked.highestPrice * 100)}% off peak</span>
+                )}
+              </div>
+            );
+          })()}
+          {mod.dependencies && mod.dependencies.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {mod.dependencies.map((dep) => (
+                <span
+                  key={dep.id}
+                  title={`Requires: ${dep.dependsOn.name} (${dep.dependsOn.status})`}
+                  className={`text-xs px-1.5 py-0.5 rounded-full border inline-flex items-center gap-1 ${
+                    dep.dependsOn.status === "INSTALLED"
+                      ? "bg-green-500/10 text-green-400/70 border-green-500/20"
+                      : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                  }`}
+                >
+                  {dep.dependsOn.status !== "INSTALLED" && "⚠ "}Requires: {dep.dependsOn.name}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col gap-0.5 flex-shrink-0 self-start opacity-0 group-hover:opacity-100 transition-opacity">
+          {mod.link && (
+            <a href={mod.link} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><ExternalLink className="w-3.5 h-3.5" /></Button>
+            </a>
+          )}
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditMod(mod)}><Edit2 className="w-3.5 h-3.5" /></Button>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 hover:text-destructive" onClick={() => deleteMod(mod.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+        </div>
+      </div>
     );
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Vehicle Hero Banner */}
-      <div className="-mx-3 -mt-4 md:-mx-6 md:-mt-8 mb-2 px-3 md:px-6 pt-4 md:pt-6 pb-6 border-b border-border/60 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
-        <div className="absolute top-0 right-0 w-80 h-48 bg-theme/8 rounded-full blur-3xl -translate-y-8 translate-x-8 pointer-events-none" />
+      <div className="-mx-3 -mt-4 md:-mx-6 md:-mt-8 mb-2 px-3 md:px-6 pt-4 md:pt-6 pb-5 border-b border-border/60 relative">
+        {/* Background effects isolated so dropdowns can overflow */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5" />
+          <div className="absolute top-0 right-0 w-80 h-48 bg-theme/8 rounded-full blur-3xl -translate-y-8 translate-x-8" />
+        </div>
 
         {/* Breadcrumb */}
         <div className="relative flex items-center gap-1.5 mb-4">
@@ -481,10 +512,10 @@ export default function VehicleDetailPage() {
           <span className="text-sm text-muted-foreground truncate">{vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}</span>
         </div>
 
-        {/* Main row: photo + info + actions */}
-        <div className="relative flex flex-col sm:flex-row items-start gap-4">
-          {/* Photo */}
-          <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden bg-secondary flex-shrink-0 ring-1 ring-border/40 shadow-lg">
+        {/* Main row: photo + info */}
+        <div className="relative flex gap-4 sm:gap-5 items-start">
+          {/* Photo — wider, more landscape */}
+          <div className="relative w-28 h-20 sm:w-40 sm:h-[7.5rem] rounded-xl overflow-hidden bg-secondary flex-shrink-0 ring-1 ring-border/40 shadow-lg">
             {vehicle.photoUrl ? (
               vehicle.photoUrl.startsWith("data:") ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -493,31 +524,87 @@ export default function VehicleDetailPage() {
                 <Image src={vehicle.photoUrl} alt={vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`} fill className="object-cover" />
               )
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Car className="w-10 h-10 text-muted-foreground/20" />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+                <Car className="w-8 h-8 text-muted-foreground/20" />
+                {vehicle.color && (
+                  <span className="text-[10px] text-muted-foreground/40 font-medium px-1 text-center leading-tight">{vehicle.color}</span>
+                )}
               </div>
             )}
           </div>
 
-          {/* Info */}
+          {/* Info column */}
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl sm:text-3xl font-bold tracking-tight leading-tight">
-              {vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-            </h1>
-            {vehicle.name && (
-              <p className="text-sm text-muted-foreground mt-0.5">{vehicle.year} {vehicle.make} {vehicle.model}{vehicle.trim ? ` · ${vehicle.trim}` : ""}</p>
-            )}
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              {!vehicle.name && vehicle.trim && <Badge variant="outline">{vehicle.trim}</Badge>}
-              {vehicle.platform && <Badge className="bg-theme/10 text-theme border-theme/20">{vehicle.platform}</Badge>}
-              {vehicle.drivetrain && <Badge variant="secondary">{vehicle.drivetrain}</Badge>}
+            {/* Title row + action buttons */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-2xl font-bold tracking-tight leading-tight">
+                  {vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+                </h1>
+                {vehicle.name && (
+                  <p className="text-sm text-muted-foreground mt-0.5">{vehicle.year} {vehicle.make} {vehicle.model}{vehicle.trim ? ` · ${vehicle.trim}` : ""}</p>
+                )}
+              </div>
+              {/* Actions: Edit + More dropdown */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button variant="outline" size="sm" onClick={() => setEditVehicleOpen(true)} className="gap-1.5 h-8">
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Edit</span>
+                </Button>
+                <div className="relative" ref={heroMoreRef}>
+                  <Button
+                    variant="outline" size="sm"
+                    className="h-8 w-8 px-0"
+                    onClick={() => setHeroMoreOpen((o) => !o)}
+                    aria-label="More actions"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </Button>
+                  {heroMoreOpen && (
+                    <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl py-1 w-44 text-sm">
+                      <button
+                        className="w-full text-left flex items-center gap-2.5 px-3 py-2 hover:bg-secondary/60 transition-colors"
+                        onClick={() => { checkRecalls(); setHeroMoreOpen(false); }}
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5 text-muted-foreground" /> Check Recalls
+                      </button>
+                      <button
+                        className="w-full text-left flex items-center gap-2.5 px-3 py-2 hover:bg-secondary/60 transition-colors"
+                        onClick={() => { setBcImgError(false); setBuildCardOpen(true); setHeroMoreOpen(false); }}
+                      >
+                        <Share2 className="w-3.5 h-3.5 text-muted-foreground" /> Build Card
+                      </button>
+                      <button
+                        className="w-full text-left flex items-center gap-2.5 px-3 py-2 hover:bg-secondary/60 transition-colors"
+                        onClick={() => { setPdfDialogOpen(true); setHeroMoreOpen(false); }}
+                      >
+                        <FileDown className="w-3.5 h-3.5 text-muted-foreground" /> Export PDF
+                      </button>
+                      <div className="my-1 border-t border-border" />
+                      <button
+                        className="w-full text-left flex items-center gap-2.5 px-3 py-2 hover:bg-secondary/60 transition-colors text-destructive"
+                        onClick={() => { deleteVehicle(); setHeroMoreOpen(false); }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete Vehicle
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Spec chips */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              {!vehicle.name && vehicle.trim && <Badge variant="outline" className="text-xs">{vehicle.trim}</Badge>}
+              {vehicle.platform && <Badge className="bg-theme/10 text-theme border-theme/20 text-xs">{vehicle.platform}</Badge>}
+              {vehicle.drivetrain && <Badge variant="secondary" className="text-xs">{vehicle.drivetrain}</Badge>}
               {vehicle.engine && <span className="text-xs text-muted-foreground">{vehicle.engine}</span>}
               {vehicle.transmission && <span className="text-xs text-muted-foreground">· {vehicle.transmission}</span>}
               {vehicle.mileage != null && <span className="text-xs text-muted-foreground">· {vehicle.mileage.toLocaleString()} mi</span>}
-              {vehicle.color && <span className="text-xs text-muted-foreground">· {vehicle.color}</span>}
             </div>
+
             {(vehicle.instagramUrl || vehicle.facebookUrl) && (
-              <div className="flex gap-3 mt-2">
+              <div className="flex gap-3 mt-1.5">
                 {vehicle.instagramUrl && (
                   <a href={vehicle.instagramUrl} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-pink-400 transition-colors">
@@ -532,93 +619,96 @@ export default function VehicleDetailPage() {
                 )}
               </div>
             )}
-          </div>
 
-          {/* Right: completion + actions */}
-          <div className="flex sm:flex-col items-center sm:items-end gap-3 sm:gap-3 shrink-0 w-full sm:w-auto">
-            <div className="text-right">
-              <div className="text-2xl sm:text-3xl font-bold">{completion}%</div>
-              <div className="text-xs text-muted-foreground mb-1.5">Build Complete</div>
-              <Progress value={completion} className="h-1.5 w-24 sm:w-28" />
+            {/* Stats + completion — all in one natural-flow row */}
+            <div className="flex items-center gap-5 flex-wrap mt-3 pt-3 border-t border-border/40">
+              <div>
+                <p className="text-[11px] text-muted-foreground leading-none mb-0.5">Installed</p>
+                <p className="text-base font-bold text-green-400 leading-none">{formatCurrency(modValues.installed)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground leading-none mb-0.5">Planned</p>
+                <p className="text-base font-bold text-theme leading-none">{formatCurrency(modValues.planned)}</p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground leading-none mb-0.5">Total Build</p>
+                <p className="text-base font-bold leading-none">{formatCurrency(modValues.total)}</p>
+              </div>
+              <div className="border-l border-border/60 pl-5 ml-1">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-lg font-bold leading-none">{completion}%</span>
+                  <span className="text-[11px] text-muted-foreground">complete</span>
+                </div>
+                <Progress value={completion} className="h-1.5 w-20 mt-1.5" />
+              </div>
             </div>
-            <div className="flex gap-1.5 flex-wrap sm:justify-end ml-auto sm:ml-0">
-              <Button variant="outline" size="sm" onClick={checkRecalls} className="gap-1.5 h-7 text-xs">
-                <ShieldAlert className="w-3 h-3" />
-                Recalls
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => { setBcImgError(false); setBuildCardOpen(true); }} className="gap-1.5 h-7 text-xs">
-                <Share2 className="w-3 h-3" />
-                Build Card
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setPdfDialogOpen(true)} className="gap-1.5 h-7 text-xs">
-                <FileDown className="w-3 h-3" />
-                PDF
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setEditVehicleOpen(true)} className="gap-1.5 h-7 text-xs">
-                <Edit2 className="w-3 h-3" />
-                Edit
-              </Button>
-              <Button variant="outline" size="sm" onClick={deleteVehicle} className="gap-1.5 h-7 text-xs hover:text-destructive hover:border-destructive">
-                <Trash2 className="w-3 h-3" />
-                Delete
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Value stats bar */}
-        <div className="relative grid grid-cols-3 gap-4 mt-5 pt-4 border-t border-border/40">
-          <div>
-            <p className="text-xs text-muted-foreground">Installed Value</p>
-            <p className="text-lg font-bold text-green-400">{formatCurrency(modValues.installed)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Planned Spend</p>
-            <p className="text-lg font-bold text-theme">{formatCurrency(modValues.planned)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Total Build</p>
-            <p className="text-lg font-bold">{formatCurrency(modValues.total)}</p>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="mods">
-        <TabsList className="flex w-full max-w-4xl min-w-0">
-          <TabsTrigger value="mods" className="gap-1">
-            <Wrench className="w-3 h-3" />
-            Mods
-          </TabsTrigger>
-          <TabsTrigger value="budget" className="gap-1">
-            <DollarSign className="w-3 h-3" />
-            Budget
-          </TabsTrigger>
-          <TabsTrigger value="maintenance" className="gap-1">
-            <ClipboardList className="w-3 h-3" />
-            Service
-          </TabsTrigger>
-          <TabsTrigger value="journal" className="gap-1">
-            <BookOpen className="w-3 h-3" />
-            Journal
-          </TabsTrigger>
-          <TabsTrigger value="links" className="gap-1">
-            <LinkIcon className="w-3 h-3" />
-            Links
-          </TabsTrigger>
-          <TabsTrigger value="files" className="gap-1">
-            <FolderOpen className="w-3 h-3" />
-            Files
-          </TabsTrigger>
-          <TabsTrigger value="dyno" className="gap-1.5">
-            <Gauge className="w-3.5 h-3.5" />
-            Dyno
-          </TabsTrigger>
-          <TabsTrigger value="tunelogs" className="gap-1.5">
-            <Activity className="w-3.5 h-3.5" />
-            Logs
-          </TabsTrigger>
-        </TabsList>
+      {(() => {
+        const SECONDARY_TABS = [
+          { value: "journal",  label: "Journal",  icon: <BookOpen  className="w-3.5 h-3.5" /> },
+          { value: "links",    label: "Links",    icon: <LinkIcon  className="w-3.5 h-3.5" /> },
+          { value: "files",    label: "Files",    icon: <FolderOpen className="w-3.5 h-3.5" /> },
+          { value: "dyno",     label: "Dyno",     icon: <Gauge     className="w-3.5 h-3.5" /> },
+          { value: "tunelogs", label: "Logs",     icon: <Activity  className="w-3.5 h-3.5" /> },
+        ];
+        const activeSecondary = SECONDARY_TABS.find((t) => t.value === activeTab);
+        return (
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <div className="flex items-center border-b border-border/60 -mx-3 md:-mx-6 px-3 md:px-6">
+          <TabsList className="bg-transparent border-0 p-0 h-auto gap-0 rounded-none shrink-0">
+            {[
+              { value: "mods",        label: "Mods",    icon: <Wrench       className="w-3.5 h-3.5" /> },
+              { value: "budget",      label: "Budget",  icon: <DollarSign   className="w-3.5 h-3.5" /> },
+              { value: "maintenance", label: "Service", icon: <ClipboardList className="w-3.5 h-3.5" /> },
+            ].map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="gap-1.5 rounded-none border-b-2 border-transparent data-[state=active]:border-theme data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2.5 text-sm h-auto"
+              >
+                {tab.icon}{tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {/* More dropdown for secondary tabs */}
+          <div className="relative ml-1" ref={moreTabRef}>
+            <button
+              onClick={() => setMoreTabOpen((o) => !o)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm rounded-none border-b-2 transition-colors ${
+                activeSecondary
+                  ? "border-theme text-foreground font-medium"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {activeSecondary ? (
+                <>{activeSecondary.icon}{activeSecondary.label}</>
+              ) : (
+                <>More</>
+              )}
+              <ChevronDown className={`w-3 h-3 transition-transform ${moreTabOpen ? "rotate-180" : ""}`} />
+            </button>
+            {moreTabOpen && (
+              <div className="absolute left-0 top-full mt-0.5 z-50 bg-card border border-border rounded-lg shadow-xl py-1 w-40 text-sm">
+                {SECONDARY_TABS.map((tab) => (
+                  <button
+                    key={tab.value}
+                    className={`w-full text-left flex items-center gap-2.5 px-3 py-2 hover:bg-secondary/60 transition-colors ${
+                      activeTab === tab.value ? "text-theme font-medium" : "text-muted-foreground"
+                    }`}
+                    onClick={() => { setActiveTab(tab.value); setMoreTabOpen(false); }}
+                  >
+                    {tab.icon}{tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* ===== MODIFICATIONS TAB ===== */}
         <TabsContent value="mods" className="space-y-4 mt-4">
@@ -817,11 +907,12 @@ export default function VehicleDetailPage() {
               const categoryTotal = mods.filter((m) => m.status !== "RESEARCHING" && m.status !== "REMOVED").reduce((s, m) => s + ((m.actualPrice ?? m.price) ?? 0), 0);
               return (
                 <div key={category}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">{category}</h3>
-                    <div className="text-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{mods.length}</div>
-                    {categoryTotal > 0 && <span className="text-xs font-semibold text-theme">{formatCurrency(categoryTotal)}</span>}
-                    <div className="flex-1 h-px bg-border ml-2" />
+                  <div className="flex items-center gap-2.5 mb-3 mt-1">
+                    <div className="w-[3px] h-3.5 rounded-full bg-theme/50 shrink-0" />
+                    <h3 className="text-xs font-bold text-foreground/60 uppercase tracking-widest">{category}</h3>
+                    <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{mods.length}</span>
+                    {categoryTotal > 0 && <span className="text-xs font-bold text-theme tabular-nums">{formatCurrency(categoryTotal)}</span>}
+                    <div className="flex-1 h-px bg-border/50 ml-1" />
                   </div>
                   <div className={modView === "compact" ? "space-y-1" : "space-y-2"}>
                     {mods.map((mod) => renderModCard(mod))}
@@ -1020,6 +1111,8 @@ export default function VehicleDetailPage() {
           <TuneLogsTab vehicleId={id} />
         </TabsContent>
       </Tabs>
+        );
+      })()}
 
       {/* Dialogs */}
       <AddVehicleDialog
