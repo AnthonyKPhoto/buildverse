@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
   Car, DollarSign, Wrench, FolderOpen, Bell,
   Plus, ArrowRight, ShoppingCart, Package, BarChart3, TrendingUp,
-  Zap, Settings2, Eye, EyeOff, Activity, ClipboardList,
+  Zap, Activity, ClipboardList,
 } from "lucide-react";
 import { formatCurrency, calcBuildCompletion } from "@/lib/utils";
 
@@ -25,20 +24,11 @@ interface Vehicle {
   _count: { modifications: number; maintenanceLogs: number };
 }
 
-type SectionKey = "spotlight" | "activity" | "garage" | "links";
-
-const SECTION_LABELS: Record<SectionKey, string> = {
-  spotlight: "Vehicle Spotlight",
-  activity: "Recent Activity",
-  garage: "All Vehicles",
-  links: "Quick Links",
-};
-
 const QUICK_LINKS = [
-  { href: "/budget",   icon: BarChart3,    label: "Budget" },
-  { href: "/products", icon: ShoppingCart, label: "Products" },
-  { href: "/vendors",  icon: Package,      label: "Vendors" },
-  { href: "/garage",   icon: Car,          label: "Garage" },
+  { href: "/budget",   icon: BarChart3,    label: "Budget",          desc: "Track spending by category" },
+  { href: "/products", icon: ShoppingCart, label: "Product Tracker", desc: "Watch prices on parts" },
+  { href: "/vendors",  icon: Package,      label: "Vendors",         desc: "Your trusted suppliers" },
+  { href: "/garage",   icon: Car,          label: "Garage",          desc: "All vehicles & builds" },
 ];
 
 const ACTIVITY_ICONS: Record<ActivityType, React.ComponentType<{ className?: string }>> = {
@@ -58,27 +48,12 @@ function timeGreeting() {
   return "Good evening";
 }
 
-const DEFAULT_VIS: Record<SectionKey, boolean> = { spotlight: true, activity: true, garage: true, links: true };
-
-function loadVis(): Record<SectionKey, boolean> {
-  if (typeof window === "undefined") return DEFAULT_VIS;
-  try {
-    const s = localStorage.getItem("bv-dash-sections");
-    if (s) return { ...DEFAULT_VIS, ...JSON.parse(s) };
-  } catch {}
-  return DEFAULT_VIS;
-}
-
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [customizing, setCustomizing] = useState(false);
-  const [visible, setVisible] = useState<Record<SectionKey, boolean>>(DEFAULT_VIS);
-
-  useEffect(() => { setVisible(loadVis()); }, []);
 
   useEffect(() => {
     const fetchAll = () =>
@@ -92,36 +67,19 @@ export default function DashboardPage() {
       }).catch(() => setLoading(false));
 
     fetchAll();
-
     const onFocus = () => fetchAll();
     window.addEventListener("focus", onFocus);
     const interval = setInterval(fetchAll, 30_000);
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      clearInterval(interval);
-    };
+    return () => { window.removeEventListener("focus", onFocus); clearInterval(interval); };
   }, []);
 
-  const toggleSection = (key: SectionKey) => {
-    setVisible(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      try { localStorage.setItem("bv-dash-sections", JSON.stringify(next)); } catch {}
-      return next;
-    });
-  };
+  const totalMods      = vehicles.reduce((s, v) => s + v._count.modifications, 0);
+  const totalInstalled = vehicles.reduce((s, v) => s + v.modifications.filter(m => m.status === "INSTALLED").length, 0);
+  const totalInvested  = vehicles.reduce(
+    (s, v) => s + v.modifications.filter(m => m.status === "INSTALLED").reduce((ms, m) => ms + (m.price ?? 0), 0), 0
+  );
 
-  const stats = {
-    vehicleCount: vehicles.length,
-    modCount: vehicles.reduce((s, v) => s + v._count.modifications, 0),
-    installedCount: vehicles.reduce((s, v) => s + v.modifications.filter(m => m.status === "INSTALLED").length, 0),
-    totalInstalled: vehicles.reduce(
-      (s, v) => s + v.modifications.filter(m => m.status === "INSTALLED").reduce((ms, m) => ms + (m.price ?? 0), 0), 0
-    ),
-  };
-
-  const spotlights = vehicles.slice(0, 2);
-  const restVehicles = vehicles.slice(2);
-  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -133,85 +91,54 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="animate-fade-in">
-      {/* ── Hero banner ──────────────────────────────────────────────────────── */}
-      <div className="-mx-6 -mt-8 mb-8 px-6 pt-8 pb-6 border-b border-border/60 relative overflow-hidden">
+    <div className="animate-fade-in space-y-8">
+      {/* ── Header ───────────────────────────────────────────────────────────── */}
+      <div className="-mx-3 -mt-4 md:-mx-6 md:-mt-8 px-3 md:px-6 pt-6 md:pt-8 pb-6 relative overflow-hidden border-b border-border/60">
         <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
-        <div className="absolute top-0 right-0 w-80 h-40 bg-theme/8 rounded-full blur-3xl -translate-y-10 translate-x-10 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-96 h-48 bg-theme/6 rounded-full blur-3xl -translate-y-12 translate-x-12 pointer-events-none" />
+
         <div className="relative">
           <div className="flex items-start justify-between mb-6">
             <div>
-              <p className="text-xs font-medium text-muted-foreground/60 tracking-wider uppercase mb-1">{today}</p>
+              <p className="text-xs font-medium text-muted-foreground/50 tracking-widest uppercase mb-1">{today}</p>
               <h1 className="text-3xl font-bold tracking-tight">{timeGreeting()}</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                {vehicles.length > 0
-                  ? `${stats.vehicleCount} build${stats.vehicleCount !== 1 ? "s" : ""} · ${stats.modCount} mod${stats.modCount !== 1 ? "s" : ""} tracked`
-                  : "Start tracking your first build"}
-              </p>
+              {vehicles.length > 0 && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  {vehicles.length} build{vehicles.length !== 1 ? "s" : ""} · {totalMods} mod{totalMods !== 1 ? "s" : ""} tracked
+                </p>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost" size="sm"
-                className="gap-1.5 text-muted-foreground hover:text-foreground"
-                onClick={() => setCustomizing(c => !c)}
-              >
-                <Settings2 className="w-4 h-4" />
-                {customizing ? "Done" : "Customize"}
+            <Link href="/garage">
+              <Button size="sm" className="gap-2 bg-theme hover:brightness-90">
+                <Plus className="w-4 h-4" /> Add Vehicle
               </Button>
-              <Link href="/garage">
-                <Button size="sm" className="gap-2 bg-theme hover:brightness-90">
-                  <Plus className="w-4 h-4" /> Add Vehicle
-                </Button>
-              </Link>
-            </div>
+            </Link>
           </div>
 
-          {/* Stats row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { label: "Vehicles",   value: stats.vehicleCount.toString(),        icon: Car,        color: "text-theme",    bg: "bg-theme/10" },
-              { label: "Total Mods", value: stats.modCount.toString(),            icon: Wrench,     color: "text-blue-400", bg: "bg-blue-500/10" },
-              { label: "Installed",  value: stats.installedCount.toString(),      icon: TrendingUp, color: "text-green-400",bg: "bg-green-500/10" },
-              { label: "Invested",   value: formatCurrency(stats.totalInstalled), icon: DollarSign, color: "text-amber-400",bg: "bg-amber-500/10" },
-            ].map(({ label, value, icon: Icon, color, bg }) => (
-              <div key={label} className="flex items-center gap-3 bg-card/80 backdrop-blur-sm border border-border/60 rounded-xl px-4 py-3">
-                <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
-                  <Icon className={`w-4 h-4 ${color}`} />
+          {/* Stats strip */}
+          {vehicles.length > 0 && (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { label: "Vehicles",   value: vehicles.length.toString(),      icon: Car,        color: "text-theme",    stripe: "bg-theme/80" },
+                { label: "Total Mods", value: totalMods.toString(),            icon: Wrench,     color: "text-blue-400", stripe: "bg-blue-400/70" },
+                { label: "Installed",  value: totalInstalled.toString(),       icon: TrendingUp, color: "text-green-400",stripe: "bg-green-400/80" },
+                { label: "Invested",   value: formatCurrency(totalInvested),   icon: DollarSign, color: "text-amber-400",stripe: "bg-amber-400/70" },
+              ].map(({ label, value, icon: Icon, color, stripe }) => (
+                <div key={label} className="relative flex items-center gap-3 bg-card border border-border/60 rounded-xl px-4 py-3 overflow-hidden">
+                  <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${stripe}`} />
+                  <Icon className={`w-5 h-5 shrink-0 ${color}`} />
+                  <div>
+                    <p className="text-xl font-bold leading-none tabular-nums">{value}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xl font-bold leading-none">{value}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── Section visibility toggles ───────────────────────────────────────── */}
-      {customizing && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
-          {(["spotlight", "activity", "garage", "links"] as SectionKey[]).map(key => {
-            const on = visible[key];
-            return (
-              <button
-                key={key}
-                onClick={() => toggleSection(key)}
-                className={`flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-all ${
-                  on
-                    ? "bg-theme/10 border-theme/30 text-theme"
-                    : "bg-secondary border-border text-muted-foreground"
-                }`}
-              >
-                <span>{SECTION_LABELS[key]}</span>
-                {on ? <Eye className="w-3.5 h-3.5 shrink-0" /> : <EyeOff className="w-3.5 h-3.5 shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Empty garage ─────────────────────────────────────────────────────── */}
+      {/* ── Empty state ───────────────────────────────────────────────────────── */}
       {vehicles.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <div className="w-20 h-20 rounded-2xl bg-theme/10 ring-1 ring-theme/20 flex items-center justify-center mb-5">
@@ -230,136 +157,123 @@ export default function DashboardPage() {
       )}
 
       {vehicles.length > 0 && (
-        <div className="space-y-8">
-          {/* ── Spotlight (up to 2 vehicles) ──────────────────────────────────── */}
-          {visible.spotlight && spotlights.length > 0 && (
-            <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                Spotlight Build{spotlights.length > 1 ? "s" : ""}
-              </h2>
-              <div className={spotlights.length === 2 ? "grid grid-cols-1 lg:grid-cols-2 gap-4" : ""}>
-                {spotlights.map(v => <SpotlightCard key={v.id} vehicle={v} />)}
+        <>
+          {/* ── Vehicle grid ─────────────────────────────────────────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-[3px] h-3.5 rounded-full bg-theme/50" />
+                <h2 className="text-xs font-bold text-foreground/60 uppercase tracking-widest">My Garage</h2>
+                <span className="text-xs font-semibold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
+                  {vehicles.length}
+                </span>
               </div>
+              <Link href="/garage">
+                <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground h-7 px-2">
+                  Manage <ArrowRight className="w-3 h-3" />
+                </Button>
+              </Link>
             </div>
-          )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {vehicles.map(v => <VehicleCard key={v.id} vehicle={v} />)}
+            </div>
+          </div>
 
           {/* ── Activity + Quick Links ────────────────────────────────────────── */}
-          {(visible.activity || visible.links) && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {visible.activity && (
-                <div className={visible.links ? "lg:col-span-2" : "lg:col-span-3"}>
-                  <ActivityTimeline items={activity} />
-                </div>
-              )}
-              {visible.links && (
-                <div className={!visible.activity ? "lg:col-span-3" : ""}>
-                  <QuickLinks />
-                </div>
-              )}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <ActivityTimeline items={activity} />
             </div>
-          )}
-
-          {/* ── All Vehicles (vehicles beyond the first 2) ────────────────────── */}
-          {visible.garage && restVehicles.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">All Vehicles</h2>
-                <Link href="/garage">
-                  <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground h-7 px-2">
-                    Manage <ArrowRight className="w-3 h-3" />
-                  </Button>
-                </Link>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                {restVehicles.map(v => <GarageCard key={v.id} vehicle={v} />)}
-              </div>
+              <QuickLinks />
             </div>
-          )}
-        </div>
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
+// ── Vehicle card (used for every vehicle, uniform treatment) ───────────────────
 
-function SpotlightCard({ vehicle }: { vehicle: Vehicle }) {
+function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
   const [imgErr, setImgErr] = useState(false);
   const completion = calcBuildCompletion(vehicle.modifications);
   const installedValue = vehicle.modifications
     .filter(m => m.status === "INSTALLED")
     .reduce((s, m) => s + (m.price ?? 0), 0);
 
+  const hasPhoto = vehicle.photoUrl && !imgErr;
+
   return (
     <Link href={`/garage/${vehicle.id}`} className="block group">
-      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card hover:border-theme/30 transition-colors duration-200 min-h-[160px]">
-        {/* Photo strip */}
-        {vehicle.photoUrl && !imgErr ? (
-          <div className="absolute right-0 top-0 bottom-0 w-5/12 overflow-hidden">
-            {vehicle.photoUrl.startsWith("data:") ? (
+      <div className="rounded-2xl border border-border/60 bg-card overflow-hidden hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/25 hover:border-theme/30 transition-all duration-200">
+        {/* Photo / hero */}
+        <div className="relative h-44 overflow-hidden bg-secondary">
+          {hasPhoto ? (
+            vehicle.photoUrl!.startsWith("data:") ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={vehicle.photoUrl}
+                src={vehicle.photoUrl!}
                 alt=""
-                className="w-full h-full object-cover opacity-35 group-hover:opacity-50 transition-opacity duration-300"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 onError={() => setImgErr(true)}
               />
             ) : (
               <Image
-                src={vehicle.photoUrl}
+                src={vehicle.photoUrl!}
                 alt=""
                 fill
-                className="object-cover opacity-35 group-hover:opacity-50 transition-opacity duration-300"
+                className="object-cover group-hover:scale-105 transition-transform duration-500"
                 onError={() => setImgErr(true)}
               />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-r from-card via-card/70 to-transparent" />
-          </div>
-        ) : (
-          <div className="absolute right-0 top-0 bottom-0 w-5/12 bg-gradient-to-r from-card to-theme/5" />
-        )}
-
-        {/* Content */}
-        <div className="relative p-6 max-w-[62%]">
-          <div className="flex items-start gap-3 mb-4">
-            <div className="w-11 h-11 rounded-xl bg-theme/10 ring-1 ring-theme/20 flex items-center justify-center shrink-0">
-              <Car className="w-5 h-5 text-theme" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="font-bold text-lg leading-tight truncate">
-                {vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-              </h3>
-              {vehicle.name && (
-                <p className="text-sm text-muted-foreground">{vehicle.year} {vehicle.make} {vehicle.model}</p>
+            )
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-secondary to-theme/8 flex flex-col items-center justify-center gap-2">
+              <Car className="w-12 h-12 text-muted-foreground/15" />
+              {vehicle.trim && (
+                <span className="text-xs text-muted-foreground/30 font-medium">{vehicle.trim}</span>
               )}
-              {vehicle.trim && <Badge variant="outline" className="mt-1 text-xs">{vehicle.trim}</Badge>}
+            </div>
+          )}
+          {/* Bottom fade */}
+          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-card via-card/40 to-transparent" />
+          {/* Completion badge */}
+          <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs font-bold bg-black/50 backdrop-blur-sm text-white border border-white/10">
+            {completion}%
+          </div>
+          {/* Name overlaid at bottom of photo */}
+          <div className="absolute bottom-0 left-0 right-0 px-4 pb-3">
+            <h3 className="font-bold text-base leading-tight truncate drop-shadow-sm">
+              {vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+            </h3>
+            <p className="text-xs text-muted-foreground truncate">
+              {vehicle.name
+                ? `${vehicle.year} ${vehicle.make} ${vehicle.model}`
+                : vehicle.trim || ""}
+            </p>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="px-4 pt-3 pb-4">
+          <Progress value={completion} className="h-1.5 mb-4" />
+          <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+            <div>
+              <p className="text-[11px] text-muted-foreground leading-none mb-1">Mods</p>
+              <p className="text-sm font-bold tabular-nums">{vehicle._count.modifications}</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground leading-none mb-1">Invested</p>
+              <p className="text-sm font-bold tabular-nums">{formatCurrency(installedValue)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground leading-none mb-1">Services</p>
+              <p className="text-sm font-bold tabular-nums">{vehicle._count.maintenanceLogs}</p>
             </div>
           </div>
-
-          <div className="space-y-1 mb-4">
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Build progress</span>
-              <span className="font-semibold">{completion}%</span>
-            </div>
-            <Progress value={completion} className="h-1.5" />
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 pt-4 border-t border-border/60 mb-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Mods</p>
-              <p className="text-base font-bold">{vehicle._count.modifications}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Invested</p>
-              <p className="text-base font-bold">{formatCurrency(installedValue)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Services</p>
-              <p className="text-base font-bold">{vehicle._count.maintenanceLogs}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 text-theme text-sm font-medium group-hover:gap-3 transition-all duration-200">
-            View full build <ArrowRight className="w-4 h-4" />
+          <div className="flex items-center gap-1.5 text-theme text-sm font-semibold group-hover:gap-3 transition-all duration-200">
+            View Build <ArrowRight className="w-4 h-4" />
           </div>
         </div>
       </div>
@@ -367,48 +281,41 @@ function SpotlightCard({ vehicle }: { vehicle: Vehicle }) {
   );
 }
 
+// ── Activity timeline ──────────────────────────────────────────────────────────
+
 function ActivityTimeline({ items }: { items: ActivityItem[] }) {
   const shown = items.slice(0, 8);
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3">
-        <Activity className="w-3.5 h-3.5 text-muted-foreground" />
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent Activity</h2>
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className="w-[3px] h-3.5 rounded-full bg-theme/50" />
+        <h2 className="text-xs font-bold text-foreground/60 uppercase tracking-widest">Recent Activity</h2>
       </div>
 
       {shown.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center rounded-xl border border-dashed border-border">
+        <div className="flex flex-col items-center justify-center py-10 text-center rounded-xl border border-dashed border-border">
           <Activity className="w-7 h-7 text-muted-foreground/30 mb-2" />
-          <p className="text-sm text-muted-foreground">No activity yet — add a mod or log a service to get started.</p>
+          <p className="text-sm text-muted-foreground">No activity yet — add a mod or log a service.</p>
         </div>
       ) : (
-        <div>
-          {shown.map((item, i) => {
+        <div className="rounded-xl border border-border/60 bg-card overflow-hidden divide-y divide-border/40">
+          {shown.map((item) => {
             const Icon = ACTIVITY_ICONS[item.type];
-            const isLast = i === shown.length - 1;
             const href = item.vehicleId ? `/garage/${item.vehicleId}` : "/products";
             return (
               <Link key={item.id} href={href}>
-                <div className="flex gap-3 group">
-                  <div className="flex flex-col items-center shrink-0 w-5">
-                    <div className={`w-2.5 h-2.5 rounded-full mt-2 shrink-0 ring-2 ring-background ${ACTIVITY_DOT[item.type]}`} />
-                    {!isLast && <div className="w-px flex-1 bg-border/50 mt-1" />}
+                <div className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/40 transition-colors group">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${ACTIVITY_DOT[item.type]}/15`}>
+                    <Icon className={`w-3 h-3 ${ACTIVITY_ICON_COLOR[item.type]}`} />
                   </div>
-                  <div className={`flex-1 ${isLast ? "pb-0" : "pb-3"}`}>
-                    <div className="rounded-xl px-3 py-2 group-hover:bg-secondary/60 transition-colors">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Icon className={`w-3.5 h-3.5 shrink-0 ${ACTIVITY_ICON_COLOR[item.type]}`} />
-                          <p className="text-sm font-medium truncate">{item.text}</p>
-                        </div>
-                        <span className="text-xs text-muted-foreground/50 shrink-0">
-                          {new Date(item.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 pl-5">{item.sub}</p>
-                    </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{item.text}</p>
+                    <p className="text-xs text-muted-foreground truncate">{item.sub}</p>
                   </div>
+                  <span className="text-xs text-muted-foreground/50 shrink-0">
+                    {new Date(item.createdAt).toLocaleDateString()}
+                  </span>
                 </div>
               </Link>
             );
@@ -419,65 +326,30 @@ function ActivityTimeline({ items }: { items: ActivityItem[] }) {
   );
 }
 
+// ── Quick links ────────────────────────────────────────────────────────────────
+
 function QuickLinks() {
   return (
     <div>
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Quick Access</h2>
-      <div className="rounded-xl border border-border/60 bg-card overflow-hidden divide-y divide-border/40">
-        {QUICK_LINKS.map(({ href, icon: Icon, label }) => (
+      <div className="flex items-center gap-2.5 mb-4">
+        <div className="w-[3px] h-3.5 rounded-full bg-theme/50" />
+        <h2 className="text-xs font-bold text-foreground/60 uppercase tracking-widest">Quick Access</h2>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {QUICK_LINKS.map(({ href, icon: Icon, label, desc }) => (
           <Link key={href} href={href}>
-            <div className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 transition-colors group">
-              <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                <Icon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+            <div className="flex flex-col gap-2 p-4 rounded-xl border border-border/60 bg-card hover:border-theme/30 hover:-translate-y-px hover:shadow-lg hover:shadow-black/20 transition-all duration-200 group h-full">
+              <div className="w-8 h-8 rounded-lg bg-theme/10 flex items-center justify-center">
+                <Icon className="w-4 h-4 text-theme" />
               </div>
-              <span className="text-sm font-medium flex-1">{label}</span>
-              <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/30 group-hover:text-muted-foreground transition-colors" />
+              <div>
+                <p className="text-sm font-semibold">{label}</p>
+                <p className="text-xs text-muted-foreground leading-snug mt-0.5">{desc}</p>
+              </div>
             </div>
           </Link>
         ))}
       </div>
     </div>
-  );
-}
-
-function GarageCard({ vehicle }: { vehicle: Vehicle }) {
-  const [imgErr, setImgErr] = useState(false);
-  const completion = calcBuildCompletion(vehicle.modifications);
-  return (
-    <Link href={`/garage/${vehicle.id}`}>
-      <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3 hover:border-theme/30 transition-colors group cursor-pointer">
-        {vehicle.photoUrl && !imgErr ? (
-          vehicle.photoUrl.startsWith("data:") ? (
-            <img
-              src={vehicle.photoUrl}
-              alt=""
-              className="w-12 h-12 rounded-lg object-cover shrink-0"
-              onError={() => setImgErr(true)}
-            />
-          ) : (
-            <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 relative">
-              <Image src={vehicle.photoUrl} alt="" fill className="object-cover" onError={() => setImgErr(true)} />
-            </div>
-          )
-        ) : (
-          <div className="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-            <Car className="w-5 h-5 text-muted-foreground" />
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm truncate">
-            {vehicle.name || `${vehicle.year} ${vehicle.make} ${vehicle.model}`}
-          </p>
-          {vehicle.name && (
-            <p className="text-xs text-muted-foreground truncate">{vehicle.year} {vehicle.make} {vehicle.model}</p>
-          )}
-          <div className="flex items-center gap-2 mt-1.5">
-            <Progress value={completion} className="h-1 flex-1" />
-            <span className="text-xs text-muted-foreground shrink-0">{completion}%</span>
-          </div>
-        </div>
-        <ArrowRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-muted-foreground shrink-0 transition-colors" />
-      </div>
-    </Link>
   );
 }
