@@ -119,17 +119,19 @@ export default function DashboardPage() {
           {vehicles.length > 0 && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[
-                { label: "Vehicles",   value: vehicles.length.toString(),      icon: Car,        color: "text-theme",    stripe: "bg-theme/80" },
-                { label: "Total Mods", value: totalMods.toString(),            icon: Wrench,     color: "text-blue-400", stripe: "bg-blue-400/70" },
-                { label: "Installed",  value: totalInstalled.toString(),       icon: TrendingUp, color: "text-green-400",stripe: "bg-green-400/80" },
-                { label: "Invested",   value: formatCurrency(totalInvested),   icon: DollarSign, color: "text-amber-400",stripe: "bg-amber-400/70" },
-              ].map(({ label, value, icon: Icon, color, stripe }) => (
-                <div key={label} className="relative flex items-center gap-3 bg-card border border-border/60 rounded-xl px-4 py-3 overflow-hidden">
+                { label: "Vehicles",   value: vehicles.length.toString(),      icon: Car,        color: "text-theme",    bg: "bg-theme/10",     stripe: "bg-theme/80" },
+                { label: "Total Mods", value: totalMods.toString(),            icon: Wrench,     color: "text-blue-400", bg: "bg-blue-500/10",  stripe: "bg-blue-400/70" },
+                { label: "Installed",  value: totalInstalled.toString(),       icon: TrendingUp, color: "text-green-400",bg: "bg-green-500/10", stripe: "bg-green-400/80" },
+                { label: "Invested",   value: formatCurrency(totalInvested),   icon: DollarSign, color: "text-amber-400",bg: "bg-amber-500/10", stripe: "bg-amber-400/70" },
+              ].map(({ label, value, icon: Icon, color, bg, stripe }) => (
+                <div key={label} className="relative flex items-center gap-3 bg-card border border-border/60 rounded-xl px-4 py-3.5 overflow-hidden hover:-translate-y-px hover:shadow-lg hover:shadow-black/25 transition-all duration-200">
                   <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${stripe}`} />
-                  <Icon className={`w-5 h-5 shrink-0 ${color}`} />
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${bg}`}>
+                    <Icon className={`w-4 h-4 ${color}`} />
+                  </div>
                   <div>
-                    <p className="text-xl font-bold leading-none tabular-nums">{value}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+                    <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">{label}</p>
+                    <p className="text-xl font-bold leading-tight tabular-nums mt-0.5">{value}</p>
                   </div>
                 </div>
               ))}

@@ -811,11 +811,12 @@ export default function SettingsPage() {
                 key={item.id}
                 onClick={() => setSection(item.id)}
                 className={cn(
-                  "shrink-0 md:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-left whitespace-nowrap",
+                  "relative shrink-0 md:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-left whitespace-nowrap",
                   section === item.id ? "bg-theme/10 text-theme" : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                 )}
               >
-                <item.icon className="w-4 h-4 shrink-0" />
+                {section === item.id && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-[3px] h-4 bg-theme rounded-full hidden md:block" />}
+                <item.icon className={cn("w-4 h-4 shrink-0", section === item.id ? "text-theme" : "")} />
                 {item.label}
               </button>
             ))}
@@ -1353,9 +1354,9 @@ export default function SettingsPage() {
                       { label: "Modifications", value: stats.modCount },
                       { label: "Products", value: stats.productCount },
                     ].map(({ label, value }) => (
-                      <div key={label} className="surface-inset p-4 text-center">
-                        <p className="text-2xl font-bold">{value}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+                      <div key={label} className="bg-secondary/40 border border-border/60 rounded-xl p-4 text-center">
+                        <p className="text-2xl font-bold tabular-nums">{value}</p>
+                        <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mt-1">{label}</p>
                       </div>
                     ))}
                   </div>

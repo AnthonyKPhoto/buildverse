@@ -146,7 +146,7 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 h-16 border-b border-border shrink-0">
-        <Image src="/logo.svg" alt="BuildVerse" width={34} height={34} className="rounded-xl shrink-0" />
+        <Image src="/logo.svg" alt="BuildVerse" width={34} height={34} className="rounded-xl shrink-0 ring-1 ring-white/10 shadow-md shadow-black/20" />
         <div className="leading-none">
           <p className="font-semibold text-sm tracking-tight">
             Build<span className="text-theme">Verse</span>
@@ -164,11 +164,11 @@ export function Sidebar() {
         {/* Global search */}
         <button
           onClick={() => setSearchOpen(true)}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all duration-150 mb-1"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm text-muted-foreground bg-secondary/50 border border-border/50 hover:bg-secondary hover:border-border hover:text-foreground transition-all duration-150 mb-2"
         >
-          <Search className="w-[18px] h-[18px] shrink-0 text-muted-foreground" strokeWidth={1.8} />
-          Search
-          <kbd className="ml-auto text-2xs text-muted-foreground/40 border border-border rounded px-1 py-0.5 font-sans">
+          <Search className="w-[14px] h-[14px] shrink-0 text-muted-foreground/70" strokeWidth={1.8} />
+          <span className="flex-1 text-left">Search</span>
+          <kbd className="text-2xs text-muted-foreground/40 border border-border/60 rounded px-1 py-0.5 font-sans">
             ⌘K
           </kbd>
         </button>
@@ -181,34 +181,34 @@ export function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+                "group relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150",
                 active
                   ? "bg-theme/10 text-theme"
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary"
               )}
             >
-              {active && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-[2px] h-5 bg-theme rounded-full" />}
-              <Icon
-                className={cn(
-                  "w-[18px] h-[18px] shrink-0 transition-colors",
-                  active ? "text-theme" : "text-muted-foreground group-hover:text-foreground"
-                )}
-                strokeWidth={active ? 2.2 : 1.8}
-              />
+              {active && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-theme rounded-full" />}
+              {active ? (
+                <div className="w-7 h-7 rounded-lg bg-theme/15 flex items-center justify-center shrink-0">
+                  <Icon className="w-[15px] h-[15px] text-theme" strokeWidth={2.2} />
+                </div>
+              ) : (
+                <Icon
+                  className="w-[18px] h-[18px] shrink-0 text-muted-foreground group-hover:text-foreground transition-colors"
+                  strokeWidth={1.8}
+                />
+              )}
               {label}
-              <span className="ml-auto flex items-center gap-1.5">
-                {count != null && count > 0 && (
-                  <span className={cn(
-                    "text-2xs font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
-                    active
-                      ? "bg-theme/20 text-theme"
-                      : "bg-secondary text-muted-foreground group-hover:bg-secondary/80"
-                  )}>
-                    {count}
-                  </span>
-                )}
-                {active && <span className="w-1.5 h-1.5 rounded-full bg-theme" />}
-              </span>
+              {count != null && count > 0 && (
+                <span className={cn(
+                  "ml-auto text-2xs font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+                  active
+                    ? "bg-theme/20 text-theme"
+                    : "bg-secondary text-muted-foreground group-hover:bg-secondary/80"
+                )}>
+                  {count}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -272,24 +272,24 @@ export function Sidebar() {
         <Link
           href="/settings"
           className={cn(
-            "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
+            "group relative flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150",
             pathname === "/settings"
               ? "bg-theme/10 text-theme"
               : "text-muted-foreground hover:text-foreground hover:bg-secondary"
           )}
         >
-          {pathname === "/settings" && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-[2px] h-5 bg-theme rounded-full" />}
-          <Settings
-            className={cn(
-              "w-[18px] h-[18px] shrink-0",
-              pathname === "/settings" ? "text-theme" : "text-muted-foreground group-hover:text-foreground"
-            )}
-            strokeWidth={pathname === "/settings" ? 2.2 : 1.8}
-          />
-          Settings
-          {pathname === "/settings" && (
-            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-theme" />
+          {pathname === "/settings" && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-theme rounded-full" />}
+          {pathname === "/settings" ? (
+            <div className="w-7 h-7 rounded-lg bg-theme/15 flex items-center justify-center shrink-0">
+              <Settings className="w-[15px] h-[15px] text-theme" strokeWidth={2.2} />
+            </div>
+          ) : (
+            <Settings
+              className="w-[18px] h-[18px] shrink-0 text-muted-foreground group-hover:text-foreground"
+              strokeWidth={1.8}
+            />
           )}
+          Settings
         </Link>
         {/* Renders nothing in local/Electron mode — server mode only */}
         <AccountMenu className="px-3 py-2 mt-1 border-t border-border/60 pt-2.5" />
