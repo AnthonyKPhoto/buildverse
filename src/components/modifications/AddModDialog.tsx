@@ -1,17 +1,20 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { MOD_CATEGORIES, INSTALL_DIFFICULTIES } from "@/lib/utils";
+import { INSTALL_DIFFICULTIES } from "@/lib/utils";
 import { useCategories } from "@/hooks/use-categories";
 import { ImageUpload } from "@/components/ui/ImageUpload";
 import { AutocompleteInput } from "@/components/ui/AutocompleteInput";
-import { Link2, Loader2, CheckCircle2, ArrowLeft, Sparkles, ChevronRight } from "lucide-react";
+import {
+  Link2, Loader2, CheckCircle2, ArrowLeft, Sparkles, ChevronRight,
+  Wrench, Tag, DollarSign, Calendar, Camera, AlignLeft,
+} from "lucide-react";
 
 interface Suggestions { brands: string[]; vendors: string[]; names: string[]; }
 interface VehicleMod { id: string; name: string; status: string; category: string; }
@@ -34,16 +37,50 @@ interface AddModDialogProps {
 
 const STATUSES = ["PLANNED", "RESEARCHING", "ORDERED", "PURCHASED", "INSTALLED", "REMOVED"];
 const STATUS_LABELS: Record<string, string> = {
-  PLANNED: "Planned", RESEARCHING: "Researching / Idea", ORDERED: "Ordered",
+  PLANNED: "Planned", RESEARCHING: "Researching", ORDERED: "Ordered",
   PURCHASED: "Purchased", INSTALLED: "Installed", REMOVED: "Removed",
 };
-const PRIORITIES = [
-  { value: "NONE",     label: "—  None" },
-  { value: "LOW",      label: "Low" },
-  { value: "MEDIUM",   label: "Medium" },
-  { value: "HIGH",     label: "High" },
-  { value: "CRITICAL", label: "Critical" },
-];
+
+// Complete literal Tailwind class strings — required for JIT scanner
+const STATUS_PILL_IDLE: Record<string, string> = {
+  PLANNED:     "border-slate-500/30 text-slate-400/60 hover:border-slate-500/50 hover:bg-slate-500/10",
+  RESEARCHING: "border-blue-500/30 text-blue-400/60 hover:border-blue-500/50 hover:bg-blue-500/10",
+  ORDERED:     "border-yellow-500/30 text-yellow-400/60 hover:border-yellow-500/50 hover:bg-yellow-500/10",
+  PURCHASED:   "border-purple-500/30 text-purple-400/60 hover:border-purple-500/50 hover:bg-purple-500/10",
+  INSTALLED:   "border-green-500/30 text-green-400/60 hover:border-green-500/50 hover:bg-green-500/10",
+  REMOVED:     "border-red-500/30 text-red-400/60 hover:border-red-500/50 hover:bg-red-500/10",
+};
+const STATUS_PILL_ACTIVE: Record<string, string> = {
+  PLANNED:     "border-slate-400/70 bg-slate-400/15 text-slate-200",
+  RESEARCHING: "border-blue-400/70 bg-blue-400/15 text-blue-200",
+  ORDERED:     "border-yellow-400/70 bg-yellow-400/15 text-yellow-200",
+  PURCHASED:   "border-purple-400/70 bg-purple-400/15 text-purple-200",
+  INSTALLED:   "border-green-400/70 bg-green-400/15 text-green-200",
+  REMOVED:     "border-red-400/70 bg-red-400/15 text-red-200",
+};
+const STATUS_DOT: Record<string, string> = {
+  PLANNED: "bg-slate-400", RESEARCHING: "bg-blue-400", ORDERED: "bg-yellow-400",
+  PURCHASED: "bg-purple-400", INSTALLED: "bg-green-400", REMOVED: "bg-red-400",
+};
+
+const PRIORITIES = ["NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const PRIORITY_LABELS: Record<string, string> = {
+  NONE: "None", LOW: "Low", MEDIUM: "Medium", HIGH: "High", CRITICAL: "Critical",
+};
+const PRIORITY_PILL_IDLE: Record<string, string> = {
+  NONE:     "border-border/40 text-muted-foreground/60 hover:bg-secondary/60",
+  LOW:      "border-blue-500/30 text-blue-400/60 hover:border-blue-500/50 hover:bg-blue-500/10",
+  MEDIUM:   "border-yellow-500/30 text-yellow-400/60 hover:border-yellow-500/50 hover:bg-yellow-500/10",
+  HIGH:     "border-orange-500/30 text-orange-400/60 hover:border-orange-500/50 hover:bg-orange-500/10",
+  CRITICAL: "border-red-500/30 text-red-400/60 hover:border-red-500/50 hover:bg-red-500/10",
+};
+const PRIORITY_PILL_ACTIVE: Record<string, string> = {
+  NONE:     "border-border/70 bg-secondary/80 text-foreground",
+  LOW:      "border-blue-400/70 bg-blue-400/15 text-blue-200",
+  MEDIUM:   "border-yellow-400/70 bg-yellow-400/15 text-yellow-200",
+  HIGH:     "border-orange-400/70 bg-orange-400/15 text-orange-200",
+  CRITICAL: "border-red-400/70 bg-red-400/15 text-red-200",
+};
 
 const BLANK_FORM = {
   name: "", category: "", brand: "", vendor: "", price: "", actualPrice: "",
@@ -80,6 +117,18 @@ function extractDomain(url: string) {
   try { return new URL(url).hostname.replace("www.", ""); } catch { return url; }
 }
 
+// ── Section header ────────────────────────────────────────────────────────────
+
+function SectionHeader({ icon: Icon, title }: { icon: React.ComponentType<{ className?: string }>; title: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Icon className="w-3.5 h-3.5 text-theme/50 flex-shrink-0" />
+      <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 whitespace-nowrap">{title}</span>
+      <div className="flex-1 h-px bg-border/40" />
+    </div>
+  );
+}
+
 // ── Scraping animation ────────────────────────────────────────────────────────
 
 const SCRAPE_PHASES = ["Connecting to site…", "Reading product page…", "Extracting details…"];
@@ -94,7 +143,7 @@ function ScrapingView({ url }: { url: string }) {
   }, []);
 
   return (
-    <div className="flex flex-col items-center py-10 gap-5">
+    <div className="flex flex-col items-center py-12 gap-5">
       <div className="w-14 h-14 rounded-2xl bg-theme/10 flex items-center justify-center">
         <Loader2 className="w-7 h-7 text-theme animate-spin" />
       </div>
@@ -139,7 +188,6 @@ function DepPicker({
       m.name.toLowerCase().includes(search.toLowerCase()) ||
       m.category.toLowerCase().includes(search.toLowerCase())
     )
-    // Float selected items to the top of the list
     .sort((a, b) => {
       const asel = dependsOn.includes(a.id) ? 0 : 1;
       const bsel = dependsOn.includes(b.id) ? 0 : 1;
@@ -158,7 +206,6 @@ function DepPicker({
         )}
       </summary>
 
-      {/* Selected chips — visible even when the list is collapsed */}
       {selectedMods.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {selectedMods.map((m) => (
@@ -183,7 +230,6 @@ function DepPicker({
       )}
 
       <div className="mt-2 border border-input rounded-xl overflow-hidden">
-        {/* Search bar */}
         <div className="px-2 pt-2 pb-1">
           <div className="relative">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
@@ -251,7 +297,6 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
   const [vehicleMods, setVehicleMods] = useState<VehicleMod[]>([]);
   const [dependsOn, setDependsOn] = useState<string[]>([]);
 
-  // URL step
   const [step, setStep] = useState<"url" | "form">(editMod ? "form" : "url");
   const [urlInput, setUrlInput] = useState("");
   const [scraping, setScraping] = useState(false);
@@ -274,7 +319,6 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
       setAutoFilled([]);
       setDependsOn([]);
 
-      // Fetch all other mods for this vehicle for dependency selector
       fetch(`/api/vehicles/${vehicleId}/modifications`)
         .then((r) => r.json())
         .then((data: VehicleMod[]) => {
@@ -282,7 +326,6 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
         })
         .catch(() => {});
 
-      // Fetch existing dependencies when editing
       if (editMod) {
         fetch(`/api/modifications/${editMod.id}/dependencies`)
           .then((r) => r.json())
@@ -394,7 +437,6 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
       if (!res.ok) throw new Error(await res.text());
       const mod = await res.json();
 
-      // Sync dependencies
       await fetch(`/api/modifications/${mod.id}/dependencies`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -428,30 +470,43 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl flex flex-col max-h-[92vh] p-0 gap-0">
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-border flex-shrink-0">
-          <DialogTitle>{editMod ? "Edit Modification" : "Add Modification"}</DialogTitle>
+
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <DialogHeader className="relative flex-shrink-0 px-6 pt-5 pb-4 border-b border-border overflow-hidden">
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-theme" />
+          <DialogTitle className="text-base font-bold">
+            {editMod ? "Edit Modification" : "Add Modification"}
+          </DialogTitle>
+          {!editMod && (
+            <div className="flex items-center gap-2 mt-1.5">
+              <div className={`h-1 rounded-full transition-all duration-300 ${step === "url" ? "w-6 bg-theme" : "w-3 bg-theme/40"}`} />
+              <div className={`h-1 rounded-full transition-all duration-300 ${step === "form" ? "w-6 bg-theme" : "w-3 bg-border/50"}`} />
+              <span className="text-xs text-muted-foreground ml-0.5">
+                {step === "url" ? "Paste a link to auto-fill, or skip" : "Fill in the mod details"}
+              </span>
+            </div>
+          )}
         </DialogHeader>
 
-        {/* ── Scrollable body ───────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
+        {/* ── Scrollable body ─────────────────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto min-h-0">
 
-        {/* ── Step 0: URL entry ─────────────────────────────────────────── */}
-        {step === "url" && !editMod && (
-          <div className="py-2">
-            {scraping ? (
-              <ScrapingView url={urlInput} />
-            ) : (
-              <div className="space-y-5">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2.5 px-4 py-3.5 rounded-xl bg-theme/5 border border-theme/15">
-                    <Sparkles className="w-4 h-4 text-theme flex-shrink-0" />
-                    <p className="text-sm text-muted-foreground">
-                      Paste a product link and we&apos;ll auto-fill the name, brand, price, and photo.
+          {/* ── Step 0: URL entry ─────────────────────────────────────────── */}
+          {step === "url" && !editMod && (
+            <div className="px-6 py-6">
+              {scraping ? (
+                <ScrapingView url={urlInput} />
+              ) : (
+                <div className="space-y-5">
+                  <div className="flex items-start gap-3 px-4 py-3.5 rounded-xl bg-theme/5 border border-theme/15">
+                    <Sparkles className="w-4 h-4 text-theme flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Paste a product link and we&apos;ll auto-fill the name, brand, price, and photo for you.
                     </p>
                   </div>
 
-                  <div>
-                    <Label className="mb-1.5 block">Product URL</Label>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">Product URL</Label>
                     <div className="flex gap-2">
                       <div className="relative flex-1">
                         <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
@@ -468,260 +523,337 @@ export function AddModDialog({ open, onOpenChange, vehicleId, onSaved, editMod }
                         type="button"
                         onClick={handleScrape}
                         disabled={!urlInput.trim()}
-                        className="bg-theme hover:brightness-90 shrink-0"
+                        className="bg-theme hover:brightness-90 text-white shrink-0"
                       >
                         Auto-fill
                       </Button>
                     </div>
                   </div>
-                </div>
 
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full h-px bg-border" />
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full h-px bg-border" />
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="bg-background px-3 text-xs text-muted-foreground">or</span>
+                    </div>
                   </div>
-                  <div className="relative flex justify-center">
-                    <span className="bg-background px-3 text-xs text-muted-foreground">or</span>
-                  </div>
-                </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => setStep("form")}
-                >
-                  Skip — fill in manually
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Step 1: Form ──────────────────────────────────────────────── */}
-        {step === "form" && (
-          <form id="mod-form" onSubmit={handleSubmit} className="space-y-4">
-
-            {/* Auto-fill banner */}
-            {autoFilled.length > 0 && (
-              <div className="flex items-start gap-2.5 px-3.5 py-3 bg-green-500/8 border border-green-500/20 rounded-xl">
-                <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-green-400">Auto-filled from URL</p>
-                  <p className="text-xs text-green-400/70 mt-0.5">
-                    {autoFilled.join(", ")} — verify and edit before adding
-                  </p>
-                </div>
-                {!editMod && (
-                  <button
+                  <Button
                     type="button"
-                    onClick={() => { setStep("url"); setAutoFilled([]); }}
-                    className="flex items-center gap-1 text-2xs text-green-400/60 hover:text-green-400 transition-colors flex-shrink-0"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setStep("form")}
                   >
-                    <ArrowLeft className="w-3 h-3" />
-                    Change URL
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Name / Category */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Name *</Label>
-                <AutocompleteInput
-                  placeholder="BC Racing BR Coilovers…"
-                  value={form.name}
-                  onChange={(v) => set("name", v)}
-                  suggestions={suggestions.names}
-                />
-              </div>
-              <div>
-                <Label>Category *</Label>
-                <Select value={form.category} onValueChange={(v) => set("category", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                  <SelectContent>
-                    {modCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Brand / Vendor */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Brand</Label>
-                <AutocompleteInput
-                  placeholder="BC Racing, APR, 034…"
-                  value={form.brand}
-                  onChange={(v) => set("brand", v)}
-                  suggestions={suggestions.brands}
-                />
-              </div>
-              <div>
-                <Label>Vendor</Label>
-                <AutocompleteInput
-                  placeholder="ECS Tuning, FCP Euro…"
-                  value={form.vendor}
-                  onChange={(v) => set("vendor", v)}
-                  suggestions={suggestions.vendors}
-                />
-              </div>
-            </div>
-
-            {/* Status / Priority / Difficulty */}
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <Label>Status</Label>
-                <Select value={form.status} onValueChange={(v) => set("status", v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_LABELS[s] ?? s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Priority</Label>
-                <Select value={form.priority} onValueChange={(v) => set("priority", v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Install Difficulty</Label>
-                <Select value={form.difficulty} onValueChange={(v) => set("difficulty", v)}>
-                  <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="UNKNOWN">Unknown</SelectItem>
-                    {INSTALL_DIFFICULTIES.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Price / Actual Price */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Estimated Price ($)</Label>
-                <Input type="number" min="0" step="0.01" placeholder="1200.00" value={form.price} onChange={(e) => set("price", e.target.value)} />
-              </div>
-              <div>
-                <Label>Actual Price Paid ($)</Label>
-                <Input type="number" min="0" step="0.01" placeholder="1149.99" value={form.actualPrice} onChange={(e) => set("actualPrice", e.target.value)} />
-              </div>
-            </div>
-
-            {/* Link */}
-            <div>
-              <Label className="flex items-center gap-2">
-                Product Link
-                {fetchingImage && (
-                  <span className="text-xs text-muted-foreground font-normal flex items-center gap-1">
-                    <span className="w-3 h-3 border border-muted-foreground border-t-transparent rounded-full animate-spin inline-block" />
-                    fetching image…
-                  </span>
-                )}
-              </Label>
-              <Input
-                placeholder="https://ecstuning.com/…"
-                value={form.link}
-                onChange={(e) => set("link", e.target.value)}
-                onBlur={handleLinkBlur}
-              />
-              {!form.imageUrl && !fetchingImage && form.link && (
-                <p className="text-xs text-muted-foreground mt-1">Image will auto-fill when you leave this field</p>
+                    Skip — fill in manually
+                  </Button>
+                </div>
               )}
             </div>
+          )}
 
-            {/* Image upload */}
-            <ImageUpload
-              label="Mod Photo"
-              value={form.imageUrl}
-              onChange={(v) => set("imageUrl", v)}
-            />
+          {/* ── Step 1: Form ──────────────────────────────────────────────── */}
+          {step === "form" && (
+            <form id="mod-form" onSubmit={handleSubmit} className="px-6 py-5 space-y-6">
 
-            {/* Part# / Order# */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Part Number</Label>
-                <Input placeholder="ES#1234567" value={form.partNumber} onChange={(e) => set("partNumber", e.target.value)} />
+              {/* Auto-fill banner */}
+              {autoFilled.length > 0 && (
+                <div className="flex items-start gap-2.5 px-3.5 py-3 bg-green-500/8 border border-green-500/20 rounded-xl">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-green-400">Auto-filled from URL</p>
+                    <p className="text-xs text-green-400/70 mt-0.5">
+                      {autoFilled.join(", ")} — verify and edit before adding
+                    </p>
+                  </div>
+                  {!editMod && (
+                    <button
+                      type="button"
+                      onClick={() => { setStep("url"); setAutoFilled([]); }}
+                      className="flex items-center gap-1 text-xs text-green-400/60 hover:text-green-400 transition-colors flex-shrink-0"
+                    >
+                      <ArrowLeft className="w-3 h-3" />
+                      Change URL
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* ── MOD DETAILS ─────────────────────────────────────────────── */}
+              <div className="space-y-3">
+                <SectionHeader icon={Wrench} title="Mod Details" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Name *</Label>
+                    <AutocompleteInput
+                      placeholder="BC Racing BR Coilovers…"
+                      value={form.name}
+                      onChange={(v) => set("name", v)}
+                      suggestions={suggestions.names}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Category *</Label>
+                    <Select value={form.category} onValueChange={(v) => set("category", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                      <SelectContent>
+                        {modCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Brand</Label>
+                    <AutocompleteInput
+                      placeholder="BC Racing, APR, 034…"
+                      value={form.brand}
+                      onChange={(v) => set("brand", v)}
+                      suggestions={suggestions.brands}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Vendor</Label>
+                    <AutocompleteInput
+                      placeholder="ECS Tuning, FCP Euro…"
+                      value={form.vendor}
+                      onChange={(v) => set("vendor", v)}
+                      suggestions={suggestions.vendors}
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <Label>Order Number</Label>
-                <Input placeholder="ORD-20240101" value={form.orderNumber} onChange={(e) => set("orderNumber", e.target.value)} />
+
+              {/* ── STATUS & PRIORITY ────────────────────────────────────────── */}
+              <div className="space-y-3">
+                <SectionHeader icon={Tag} title="Status & Priority" />
+
+                {/* Status pills */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {STATUSES.map((s) => {
+                      const active = form.status === s;
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => set("status", s)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all duration-150 ${
+                            active ? STATUS_PILL_ACTIVE[s] : STATUS_PILL_IDLE[s]
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[s]}`} />
+                          {STATUS_LABELS[s]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Priority pills */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Priority</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRIORITIES.map((p) => {
+                      const active = form.priority === p;
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => set("priority", p)}
+                          className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-all duration-150 ${
+                            active ? PRIORITY_PILL_ACTIVE[p] : PRIORITY_PILL_IDLE[p]
+                          }`}
+                        >
+                          {PRIORITY_LABELS[p]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Difficulty */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Install Difficulty</Label>
+                  <Select value={form.difficulty} onValueChange={(v) => set("difficulty", v)}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Select…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="UNKNOWN">Unknown</SelectItem>
+                      {INSTALL_DIFFICULTIES.map((d) => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
 
-            {/* Install info */}
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <Label>Install Date</Label>
-                <Input type="date" value={form.installDate} onChange={(e) => set("installDate", e.target.value)} />
+              {/* ── PRICING ──────────────────────────────────────────────────── */}
+              <div className="space-y-3">
+                <SectionHeader icon={DollarSign} title="Pricing" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Estimated Price</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <Input type="number" min="0" step="0.01" placeholder="0.00" className="pl-6" value={form.price} onChange={(e) => set("price", e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Actual Price Paid</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <Input type="number" min="0" step="0.01" placeholder="0.00" className="pl-6" value={form.actualPrice} onChange={(e) => set("actualPrice", e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 items-end">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Labor Cost</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <Input type="number" min="0" step="0.01" placeholder="0.00" className="pl-6" value={form.laborCost} onChange={(e) => set("laborCost", e.target.value)} />
+                    </div>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={form.diyInstall}
+                      onClick={() => set("diyInstall", !form.diyInstall)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg border transition-all duration-150 ${
+                        form.diyInstall
+                          ? "bg-theme/10 border-theme/30 text-theme"
+                          : "bg-secondary/30 border-border/40 text-muted-foreground hover:border-border/60"
+                      }`}
+                    >
+                      <span className="text-sm font-medium">DIY Install</span>
+                      <div className={`relative flex-shrink-0 w-8 h-4 rounded-full transition-colors duration-200 ${form.diyInstall ? "bg-theme" : "bg-border/60"}`}>
+                        <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200 ${form.diyInstall ? "translate-x-4" : "translate-x-0"}`} />
+                      </div>
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div>
-                <Label>Install Mileage</Label>
-                <Input type="number" min="0" placeholder="52000" value={form.installMileage} onChange={(e) => set("installMileage", e.target.value)} />
+
+              {/* ── PRODUCT ──────────────────────────────────────────────────── */}
+              <div className="space-y-3">
+                <SectionHeader icon={Link2} title="Product" />
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-2">
+                    Product Link
+                    {fetchingImage && (
+                      <span className="font-normal flex items-center gap-1 text-muted-foreground/60">
+                        <span className="w-3 h-3 border border-muted-foreground/40 border-t-transparent rounded-full animate-spin inline-block" />
+                        fetching image…
+                      </span>
+                    )}
+                  </Label>
+                  <Input
+                    placeholder="https://ecstuning.com/…"
+                    value={form.link}
+                    onChange={(e) => set("link", e.target.value)}
+                    onBlur={handleLinkBlur}
+                  />
+                  {!form.imageUrl && !fetchingImage && form.link && (
+                    <p className="text-xs text-muted-foreground/60">Image will auto-fill when you leave this field</p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Part Number</Label>
+                    <Input placeholder="ES#1234567" value={form.partNumber} onChange={(e) => set("partNumber", e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Order Number</Label>
+                    <Input placeholder="ORD-20240101" value={form.orderNumber} onChange={(e) => set("orderNumber", e.target.value)} />
+                  </div>
+                </div>
               </div>
-              <div>
-                <Label>Labor Cost ($)</Label>
-                <Input type="number" min="0" step="0.01" placeholder="0" value={form.laborCost} onChange={(e) => set("laborCost", e.target.value)} />
+
+              {/* ── INSTALLATION ─────────────────────────────────────────────── */}
+              <div className="space-y-3">
+                <SectionHeader icon={Calendar} title="Installation" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Install Date</Label>
+                    <Input type="date" value={form.installDate} onChange={(e) => set("installDate", e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Install Mileage</Label>
+                    <Input type="number" min="0" placeholder="52000" value={form.installMileage} onChange={(e) => set("installMileage", e.target.value)} />
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {/* DIY checkbox */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="diyInstall"
-                checked={form.diyInstall}
-                onChange={(e) => set("diyInstall", e.target.checked)}
-                className="rounded border-input"
-              />
-              <Label htmlFor="diyInstall" className="cursor-pointer">DIY Install</Label>
-            </div>
+              {/* ── PHOTO ────────────────────────────────────────────────────── */}
+              <div className="space-y-3">
+                <SectionHeader icon={Camera} title="Photo" />
+                <ImageUpload
+                  label=""
+                  value={form.imageUrl}
+                  onChange={(v) => set("imageUrl", v)}
+                />
+              </div>
 
-            {/* Dependencies */}
-            {vehicleMods.length > 0 && (
-              <DepPicker
-                vehicleMods={vehicleMods}
-                dependsOn={dependsOn}
-                onChange={setDependsOn}
-              />
-            )}
+              {/* ── NOTES ────────────────────────────────────────────────────── */}
+              <div className="space-y-3">
+                <SectionHeader icon={AlignLeft} title="Notes" />
+                <textarea
+                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-none overflow-hidden"
+                  placeholder="Any notes, fitment info, install tips…"
+                  value={form.notes}
+                  onChange={(e) => {
+                    set("notes", e.target.value);
+                    const t = e.target; t.style.height = "auto"; t.style.height = t.scrollHeight + "px";
+                  }}
+                  onFocus={(e) => {
+                    const t = e.target; t.style.height = "auto"; t.style.height = t.scrollHeight + "px";
+                  }}
+                />
+              </div>
 
-            {/* Notes */}
-            <div>
-              <Label>Notes</Label>
-              <textarea
-                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring min-h-[80px] resize-none overflow-hidden"
-                placeholder="Any notes, fitment info, install tips…"
-                value={form.notes}
-                onChange={(e) => {
-                  set("notes", e.target.value);
-                  const t = e.target; t.style.height = "auto"; t.style.height = t.scrollHeight + "px";
-                }}
-                onFocus={(e) => {
-                  const t = e.target; t.style.height = "auto"; t.style.height = t.scrollHeight + "px";
-                }}
-              />
-            </div>
+              {/* ── DEPENDENCIES ─────────────────────────────────────────────── */}
+              {vehicleMods.length > 0 && (
+                <DepPicker
+                  vehicleMods={vehicleMods}
+                  dependsOn={dependsOn}
+                  onChange={setDependsOn}
+                />
+              )}
 
-          </form>
-        )}
+            </form>
+          )}
 
         </div>{/* end scrollable body */}
 
-        {/* ── Sticky footer ─────────────────────────────────────────────── */}
-        <div className="px-6 py-4 border-t border-border flex-shrink-0 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          {step === "form" && (
-            <Button type="submit" form="mod-form" disabled={saving || fetchingImage}>
-              {saving ? "Saving…" : editMod ? "Save Changes" : "Add Modification"}
-            </Button>
-          )}
+        {/* ── Sticky footer ───────────────────────────────────────────────── */}
+        <div className="px-6 py-4 border-t border-border flex-shrink-0 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            {step === "form" && form.name && (
+              <p className="text-xs font-medium text-muted-foreground truncate max-w-[200px]">{form.name}</p>
+            )}
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            {step === "form" && (
+              <Button
+                type="submit"
+                form="mod-form"
+                disabled={saving || fetchingImage}
+                className="bg-theme hover:brightness-90 text-white min-w-[130px]"
+              >
+                {saving ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    {editMod ? "Saving…" : "Adding…"}
+                  </span>
+                ) : editMod ? "Save Changes" : "Add Modification"}
+              </Button>
+            )}
+          </div>
         </div>
+
       </DialogContent>
     </Dialog>
   );
