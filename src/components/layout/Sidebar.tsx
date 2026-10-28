@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -144,8 +145,11 @@ export function Sidebar() {
       className="hidden md:flex flex-shrink-0 flex-col border-r border-border bg-card"
       style={{ width: "var(--sidebar-width, 240px)" }}
     >
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-5 h-16 border-b border-border shrink-0">
+      {/* Logo — -webkit-app-region:drag makes this draggable in Electron */}
+      <div
+        className="flex items-center gap-3 px-5 h-16 border-b border-border shrink-0"
+        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+      >
         <Image src="/logo.svg" alt="BuildVerse" width={34} height={34} className="rounded-xl shrink-0 ring-1 ring-white/10 shadow-md shadow-black/20" />
         <div className="leading-none">
           <p className="font-semibold text-sm tracking-tight">

@@ -5,7 +5,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Car, Plus, Wrench, Edit2, Trash2, TrendingUp, DollarSign, Zap, ArrowRight } from "lucide-react";
 import { AddVehicleDialog } from "@/components/vehicles/AddVehicleDialog";
 import { formatCurrency, calcBuildCompletion } from "@/lib/utils";
@@ -34,9 +33,12 @@ function VehicleCard({ vehicle, onEdit, onDelete }: { vehicle: Vehicle; onEdit: 
   const completion = calcBuildCompletion(vehicle.modifications);
   const installedMods = vehicle.modifications.filter((m) => m.status === "INSTALLED");
   const installedValue = installedMods.reduce((s, m) => s + (m.price ?? 0), 0);
-  const plannedValue = vehicle.modifications
-    .filter((m) => m.status !== "INSTALLED" && m.status !== "RESEARCHING" && m.status !== "REMOVED")
-    .reduce((s, m) => s + (m.price ?? 0), 0);
+  const plannedMods = vehicle.modifications.filter(
+    (m) => m.status !== "INSTALLED" && m.status !== "RESEARCHING" && m.status !== "REMOVED"
+  );
+  const plannedValue = plannedMods.reduce((s, m) => s + (m.price ?? 0), 0);
+  const plannedCount = plannedMods.length;
+  const total = vehicle._count.modifications;
 
   return (
     <Link href={`/garage/${vehicle.id}`} className="block">
@@ -116,26 +118,37 @@ function VehicleCard({ vehicle, onEdit, onDelete }: { vehicle: Vehicle; onEdit: 
             )}
           </div>
 
-          <div className="space-y-1 mb-4">
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Build progress</span>
-              <span className="font-semibold">{completion}%</span>
+          {/* Stacked build progress bar */}
+          <div className="space-y-1.5 mb-5">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" />
+                <span className="font-semibold text-green-400">{formatCurrency(installedValue)}</span>
+                <span className="text-muted-foreground/60">installed</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground/60">planned</span>
+                <span className="font-semibold text-theme">{formatCurrency(plannedValue)}</span>
+                <span className="w-2 h-2 rounded-full bg-theme flex-shrink-0" />
+              </div>
             </div>
-            <Progress value={completion} className="h-1.5" />
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 text-center pt-3 border-t border-border/60 mb-4">
-            <div>
-              <p className="text-xs text-muted-foreground">Mods</p>
-              <p className="text-sm font-bold">{vehicle._count.modifications}</p>
+            <div className="h-2.5 w-full bg-secondary rounded-full overflow-hidden flex">
+              {installedMods.length > 0 && total > 0 && (
+                <div
+                  className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-700 ease-out"
+                  style={{ width: `${(installedMods.length / total) * 100}%` }}
+                />
+              )}
+              {plannedCount > 0 && total > 0 && (
+                <div
+                  className="h-full bg-theme/40 transition-all duration-700 ease-out"
+                  style={{ width: `${(plannedCount / total) * 100}%` }}
+                />
+              )}
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Installed</p>
-              <p className="text-sm font-bold text-green-400">{formatCurrency(installedValue)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Planned</p>
-              <p className="text-sm font-bold text-theme">{formatCurrency(plannedValue)}</p>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground/50">{installedMods.length}/{total} mods installed</span>
+              <span className="font-semibold text-muted-foreground">{completion}%</span>
             </div>
           </div>
 
