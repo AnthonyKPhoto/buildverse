@@ -745,27 +745,25 @@ export default function VendorsPage() {
       {/* Vendor grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map((vendor) => (
-          <Card key={vendor.url} className="hover:border-theme/30 transition-all duration-200 flex flex-col">
+          <Card key={vendor.url} className="relative overflow-hidden hover:-translate-y-px hover:shadow-lg hover:shadow-black/25 hover:border-theme/30 transition-all duration-200 flex flex-col">
+            <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-theme/50" />
             <CardContent className="p-5 flex flex-col flex-1">
               {/* Header */}
               <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-bold text-base">{vendor.name}</h3>
-                  <p className="text-xs text-muted-foreground">{vendor.domain}</p>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-base leading-tight">{vendor.name}</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">{vendor.domain}</p>
                 </div>
-                <div className="flex items-center gap-1 text-sm">
+                <div className="flex items-center gap-1 text-sm shrink-0 ml-3">
                   <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
                   <span className="font-semibold">{vendor.rating}</span>
                 </div>
               </div>
 
-              {/* Specialty badges */}
+              {/* Specialty badges — specialty only, no duplicate tag list */}
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {vendor.specialty.map((s) => (
                   <Badge key={s} className="text-xs bg-theme/10 text-theme border-theme/20">{s}</Badge>
-                ))}
-                {vendor.tags.slice(0, 3).map((t) => (
-                  <Badge key={t} variant="secondary" className="text-xs">{t}</Badge>
                 ))}
               </div>
 
@@ -773,14 +771,16 @@ export default function VendorsPage() {
               <p className="text-sm text-muted-foreground flex-1 mb-3 leading-relaxed">{vendor.description}</p>
 
               {/* Highlights */}
-              <ul className="space-y-1 mb-4">
+              <div className="space-y-1.5 mb-4">
                 {vendor.highlights.map((h) => (
-                  <li key={h} className="text-xs text-muted-foreground flex items-center gap-1.5">
-                    <div className="w-1 h-1 rounded-full bg-theme flex-shrink-0" />
+                  <div key={h} className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <div className="w-3.5 h-3.5 rounded-full bg-theme/10 border border-theme/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <div className="w-1 h-1 rounded-full bg-theme" />
+                    </div>
                     {h}
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
 
               {/* Footer */}
               <div className="flex items-center justify-between pt-3 border-t border-border">

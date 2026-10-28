@@ -146,25 +146,27 @@ export default function BudgetPage() {
           {/* Summary stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
-              { label: "Total Budget", value: formatCurrency(totalPlanned), sub: "planned spend", icon: TrendingUp, color: "text-blue-400 bg-blue-500/10" },
-              { label: "Total Spent", value: formatCurrency(totalSpent), sub: "installed mods value", icon: DollarSign, color: "text-green-400 bg-green-500/10" },
+              { label: "Total Budget", value: formatCurrency(totalPlanned), sub: "planned spend", icon: TrendingUp, color: "text-blue-400 bg-blue-500/10", stripe: "bg-blue-400" },
+              { label: "Total Spent", value: formatCurrency(totalSpent), sub: "installed mods value", icon: DollarSign, color: "text-green-400 bg-green-500/10", stripe: "bg-green-400" },
               {
                 label: totalRemaining >= 0 ? "Remaining" : "Over Budget",
                 value: formatCurrency(Math.abs(totalRemaining)),
                 sub: totalRemaining >= 0 ? "left in budget" : "over budget",
                 icon: totalRemaining >= 0 ? TrendingDown : TrendingUp,
                 color: totalRemaining >= 0 ? "text-theme bg-theme/10" : "text-red-400 bg-red-500/10",
+                stripe: totalRemaining >= 0 ? "bg-theme" : "bg-red-400",
               },
-            ].map(({ label, value, sub, icon: Icon, color }) => (
-              <Card key={label}>
+            ].map(({ label, value, sub, icon: Icon, color, stripe }) => (
+              <Card key={label} className="relative overflow-hidden hover:-translate-y-px hover:shadow-lg hover:shadow-black/25 transition-all duration-200">
+                <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${stripe}`} />
                 <CardContent className="p-5 flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${color}`}>
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${color}`}>
                     <Icon className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="text-xl font-bold">{value}</p>
-                    <p className="text-xs text-muted-foreground">{sub}</p>
+                    <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">{label}</p>
+                    <p className="text-2xl font-bold tabular-nums leading-tight mt-0.5">{value}</p>
+                    <p className="text-xs text-muted-foreground/70 mt-0.5">{sub}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -292,7 +294,8 @@ export default function BudgetPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {vehicleSummaries.map((v) => (
                   <Link key={v.id} href={`/garage/${v.id}`}>
-                    <Card className="hover:border-theme/30 transition-colors cursor-pointer">
+                    <Card className="relative overflow-hidden hover:border-theme/30 hover:-translate-y-px hover:shadow-lg hover:shadow-black/25 transition-all duration-200 cursor-pointer">
+                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-theme/50" />
                       <CardContent className="p-4">
                         <div className="flex items-center gap-3 mb-3">
                           <Car className="w-4 h-4 text-theme" />

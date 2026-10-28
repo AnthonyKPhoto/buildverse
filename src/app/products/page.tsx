@@ -247,63 +247,69 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Product Tracker</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Tracks prices automatically — updates every {STALE_HOURS} hours when you visit this page
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Sync from mods */}
-          <Button
-            variant="outline"
-            className="gap-2"
-            onClick={handleSync}
-            disabled={syncing}
-          >
-            {syncing ? (
-              <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Download className="w-3.5 h-3.5" />
-            )}
-            {syncing ? "Syncing…" : "Sync from Mods"}
-          </Button>
-
-          {/* Refresh all */}
-          {products.length > 0 && (
+    <div className="animate-fade-in">
+      {/* Hero banner */}
+      <div className="-mx-6 -mt-8 mb-8 px-6 pt-8 pb-6 border-b border-border/60 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-72 h-36 bg-theme/8 rounded-full blur-3xl -translate-y-8 translate-x-8 pointer-events-none" />
+        <div className="relative flex items-end justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground/60 tracking-wider uppercase mb-1">Price Monitoring</p>
+            <h1 className="text-3xl font-bold tracking-tight">Product Tracker</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Automatically tracks prices — refreshes every {STALE_HOURS} hours when you visit
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Sync from mods */}
             <Button
               variant="outline"
               className="gap-2"
-              onClick={handleRefreshAll}
-              disabled={refreshingAll}
+              onClick={handleSync}
+              disabled={syncing}
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshingAll ? "animate-spin" : ""}`} />
-              {refreshingAll ? "Refreshing…" : "Refresh All"}
+              {syncing ? (
+                <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              {syncing ? "Syncing…" : "Sync from Mods"}
             </Button>
-          )}
 
-          {/* Alert filter */}
-          {alertCount > 0 && (
-            <Button
-              variant={alertFilter ? "default" : "outline"}
-              className={`gap-2 ${alertFilter ? "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" : ""}`}
-              onClick={() => setAlertFilter((f) => !f)}
-            >
-              <Bell className="w-3.5 h-3.5" />
-              {alertCount} Alert{alertCount !== 1 ? "s" : ""}
+            {/* Refresh all */}
+            {products.length > 0 && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={handleRefreshAll}
+                disabled={refreshingAll}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${refreshingAll ? "animate-spin" : ""}`} />
+                {refreshingAll ? "Refreshing…" : "Refresh All"}
+              </Button>
+            )}
+
+            {/* Alert filter */}
+            {alertCount > 0 && (
+              <Button
+                variant={alertFilter ? "default" : "outline"}
+                className={`gap-2 ${alertFilter ? "bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30" : ""}`}
+                onClick={() => setAlertFilter((f) => !f)}
+              >
+                <Bell className="w-3.5 h-3.5" />
+                {alertCount} Alert{alertCount !== 1 ? "s" : ""}
+              </Button>
+            )}
+
+            {/* Add manual */}
+            <Button onClick={() => setAddOpen(true)} className="bg-theme hover:brightness-90 gap-2">
+              <Plus className="w-4 h-4" />
+              Track Product
             </Button>
-          )}
-
-          {/* Add manual */}
-          <Button onClick={() => setAddOpen(true)} className="bg-theme hover:brightness-90 gap-2">
-            <Plus className="w-4 h-4" />
-            Track Product
-          </Button>
+          </div>
         </div>
       </div>
+      <div className="space-y-6">
 
       {/* Search + Bulk alert row */}
       {products.length > 0 && (
@@ -361,25 +367,25 @@ export default function ProductsPage() {
 
       {/* Empty state */}
       {products.length === 0 ? (
-        <Card className="border-dashed border-2">
-          <CardContent className="flex flex-col items-center py-16 text-center">
-            <ShoppingCart className="w-12 h-12 text-muted-foreground/30 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No tracked products</h3>
-            <p className="text-muted-foreground text-sm max-w-xs mb-6">
-              Click <strong>Sync from Mods</strong> to automatically import all product links from your mods, or paste a URL manually.
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleSync} disabled={syncing} className="gap-2">
-                <Download className="w-4 h-4" />
-                {syncing ? "Syncing…" : "Sync from Mods"}
-              </Button>
-              <Button onClick={() => setAddOpen(true)} className="bg-theme hover:brightness-90">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Manually
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center py-20 text-center rounded-2xl border border-dashed border-border/60 bg-secondary/10">
+          <div className="w-16 h-16 rounded-2xl bg-theme/10 flex items-center justify-center mb-5">
+            <ShoppingCart className="w-8 h-8 text-theme" />
+          </div>
+          <h3 className="text-xl font-bold mb-2">No tracked products yet</h3>
+          <p className="text-muted-foreground text-sm max-w-sm mb-6 leading-relaxed">
+            Sync from your modification links to automatically import all product URLs, or paste a product URL manually.
+          </p>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={handleSync} disabled={syncing} className="gap-2">
+              <Download className="w-4 h-4" />
+              {syncing ? "Syncing…" : "Sync from Mods"}
+            </Button>
+            <Button onClick={() => setAddOpen(true)} className="bg-theme hover:brightness-90 gap-2">
+              <Plus className="w-4 h-4" />
+              Add Manually
+            </Button>
+          </div>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
           {filtered.map((product) => {
@@ -392,7 +398,8 @@ export default function ProductsPage() {
               .map((h) => ({ date: new Date(h.createdAt).toLocaleDateString(), price: h.price }));
 
             return (
-              <Card key={product.id} className="overflow-hidden hover:border-border/60 transition-colors">
+              <Card key={product.id} className="relative overflow-hidden hover:-translate-y-px hover:shadow-lg hover:shadow-black/25 hover:border-theme/30 transition-all duration-200">
+                <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${alertTripped ? "bg-green-400" : isAtLowest ? "bg-green-400/50" : "bg-theme/40"}`} />
                 <CardContent className="p-5">
                   <div className="flex items-start gap-4">
                     {/* Image */}
@@ -594,6 +601,7 @@ export default function ProductsPage() {
           </form>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

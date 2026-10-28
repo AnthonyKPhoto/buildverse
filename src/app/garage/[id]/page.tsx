@@ -928,16 +928,17 @@ export default function VehicleDetailPage() {
           {/* Summary */}
           <div className="grid grid-cols-3 gap-4">
             {[
-              { label: "Total Planned", value: formatCurrency(totalBudgetPlanned), icon: TrendingUp, color: "text-blue-400" },
-              { label: "Total Spent", value: formatCurrency(totalBudgetActual), icon: DollarSign, color: "text-green-400" },
-              { label: "Remaining", value: formatCurrency(totalBudgetPlanned - totalBudgetActual), icon: Gauge, color: "text-theme" },
-            ].map(({ label, value, icon: Icon, color }) => (
-              <Card key={label}>
+              { label: "Total Planned", value: formatCurrency(totalBudgetPlanned), icon: TrendingUp, color: "text-blue-400", stripe: "bg-blue-400" },
+              { label: "Total Spent", value: formatCurrency(totalBudgetActual), icon: DollarSign, color: "text-green-400", stripe: "bg-green-400" },
+              { label: "Remaining", value: formatCurrency(totalBudgetPlanned - totalBudgetActual), icon: Gauge, color: "text-theme", stripe: "bg-theme" },
+            ].map(({ label, value, icon: Icon, color, stripe }) => (
+              <Card key={label} className="relative overflow-hidden hover:-translate-y-px hover:shadow-lg hover:shadow-black/25 transition-all duration-200">
+                <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${stripe}`} />
                 <CardContent className="p-4 flex items-center gap-3">
                   <Icon className={`w-5 h-5 ${color}`} />
                   <div>
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="text-lg font-bold">{value}</p>
+                    <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">{label}</p>
+                    <p className="text-lg font-bold tabular-nums mt-0.5">{value}</p>
                   </div>
                 </CardContent>
               </Card>
