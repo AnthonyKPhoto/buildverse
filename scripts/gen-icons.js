@@ -1,5 +1,5 @@
 /**
- * Generates all BuildVerse icon assets from a source image.
+ * Generates all Upshift Garage icon assets from a source image.
  * Source priority: public/logo.png (preferred) → public/logo.svg
  *
  * Outputs:

@@ -48,7 +48,7 @@ export function LoginForm() {
           <div className="w-16 h-16 rounded-2xl bg-theme/10 border border-theme/20 flex items-center justify-center mx-auto mb-4">
             <Lock className="w-7 h-7 text-theme" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">BuildVerse</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Upshift Garage</h1>
           <p className="text-sm text-muted-foreground mt-1">Sign in to continue</p>
         </div>
 

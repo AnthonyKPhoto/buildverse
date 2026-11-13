@@ -258,7 +258,7 @@ export function LubeLoggerSettings() {
               <p className="text-xs font-medium text-blue-300">What is LubeLogger?</p>
               <p className="text-xs text-muted-foreground mt-0.5">
                 LubeLogger is a free self-hosted vehicle maintenance tracker. Sync your service records,
-                oil changes, and repairs directly into BuildVerse.
+                oil changes, and repairs directly into Upshift Garage.
               </p>
               <a
                 href="https://github.com/hargata/lubelog"
@@ -408,7 +408,7 @@ export function LubeLoggerSettings() {
                   <div className="grid grid-cols-[1fr,auto,1fr] gap-2 text-xs font-medium text-muted-foreground pb-1">
                     <span>LubeLogger Vehicle</span>
                     <span />
-                    <span>BuildVerse Vehicle</span>
+                    <span>Upshift Garage Vehicle</span>
                   </div>
                   {llVehicles.map((llv) => {
                     const linkedBvId = vehicleMap[String(llv.id)];
@@ -495,7 +495,7 @@ export function LubeLoggerSettings() {
             </div>
             {syncInterval !== "off" && (
               <p className="text-xs text-muted-foreground">
-                BuildVerse will automatically import new records in the background at the selected interval.
+                Upshift Garage will automatically import new records in the background at the selected interval.
               </p>
             )}
           </div>

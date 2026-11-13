@@ -66,7 +66,7 @@ export function SetupWizard() {
               <span className="text-4xl">🔧</span>
             </div>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight mb-2">Welcome to BuildVerse</h1>
+              <h1 className="text-3xl font-bold tracking-tight mb-2">Welcome to Upshift Garage</h1>
               <p className="text-muted-foreground">Your intelligent vehicle modification manager. Let&apos;s get you set up in about 30 seconds.</p>
             </div>
             <button onClick={next} className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-theme text-white font-semibold text-sm hover:brightness-110 transition-all">
@@ -110,7 +110,7 @@ export function SetupWizard() {
             </div>
             <div>
               <h2 className="text-2xl font-bold mb-2">You&apos;re all set!</h2>
-              <p className="text-muted-foreground text-sm">Your BuildVerse is ready. Add your first vehicle to start tracking your build.</p>
+              <p className="text-muted-foreground text-sm">Your Upshift Garage is ready. Add your first vehicle to start tracking your build.</p>
             </div>
             <div className="p-3.5 rounded-xl border border-border bg-secondary/40 text-left space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Your setup</p>

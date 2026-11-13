@@ -1,14 +1,14 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# BuildVerse — Release Workflow
+# Upshift Garage — Release Workflow
 #
 # Triggers when you push a version tag, e.g.:
 #   git tag v1.0.0 && git push origin v1.0.0
 #
 # Produces:
-#   • BuildVerse Setup X.X.X.exe    — Windows NSIS installer (recommended)
-#   • BuildVerse X.X.X Portable.exe — Windows portable, no install needed
-#   • BuildVerse-X.X.X.AppImage     — Linux, self-contained, no install needed
-#   • buildverse_X.X.X_amd64.deb    — Linux, Debian/Ubuntu package
+#   • UpshiftGarage-Setup-X.X.X.exe — Windows NSIS installer (recommended)
+#   • UpshiftGarage-X.X.X-Portable.exe — Windows portable, no install needed
+#   • UpshiftGarage-X.X.X.AppImage — Linux, self-contained, no install needed
+#   • upshift-garage_X.X.X_amd64.deb — Linux, Debian/Ubuntu package
 #
 # The Linux job runs after (needs:) the Windows job so it appends its
 # artifacts to the same GitHub Release instead of racing to create it.
@@ -114,7 +114,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "BuildVerse v${{ steps.version.outputs.ver }}"
+          name: "Upshift Garage v${{ steps.version.outputs.ver }}"
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -123,14 +123,14 @@ jobs:
             dist-electron/*.exe
             dist-electron/latest.yml
           body: |
-            ## BuildVerse v${{ steps.version.outputs.ver }}
+            ## Upshift Garage v${{ steps.version.outputs.ver }}
 
             ### Download
 
             | File | Description |
             |------|-------------|
-            | `BuildVerse Setup ${{ steps.version.outputs.ver }}.exe` | **Installer (recommended)** — installs to your user profile, creates Desktop + Start Menu shortcuts |
-            | `BuildVerse ${{ steps.version.outputs.ver }} Portable.exe` | **Portable** — run from any folder, no install needed |
+            | `UpshiftGarage-Setup-${{ steps.version.outputs.ver }}.exe` | **Installer (recommended)** — installs to your user profile, creates Desktop + Start Menu shortcuts |
+            | `UpshiftGarage-${{ steps.version.outputs.ver }}-Portable.exe` | **Portable** — run from any folder, no install needed |
 
             ---
 
@@ -141,7 +141,7 @@ jobs:
                > Click **"More info"** → **"Run anyway"**
                > *(This appears because the app is not yet code-signed. It is safe.)*
             3. Follow the wizard: **Next → Next → Install → Finish**
-            4. Launch **BuildVerse** from the Desktop shortcut or Start Menu
+            4. Launch **Upshift Garage** from the Desktop shortcut or Start Menu
 
             ---
 
@@ -232,7 +232,7 @@ jobs:
       - name: Upload Linux artifacts to the release
         uses: softprops/action-gh-release@v2
         with:
-          name: "BuildVerse v${{ steps.version.outputs.ver }}"
+          name: "Upshift Garage v${{ steps.version.outputs.ver }}"
           draft: false
           prerelease: false
           append_body: true
@@ -247,8 +247,8 @@ jobs:
 
             | File | Description |
             |------|-------------|
-            | `BuildVerse-${{ steps.version.outputs.ver }}.AppImage` | **AppImage (recommended)** — download, `chmod +x`, then run. No install needed |
-            | `buildverse_${{ steps.version.outputs.ver }}_amd64.deb` | **Debian/Ubuntu package** — `sudo apt install ./buildverse_${{ steps.version.outputs.ver }}_amd64.deb` |
+            | `UpshiftGarage-${{ steps.version.outputs.ver }}.AppImage` | **AppImage (recommended)** — download, `chmod +x`, then run. No install needed |
+            | `upshift-garage_${{ steps.version.outputs.ver }}_amd64.deb` | **Debian/Ubuntu package** — `sudo apt install ./upshift-garage_${{ steps.version.outputs.ver }}_amd64.deb` |
 
             **No prerequisites** — Node.js and all dependencies are bundled inside the package.
 
@@ -312,7 +312,7 @@ jobs:
 
       - name: Verify Node.js runtime was bundled
         run: |
-          NODE_PATH=$(ls -d dist-electron/mac*/BuildVerse.app/Contents/Resources/node | head -1)
+          NODE_PATH=$(ls -d dist-electron/mac*/"Upshift Garage.app"/Contents/Resources/node | head -1)
           if [ ! -f "$NODE_PATH" ]; then
             echo "node binary missing from packaged resources"
             exit 1
@@ -326,7 +326,7 @@ jobs:
       - name: Upload macOS artifacts to the release
         uses: softprops/action-gh-release@v2
         with:
-          name: "BuildVerse v${{ steps.version.outputs.ver }}"
+          name: "Upshift Garage v${{ steps.version.outputs.ver }}"
           draft: false
           prerelease: false
           fail_on_unmatched_files: false

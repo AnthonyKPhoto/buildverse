@@ -59,7 +59,7 @@ export async function GET() {
     // ── 3. Stream back as download ───────────────────────────────────────────
     const buffer = zip.toBuffer();
     const timestamp = new Date().toISOString().slice(0, 10);
-    const filename = `buildverse-${timestamp}.zip`;
+    const filename = `upshift-garage-${timestamp}.zip`;
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {

@@ -1309,7 +1309,7 @@ export default function VehicleDetailPage() {
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setBuildCardOpen(false)}>
             <div className="bg-card rounded-2xl overflow-hidden shadow-2xl max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center px-5 pt-4 pb-0">
-                <p className="text-xs text-muted-foreground">BuildVerse · Build Card</p>
+                <p className="text-xs text-muted-foreground">Upshift Garage · Build Card</p>
                 <button onClick={() => setBuildCardOpen(false)} className="text-muted-foreground hover:text-foreground">
                   <X className="w-4 h-4" />
                 </button>
@@ -1403,7 +1403,7 @@ export default function VehicleDetailPage() {
                   </div>
                 )}
 
-                <p className="text-xs text-muted-foreground/40 text-right mt-4">buildverse.app · screenshot to share</p>
+                <p className="text-xs text-muted-foreground/40 text-right mt-4">Upshift Garage · screenshot to share</p>
               </div>
 
               <div className="px-5 pb-5 flex items-center justify-between gap-3">

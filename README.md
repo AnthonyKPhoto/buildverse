@@ -1,4 +1,4 @@
-# BuildVerse — Intelligent Vehicle Modification Manager
+# Upshift Garage — Intelligent Vehicle Modification Manager
 
 Plan, track, budget, research, and organize your vehicle modifications.
 Runs **100% locally by default** — no cloud, no accounts, no internet required.
@@ -15,7 +15,7 @@ Available as:
 
 ## ⬇️ Download (Windows)
 
-**Go to [Releases](../../releases) and download the latest `BuildVerse Setup x.x.x.exe`.**
+**Go to [Releases](../../releases) and download the latest `UpshiftGarage-Setup-x.x.x.exe`.**
 
 1. Download the installer
 2. Double-click it — Windows may show a SmartScreen warning; click **"More info" → "Run anyway"**
@@ -25,25 +25,25 @@ Available as:
 
 **No Node.js, no npm, no prerequisites.** Everything is bundled inside the installer.
 
-> **Portable option:** Download `BuildVerse x.x.x Portable.exe` — runs from any folder without installing.
+> **Portable option:** Download `UpshiftGarage-x.x.x-Portable.exe` — runs from any folder without installing.
 
 ---
 
 ## ⬇️ Download (Linux)
 
-**Go to [Releases](../../releases) and download the latest `BuildVerse-x.x.x.AppImage` or `buildverse_x.x.x_amd64.deb`.**
+**Go to [Releases](../../releases) and download the latest `UpshiftGarage-x.x.x.AppImage` or `upshift-garage_x.x.x_amd64.deb`.**
 
 **No Node.js, no prerequisites.** Everything is bundled inside the package.
 
 **AppImage** (works on most distros, no install):
 ```bash
-chmod +x BuildVerse-x.x.x.AppImage
-./BuildVerse-x.x.x.AppImage
+chmod +x UpshiftGarage-x.x.x.AppImage
+./UpshiftGarage-x.x.x.AppImage
 ```
 
 **Debian/Ubuntu (.deb)**:
 ```bash
-sudo apt install ./buildverse_x.x.x_amd64.deb
+sudo apt install ./upshift-garage_x.x.x_amd64.deb
 ```
 
 ---
@@ -96,7 +96,7 @@ npm run electron:dev
 
 ## Self-Hosting with Docker
 
-Running BuildVerse as a server makes it the single source of truth: the desktop
+Running Upshift Garage as a server makes it the single source of truth: the desktop
 app (in "Connect to Server" mode) and a phone browser both talk to the same
 live database, so an edit made on one shows up on the other immediately —
 nothing to sync or merge, because there's only one database.
@@ -175,7 +175,7 @@ Users** to add an account for each person (member or admin role), remove
 accounts, or reset someone's password.
 
 Adding a user with just a username/password works immediately. Give an
-email instead of typing a password and BuildVerse generates a temporary one
+email instead of typing a password and Upshift Garage generates a temporary one
 and emails it (configure SMTP first under **Settings → Access & Sync →
 Email (SMTP)**) — that account is asked to set its own password on first
 sign-in. If email delivery fails, the temp password is shown once so you
@@ -191,7 +191,7 @@ everything.
 If you and someone else have each been tracking your own vehicles locally
 and want them both in the shared server:
 
-1. Each person signs in on their own PC's BuildVerse app (local mode is
+1. Each person signs in on their own PC's Upshift Garage app (local mode is
    fine) and goes to **Settings → Data & Backup → Export Data** (JSON) or
    **Export Transfer Pack** (.zip) — use the zip if you've uploaded any
    vehicle files or tune logs, since those live on disk and the JSON export
@@ -240,16 +240,16 @@ GitHub Actions (`.github/workflows/release.yml`) will:
 
 ```powershell
 npm run package:win
-# Output: dist-electron/BuildVerse Setup x.x.x.exe
-#         dist-electron/BuildVerse x.x.x Portable.exe
+# Output: dist-electron/UpshiftGarage-Setup-x.x.x.exe
+#         dist-electron/UpshiftGarage-x.x.x-Portable.exe
 ```
 
 ```bash
 # Linux only — must run on Linux (electron-builder can't cross-compile the
 # native Prisma query engine from Windows)
 npm run package:linux
-# Output: dist-electron/BuildVerse-x.x.x.AppImage
-#         dist-electron/buildverse_x.x.x_amd64.deb
+# Output: dist-electron/UpshiftGarage-x.x.x.AppImage
+#         dist-electron/upshift-garage_x.x.x_amd64.deb
 ```
 
 ---

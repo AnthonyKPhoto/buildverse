@@ -8,7 +8,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { SetupWizard } from "@/components/SetupWizard";
 
 export const metadata: Metadata = {
-  title: "BuildVerse — Vehicle Modification Manager",
+  title: "Upshift Garage — Vehicle Modification Manager",
   description: "Plan, track, budget, and organize your vehicle modifications.",
   icons: {
     icon: [

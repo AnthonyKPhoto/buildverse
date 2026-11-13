@@ -2,7 +2,7 @@
 
 process.on('uncaughtException', (err) => {
   if (err.code === 'EPIPE') return;
-  try { require('electron').dialog.showErrorBox('BuildVerse - Fatal Error', `Failed to start:\n\n${err.message}`); } catch {}
+  try { require('electron').dialog.showErrorBox('Upshift Garage - Fatal Error', `Failed to start:\n\n${err.message}`); } catch {}
   process.exit(1);
 });
 "use strict";
@@ -22,8 +22,17 @@ const fs = require("fs");
 // Configuration
 // ──────────────────────────────────────────────────────────
 const IS_DEV = !app.isPackaged;
+
+// ── Data folder: DO NOT derive this from the product name ──────────────────────
+// Packaged builds keep using the original "BuildVerse" folder (%APPDATA%\BuildVerse,
+// ~/Library/Application Support/BuildVerse, ~/.config/BuildVerse) so renaming the
+// product to "Upshift Garage" can never orphan an existing user's database, backups
+// and attachments. Must run before app 'ready' and before anything reads userData.
+if (app.isPackaged) {
+  app.setPath("userData", path.join(app.getPath("appData"), "BuildVerse"));
+}
 const PORT = IS_DEV ? 3000 : 3456;
-const APP_NAME = "BuildVerse";
+const APP_NAME = "Upshift Garage";
 
 let mainWindow = null;
 let tray = null;
@@ -325,8 +334,8 @@ function copyDirSync(src, dest) {
 ipcMain.handle("transfer:export-zip", async () => {
   const userData = app.getPath("userData");
   const { canceled, filePath } = await dialog.showSaveDialog({
-    title: "Save BuildVerse Transfer Pack",
-    defaultPath: `BuildVerse-export-${new Date().toISOString().slice(0, 10)}.zip`,
+    title: "Save Upshift Garage Transfer Pack",
+    defaultPath: `UpshiftGarage-export-${new Date().toISOString().slice(0, 10)}.zip`,
     filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
   });
   if (canceled || !filePath) return { canceled: true };
@@ -365,7 +374,7 @@ ipcMain.handle("transfer:export-zip", async () => {
 
 ipcMain.handle("transfer:import-zip", async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
-    title: "Import BuildVerse Transfer Pack",
+    title: "Import Upshift Garage Transfer Pack",
     filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
     properties: ["openFile"],
   });
@@ -437,7 +446,7 @@ function checkGitHubVersion() {
       const req = https.get({
         hostname: "api.github.com",
         path: "/repos/AnthonyKPhoto/buildverse/releases/latest",
-        headers: { "User-Agent": `BuildVerse/${app.getVersion()}`, "Accept": "application/vnd.github.v3+json" },
+        headers: { "User-Agent": `UpshiftGarage/${app.getVersion()}`, "Accept": "application/vnd.github.v3+json" },
         timeout: 8000,
       }, (res) => {
         let data = "";
@@ -584,7 +593,7 @@ async function startServer(dbPath) {
     const msg =
       "The Next.js server bundle was not found.\n\n" +
       "If you are a developer, run:\n  npm run build\n\nThen relaunch the app.";
-    dialog.showErrorBox("BuildVerse – Startup Error", msg);
+    dialog.showErrorBox("Upshift Garage – Startup Error", msg);
     app.quit();
     return;
   }
@@ -592,8 +601,8 @@ async function startServer(dbPath) {
   const nodeExe = findNodeExecutable();
   if (!nodeExe) {
     dialog.showErrorBox(
-      "BuildVerse – Node.js Not Found",
-      "BuildVerse requires Node.js to run its local server.\n\n" +
+      "Upshift Garage – Node.js Not Found",
+      "Upshift Garage requires Node.js to run its local server.\n\n" +
       "Please install Node.js from https://nodejs.org and restart the app."
     );
     app.quit();
@@ -605,7 +614,7 @@ async function startServer(dbPath) {
     ...process.env,
     PORT: String(PORT),
     // Always loopback-only — the local server is never exposed to the LAN
-    // directly. To reach BuildVerse from another device, self-host it via
+    // directly. To reach Upshift Garage from another device, self-host it via
     // Docker (see README) and use Settings → Server Connection instead.
     HOSTNAME: "127.0.0.1",
     NODE_ENV: "production",
@@ -647,7 +656,7 @@ async function startServer(dbPath) {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.loadURL(
           `data:text/html,<h2 style="font-family:sans-serif;color:#f97316;padding:2rem">
-            BuildVerse server stopped unexpectedly (exit&nbsp;${code}).
+            Upshift Garage server stopped unexpectedly (exit&nbsp;${code}).
             <br><br>Please restart the app.
           </h2>`
         );
@@ -733,7 +742,7 @@ function createWindow(targetUrl) {
         tray?.displayBalloon?.({
           iconType: "info",
           title: APP_NAME,
-          content: "BuildVerse is running in the system tray.",
+          content: "Upshift Garage is running in the system tray.",
         });
       } else {
         app.isQuitting = true;
@@ -758,7 +767,7 @@ function createTray() {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "Open BuildVerse",
+      label: "Open Upshift Garage",
       click: () => {
         if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
         else createWindow(currentTargetUrl || getServerTarget().url);
@@ -853,7 +862,7 @@ app.whenReady().then(async () => {
   } catch (err) {
     console.error("[buildverse] Fatal startup error:", err);
     dialog.showErrorBox(
-      "BuildVerse – Fatal Error",
+      "Upshift Garage – Fatal Error",
       `Failed to start:\n\n${err.message}`
     );
     app.quit();

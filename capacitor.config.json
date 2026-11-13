@@ -1,6 +1,6 @@
 {
   "appId": "net.kaiserhomelab.buildverse",
-  "appName": "BuildVerse",
+  "appName": "Upshift Garage",
   "webDir": "capacitor-app",
   "server": {
     "allowNavigation": ["*"]

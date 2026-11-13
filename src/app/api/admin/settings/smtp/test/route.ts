@@ -14,9 +14,9 @@ export async function POST(req: NextRequest) {
     const { to } = testSchema.parse(await req.json());
     const result = await sendMail({
       to,
-      subject: "BuildVerse SMTP test",
-      text: "If you're reading this, BuildVerse's SMTP settings are working.",
-      html: "<p>If you're reading this, BuildVerse's SMTP settings are working.</p>",
+      subject: "Upshift Garage SMTP test",
+      text: "If you're reading this, Upshift Garage's SMTP settings are working.",
+      html: "<p>If you're reading this, Upshift Garage's SMTP settings are working.</p>",
     });
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
     return NextResponse.json({ success: true });

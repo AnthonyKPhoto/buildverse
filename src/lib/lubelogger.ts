@@ -165,7 +165,7 @@ function parseInt2(val: unknown): number | null {
   return isNaN(n) ? null : n;
 }
 
-// Map a LubeLogger record to a BuildVerse MaintenanceLog payload
+// Map a LubeLogger record to a Upshift Garage MaintenanceLog payload
 export function mapRecord(
   rec: LLRecord,
   type: LLRecordType,

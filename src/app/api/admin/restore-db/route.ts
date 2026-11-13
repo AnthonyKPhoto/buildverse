@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
       const dbEntry = zip.getEntries().find(e => normalizeEntryName(e.entryName) === `${zipRoot}buildverse.db`);
       if (!dbEntry) {
         return NextResponse.json(
-          { error: "That zip doesn't contain a buildverse.db — is this a BuildVerse transfer pack?" },
+          { error: "That zip doesn't contain a buildverse.db — is this a Upshift Garage transfer pack?" },
           { status: 400 }
         );
       }

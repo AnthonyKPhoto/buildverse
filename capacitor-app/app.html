@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
-  <title>BuildVerse</title>
+  <title>Upshift Garage</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -117,7 +117,7 @@
     <button id="back-btn" class="btn btn-ghost" onclick="Nav.back()" style="display:none">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
     </button>
-    <h1 class="page-title" id="page-title">BuildVerse</h1>
+    <h1 class="page-title" id="page-title">Upshift Garage</h1>
     <button class="btn btn-ghost" onclick="Nav.go('sync')" title="Sync">
       <svg id="sync-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
     </button>
@@ -187,7 +187,7 @@ const Nav = {
 
     switch (S.page) {
       case "loading":
-        title.textContent = "BuildVerse";
+        title.textContent = "Upshift Garage";
         content.innerHTML = Views.loading();
         break;
 
@@ -243,7 +243,7 @@ const Views = {
       return `<div class="empty">
         ${svgIcon('<path d="M19 17H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2z"/><path d="M3 11h18"/><circle cx="7.5" cy="16.5" r="1.5"/><circle cx="16.5" cy="16.5" r="1.5"/>', 48)}
         <h3>No vehicles loaded</h3>
-        <p>Sync with your BuildVerse server or cloud provider to load your garage data.</p>
+        <p>Sync with your Upshift Garage server or cloud provider to load your garage data.</p>
         <button class="btn btn-primary" style="width:auto;padding:12px 28px" onclick="Nav.go('sync')">Open Sync Settings</button>
       </div>`;
     }
@@ -467,7 +467,7 @@ const Views = {
     const lastSync = S.lastSync ? new Date(S.lastSync).toLocaleString() : "Never";
 
     const methods = [
-      { id:"server", label:"BuildVerse Server", desc:"Connect directly via LAN or your remote access URL." },
+      { id:"server", label:"Upshift Garage Server", desc:"Connect directly via LAN or your remote access URL." },
       { id:"webdav", label:"WebDAV",            desc:"Nextcloud, OneDrive, Synology, or any WebDAV service." },
       { id:"gdrive", label:"Google Drive",      desc:"Your own Google account — requires a Client ID." },
     ];

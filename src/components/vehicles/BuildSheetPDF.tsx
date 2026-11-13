@@ -179,7 +179,7 @@ export function BuildSheetDocument({
 
   const Footer = () => (
     <View style={mk.footer} fixed>
-      <Text style={mk.footerText}>BuildVerse — {vehicleTitle}</Text>
+      <Text style={mk.footerText}>Upshift Garage — {vehicleTitle}</Text>
       <Text style={mk.footerText}>
         Generated {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
       </Text>
@@ -188,7 +188,7 @@ export function BuildSheetDocument({
   );
 
   return (
-    <Document title={`${vehicleTitle} — Build Sheet`} author="BuildVerse">
+    <Document title={`${vehicleTitle} — Build Sheet`} author="Upshift Garage">
       <Page size="A4" style={mk.page}>
 
         {/* Header */}

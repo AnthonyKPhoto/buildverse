@@ -50,7 +50,7 @@ export function SetupForm() {
           <div className="w-16 h-16 rounded-2xl bg-theme/10 border border-theme/20 flex items-center justify-center mx-auto mb-4">
             <UserPlus className="w-7 h-7 text-theme" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Welcome to BuildVerse</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Welcome to Upshift Garage</h1>
           <p className="text-sm text-muted-foreground mt-1">
             You're the first one here — create the admin account
           </p>

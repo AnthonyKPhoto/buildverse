@@ -243,7 +243,7 @@ export function buildAlertEmail(items: AlertItem[], appUrl?: string) {
         return `• [${tag(i)}] ${i.title}\n  ${money(i.price)}${was}${tgt}\n  ${i.url}`;
       })
       .join("\n\n") + (appUrl ? `\n\nOpen your tracker: ${appUrl}/products` : "") +
-    "\n\nYou're getting this because email price alerts are on in BuildVerse (Settings → Price Alerts).";
+    "\n\nYou're getting this because email price alerts are on in Upshift Garage (Settings → Price Alerts).";
 
   const rows = items
     .map((i) => {
@@ -264,7 +264,7 @@ export function buildAlertEmail(items: AlertItem[], appUrl?: string) {
     `<h2 style="margin:0 0 8px">${allRestock ? "Back in stock 📦" : `Price ${items.length === 1 ? "alert" : "alerts"} 🎯`}</h2>` +
     `<table style="width:100%;border-collapse:collapse">${rows}</table>` +
     (appUrl ? `<p><a href="${safeHref(appUrl + "/products")}">Open your tracker</a></p>` : "") +
-    `<p style="color:#888;font-size:12px">You're getting this because email price alerts are on in BuildVerse (Settings → Price Alerts).</p></div>`;
+    `<p style="color:#888;font-size:12px">You're getting this because email price alerts are on in Upshift Garage (Settings → Price Alerts).</p></div>`;
   return { subject, text, html };
 }
 

@@ -46,7 +46,7 @@ services:
 
     restart: unless-stopped
 
-  # ── Watchtower: auto-update BuildVerse when a new image is published ──────────
+  # ── Watchtower: auto-update Upshift Garage when a new image is published ──────────
   # SECURITY NOTE: mounting docker.sock gives this container root-equivalent
   # control of the host. Delete this service and update manually
   # (`docker compose pull && docker compose up -d`) if that's not acceptable.

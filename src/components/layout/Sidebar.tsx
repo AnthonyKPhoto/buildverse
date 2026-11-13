@@ -126,7 +126,7 @@ export function Sidebar() {
         });
       } else if (info.status === "downloaded") {
         toast({
-          title: `BuildVerse v${info.version} ready`,
+          title: `Upshift Garage v${info.version} ready`,
           description: "Click 'Restart to install' in the sidebar.",
           duration: 8000,
         });
@@ -150,10 +150,10 @@ export function Sidebar() {
         className="flex items-center gap-3 px-5 h-16 border-b border-border shrink-0"
         style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
       >
-        <Image src="/logo.svg" alt="BuildVerse" width={34} height={34} className="rounded-xl shrink-0 ring-1 ring-white/10 shadow-md shadow-black/20" />
+        <Image src="/logo.svg" alt="Upshift Garage" width={34} height={34} className="rounded-xl shrink-0 ring-1 ring-white/10 shadow-md shadow-black/20" />
         <div className="leading-none">
           <p className="font-semibold text-sm tracking-tight">
-            Build<span className="text-theme">Verse</span>
+            Upshift<span className="text-theme"> Garage</span>
           </p>
           <p className="text-2xs text-muted-foreground mt-0.5">Mod Manager</p>
         </div>
@@ -298,7 +298,7 @@ export function Sidebar() {
         {/* Renders nothing in local/Electron mode — server mode only */}
         <AccountMenu className="px-3 py-2 mt-1 border-t border-border/60 pt-2.5" />
         <p className="text-2xs text-muted-foreground/50 px-3 pt-1 pb-0.5">
-          BuildVerse
+          Upshift Garage
         </p>
       </div>
     </aside>

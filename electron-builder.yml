@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# BuildVerse — electron-builder packaging configuration
+# Upshift Garage — electron-builder packaging configuration
 #
 # Build locally:    npm run package:win     (Windows)
 #                    npm run package:mac     (must run on a Mac)
@@ -9,9 +9,11 @@
 # Build via CI:     push a version tag (e.g. v1.0.0) → GitHub Actions builds both
 # ─────────────────────────────────────────────────────────────────────────────
 
+# NOTE: appId and the data folder (%APPDATA%\BuildVerse, pinned in electron/main.js) intentionally
+# keep the original name — changing either would orphan existing installs' data and update channel.
 appId: "com.buildverse.app"
-productName: "BuildVerse"
-copyright: "Copyright © 2026 BuildVerse"
+productName: "Upshift Garage"
+copyright: "Copyright © 2026 Upshift Garage"
 
 directories:
   output: "dist-electron"
@@ -92,7 +94,7 @@ win:
     - target: "portable"
       arch: ["x64"]
   # Per-user install — does NOT require UAC / admin rights.
-  # Installs to %LOCALAPPDATA%\Programs\BuildVerse  (same as Chrome, VS Code)
+  # Installs to %LOCALAPPDATA%\Programs\Upshift Garage  (same as Chrome, VS Code)
   requestedExecutionLevel: "asInvoker"
   extraResources:
     - from: "resources-extra/node.exe"
@@ -112,21 +114,21 @@ nsis:
   perMachine: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: "BuildVerse"
-  artifactName: "BuildVerse-Setup-${version}.exe"
+  shortcutName: "Upshift Garage"
+  artifactName: "UpshiftGarage-Setup-${version}.exe"
   # Optional: brand the installer sidebar (164×314 px BMP)
   # installerSidebar: "build/sidebar.bmp"
 
 # ── Portable (no install, run anywhere) ──────────────────────────────────────
 portable:
-  artifactName: "BuildVerse-${version}-Portable.exe"
+  artifactName: "UpshiftGarage-${version}-Portable.exe"
 
 # ── macOS ─────────────────────────────────────────────────────────────────────
 # Must be built on a Mac (npm run package:mac) or the macos CI runners — the
 # bundled Node runtime and Prisma query engine are per-arch/per-OS. CI builds
 # x64 and arm64 on separate runners (see .github/workflows/release.yml).
 # UNSIGNED by default: first launch needs right-click → Open (or
-# `xattr -cr /Applications/BuildVerse.app`). To sign + notarize, set
+# `xattr -cr /Applications/Upshift Garage.app`). To sign + notarize, set
 # CSC_LINK / CSC_KEY_PASSWORD / APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
 # APPLE_TEAM_ID and remove `identity: null`.
 mac:
@@ -141,10 +143,10 @@ mac:
       to: "node"
     - from: "public/icon-512.png"
       to: "icon.png"
-  artifactName: "BuildVerse-${version}-mac-${arch}.${ext}"
+  artifactName: "UpshiftGarage-${version}-mac-${arch}.${ext}"
 
 dmg:
-  title: "BuildVerse ${version}"
+  title: "Upshift Garage ${version}"
 
 # ── Linux ─────────────────────────────────────────────────────────────────────
 linux:
@@ -161,11 +163,11 @@ linux:
       to: "node"
 
 appImage:
-  artifactName: "BuildVerse-${version}.AppImage"
+  artifactName: "UpshiftGarage-${version}.AppImage"
 
 deb:
-  maintainer: "BuildVerse <noreply@buildverse.app>"
-  artifactName: "buildverse_${version}_amd64.deb"
+  maintainer: "Upshift Garage <noreply@users.noreply.github.com>"
+  artifactName: "upshift-garage_${version}_amd64.deb"
 
 # ── Auto-update feed (electron-updater reads app-update.yml embedded in the package) ──
 publish:

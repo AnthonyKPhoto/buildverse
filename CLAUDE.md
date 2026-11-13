@@ -1,4 +1,6 @@
-# BuildVerse — Claude Code Handoff
+# Upshift Garage — Claude Code Handoff
+
+> **Naming:** the product was renamed from "BuildVerse" to "Upshift Garage". User-visible text uses the new name (`src/lib/app-info.ts`), but these identifiers deliberately keep the old one so existing installs keep working: the desktop data folder `…/BuildVerse` (pinned via `app.setPath` in `electron/main.js`), `buildverse.db` / `buildverse-*.db` file names, `BUILDVERSE_DATA_DIR`, the electron `appId`, the repo name, and the Docker image path.
 
 ## What this is
 A local-first vehicle modification manager. Users plan, track, budget, and share car builds.
@@ -194,9 +196,9 @@ route. Admins manage grants from **Settings → Access & Sync → Vehicle Access
 
 ---
 
-## Server-as-source-of-truth (replaces the old Google Drive / WebDAV / "BuildVerse Server" picker)
+## Server-as-source-of-truth (replaces the old Google Drive / WebDAV / "Upshift Garage Server" picker)
 
-The desktop Settings → Access & Sync tab used to offer a Google Drive / WebDAV / "BuildVerse Server"
+The desktop Settings → Access & Sync tab used to offer a Google Drive / WebDAV / "Upshift Garage Server"
 sync-method picker. That's gone. The model now: a self-hosted Docker server is the one live database;
 the Electron desktop app can either stay fully local (default, unchanged) or switch to **Connect to
 Server** mode, in which case it skips spawning its own local server entirely and just points its

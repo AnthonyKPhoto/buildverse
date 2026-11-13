@@ -104,7 +104,7 @@ function SmtpCard({ canEdit, onSaved, startOpen }: { canEdit: boolean; onSaved: 
             <label className="block"><span className="text-xs text-muted-foreground">Password</span>
               <input className={input} type="password" disabled={!canEdit} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} placeholder={hasPassword ? "•••••••• (unchanged)" : ""} autoComplete="new-password" /></label>
             <label className="block"><span className="text-xs text-muted-foreground">From</span>
-              <input className={input} required disabled={!canEdit} value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} placeholder="BuildVerse <you@example.com>" /></label>
+              <input className={input} required disabled={!canEdit} value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} placeholder="Upshift Garage <you@example.com>" /></label>
           </div>
           <div className="flex items-center justify-between gap-3 pt-1">
             <label className="flex items-center gap-2 text-sm"><Switch on={f.secure} disabled={!canEdit} onChange={(v) => setF({ ...f, secure: v })} label="Implicit TLS" />
@@ -215,7 +215,7 @@ export function PriceAlertsSettings() {
           <h3 className="font-semibold text-sm">Automatic price checks</h3>
         </div>
         <div className="px-5 py-1">
-          <Row label="Check prices in the background" desc="Keeps prices fresh even when BuildVerse isn't open on your screen. Needed for email alerts.">
+          <Row label="Check prices in the background" desc="Keeps prices fresh even when Upshift Garage isn't open on your screen. Needed for email alerts.">
             <Switch on={s.autoCheck} disabled={ro} onChange={(v) => save({ autoCheck: v })} label="Automatic checks" />
           </Row>
           <Row label="How often" desc="Each product is re-checked this often. Longer is gentler on the shops." last>

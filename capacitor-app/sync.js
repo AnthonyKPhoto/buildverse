@@ -1,4 +1,4 @@
-// BuildVerse Sync Manager — supports Server, WebDAV, Google Drive
+// Upshift Garage Sync Manager — supports Server, WebDAV, Google Drive
 const BvSync = {
 
   // ── Config ─────────────────────────────────────────────────────────────────

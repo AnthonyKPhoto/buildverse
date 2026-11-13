@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("🌱 Seeding BuildVerse demo data…");
+  console.log("🌱 Seeding Upshift Garage demo data…");
 
   // Vehicle — 2002 Honda S2000
   const s2000 = await prisma.vehicle.create({

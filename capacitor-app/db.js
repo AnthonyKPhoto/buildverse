@@ -1,4 +1,4 @@
-// BuildVerse IndexedDB wrapper
+// Upshift Garage IndexedDB wrapper
 const DB_NAME    = "buildverse-offline";
 const DB_VERSION = 1;
 

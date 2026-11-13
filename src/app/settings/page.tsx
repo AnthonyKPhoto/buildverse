@@ -345,7 +345,7 @@ export default function SettingsPage() {
     await window.electronAPI!.prefs.set({ serverMode: mode, serverUrl });
     setServerMode(mode);
     setRestartNeeded(true);
-    toast({ title: mode === "remote" ? "Server connection saved" : "Switched to local mode", description: "Restart BuildVerse to apply." });
+    toast({ title: mode === "remote" ? "Server connection saved" : "Switched to local mode", description: "Restart Upshift Garage to apply." });
   };
 
   const signOut = async () => {
@@ -548,7 +548,7 @@ export default function SettingsPage() {
           )
         : [];
       const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), version: "1.0", vehicles, products }, null, 2)], { type: "application/json" });
-      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `buildverse-export-${new Date().toISOString().slice(0, 10)}.json` });
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `upshift-garage-export-${new Date().toISOString().slice(0, 10)}.json` });
       a.click(); URL.revokeObjectURL(a.href);
       toast({ title: "Exported successfully" });
     } catch { toast({ title: "Export failed", variant: "destructive" }); }
@@ -611,7 +611,7 @@ export default function SettingsPage() {
         a.href = url;
         const disposition = res.headers.get("Content-Disposition") ?? "";
         const match = disposition.match(/filename="?([^"]+)"?/);
-        a.download = match?.[1] ?? "buildverse-export.zip";
+        a.download = match?.[1] ?? "upshift-garage-export.zip";
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -777,7 +777,7 @@ export default function SettingsPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-theme/5 pointer-events-none" />
         <div className="absolute top-0 right-0 w-72 h-36 bg-theme/8 rounded-full blur-3xl -translate-y-8 translate-x-8 pointer-events-none" />
         <div className="relative">
-          <p className="text-xs font-medium text-muted-foreground/60 tracking-wider uppercase mb-1">BuildVerse</p>
+          <p className="text-xs font-medium text-muted-foreground/60 tracking-wider uppercase mb-1">Upshift Garage</p>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-sm text-muted-foreground mt-1">Appearance, price alerts, remote access, integrations &amp; data</p>
         </div>
@@ -787,7 +787,7 @@ export default function SettingsPage() {
       {restartNeeded && (
         <div className="mb-6 flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-sm text-amber-400">
           <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>Restart BuildVerse to apply remote access changes.</span>
+          <span>Restart Upshift Garage to apply remote access changes.</span>
           <div className="ml-auto flex items-center gap-2">
             {window.electronAPI?.restart && (
               <button
@@ -947,7 +947,7 @@ export default function SettingsPage() {
                 </Section>
               )}
 
-              <Section title="About BuildVerse" icon={Zap}>
+              <Section title="About Upshift Garage" icon={Zap}>
                 <Row label="Version">
                   <span className="text-xs font-mono bg-secondary border border-border px-2 py-1 rounded-md">
                     v{appInfo?.version ?? health?.version ?? "…"}
@@ -999,7 +999,7 @@ export default function SettingsPage() {
                     <span className="text-muted-foreground">
                       {updateStatus.status === "idle" && "Click 'Check' to look for updates"}
                       {updateStatus.status === "checking" && "Checking for updates…"}
-                      {updateStatus.status === "current" && "BuildVerse is up to date"}
+                      {updateStatus.status === "current" && "Upshift Garage is up to date"}
                       {updateStatus.status === "available" && (() => { const s = updateStatus as { status: "available"; version: string; manual?: boolean }; return s.manual ? `v${s.version} available` : `v${s.version} available — downloading…`; })()}
                       {updateStatus.status === "downloading" && `Downloading… ${(updateStatus as { status: "downloading"; percent: number }).percent}%`}
                       {updateStatus.status === "downloaded" && `v${(updateStatus as { status: "downloaded"; version: string }).version} ready — restart to install`}
@@ -1023,7 +1023,7 @@ export default function SettingsPage() {
               {isElectron && (
                 <Section title="Server Connection" icon={Cloud}>
                   <p className="text-xs text-muted-foreground mb-3">
-                    Point BuildVerse at a self-hosted server so this PC and your phone share
+                    Point Upshift Garage at a self-hosted server so this PC and your phone share
                     the same live data. Leave disconnected to keep everything local to this PC.
                   </p>
                   <div className="space-y-3">
@@ -1032,7 +1032,7 @@ export default function SettingsPage() {
                         type="url"
                         value={serverUrl}
                         onChange={e => { setServerUrl(e.target.value); setTestStatus("idle"); }}
-                        placeholder="https://buildverse.yourdomain.com"
+                        placeholder="https://garage.yourdomain.com"
                         className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
                       />
                       <Btn onClick={testServerConnection} disabled={!serverUrl || testStatus === "testing"}>
@@ -1270,7 +1270,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="col-span-2">
                         <label className="text-xs font-semibold text-muted-foreground uppercase tracking-widest block mb-1.5">From address</label>
-                        <input type="text" required value={smtpFrom} onChange={e => setSmtpFrom(e.target.value)} placeholder="BuildVerse <noreply@example.com>"
+                        <input type="text" required value={smtpFrom} onChange={e => setSmtpFrom(e.target.value)} placeholder="Upshift Garage <noreply@example.com>"
                           className="w-full px-3 py-2 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring" />
                       </div>
                     </div>
@@ -1336,7 +1336,7 @@ export default function SettingsPage() {
                   <p className="text-sm text-muted-foreground">
                     {health?.mode === "server"
                       ? "This connection isn't signed in as a specific user (e.g. a loopback/local request), so there's nothing personalized to show here. Sign in normally to see your account and, if you're an admin, user management."
-                      : "This browser is talking to a local, single-machine instance of BuildVerse — there's nothing to configure here. Self-host BuildVerse with Docker to get a shared server that this page, the desktop app, and the Android app can all connect to (see the README)."}
+                      : "This browser is talking to a local, single-machine instance of Upshift Garage — there's nothing to configure here. Self-host Upshift Garage with Docker to get a shared server that this page, the desktop app, and the Android app can all connect to (see the README)."}
                   </p>
                 </Section>
               )}
@@ -1388,7 +1388,7 @@ export default function SettingsPage() {
                 <Row label="Export Data" desc="Download all vehicles, mods & products as JSON">
                   <Btn onClick={handleExport}><Download className="w-3.5 h-3.5" /> Export JSON</Btn>
                 </Row>
-                <Row label="Import Data" desc="Restore from a BuildVerse JSON export file">
+                <Row label="Import Data" desc="Restore from a Upshift Garage JSON export file">
                   <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
                   <Btn onClick={() => importRef.current?.click()} disabled={importing}>
                     {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
@@ -1405,7 +1405,7 @@ export default function SettingsPage() {
                   </Row>
                 )}
                 {(isElectron && serverMode === "local") || !isElectron ? (
-                  <Row label="Export Transfer Pack" desc="Full ZIP archive — use to move BuildVerse to another computer">
+                  <Row label="Export Transfer Pack" desc="Full ZIP archive — use to move Upshift Garage to another computer">
                     <Btn onClick={handleExportZip} disabled={zipExporting}>
                       {zipExporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
                       {zipExporting ? "Exporting…" : "Export Pack"}

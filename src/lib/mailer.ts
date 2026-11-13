@@ -89,13 +89,13 @@ export async function sendMail(opts: { to: string; subject: string; text: string
 export async function sendPasswordResetEmail(to: string, username: string, resetUrl: string) {
   return sendMail({
     to,
-    subject: "Reset your BuildVerse password",
+    subject: "Reset your Upshift Garage password",
     text:
-      `A password reset was requested for your BuildVerse account (${username}).\n\n` +
+      `A password reset was requested for your Upshift Garage account (${username}).\n\n` +
       `Reset it here: ${resetUrl}\n\n` +
       `This link expires in 30 minutes. If you didn't request this, you can ignore this email — your password won't change.`,
     html:
-      `<p>A password reset was requested for your BuildVerse account (<strong>${username}</strong>).</p>` +
+      `<p>A password reset was requested for your Upshift Garage account (<strong>${username}</strong>).</p>` +
       `<p><a href="${resetUrl}">Reset your password</a></p>` +
       `<p>This link expires in 30 minutes. If you didn't request this, you can ignore this email — your password won't change.</p>`,
   });
@@ -104,14 +104,14 @@ export async function sendPasswordResetEmail(to: string, username: string, reset
 export async function sendTempPasswordEmail(to: string, username: string, tempPassword: string, appUrl: string) {
   return sendMail({
     to,
-    subject: "Your BuildVerse account",
+    subject: "Your Upshift Garage account",
     text:
-      `An admin created a BuildVerse account for you.\n\n` +
+      `An admin created a Upshift Garage account for you.\n\n` +
       `Username: ${username}\n` +
       `Temporary password: ${tempPassword}\n\n` +
       `Sign in at ${appUrl} — you'll be asked to set your own password right away.`,
     html:
-      `<p>An admin created a BuildVerse account for you.</p>` +
+      `<p>An admin created a Upshift Garage account for you.</p>` +
       `<p><strong>Username:</strong> ${username}<br/>` +
       `<strong>Temporary password:</strong> <code>${tempPassword}</code></p>` +
       `<p>Sign in at <a href="${appUrl}">${appUrl}</a> — you'll be asked to set your own password right away.</p>`,
