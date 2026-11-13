@@ -17,6 +17,7 @@ import { AppearanceExtras } from "@/components/settings/AppearanceExtras";
 import { PriceAlertsSettings } from "@/components/settings/PriceAlertsSettings";
 import { AutoBackups } from "@/components/settings/AutoBackups";
 import { MaterialSwitcher } from "@/components/settings/MaterialSwitcher";
+import { GlassControls } from "@/components/settings/GlassControls";
 import { usePrefs } from "@/hooks/use-prefs";
 import {
   ACCENT_PRESETS, RADIUS_PRESETS, FONT_PRESETS,
@@ -839,6 +840,8 @@ export default function SettingsPage() {
           {section === "general" && (
             <>
               <MaterialSwitcher />
+
+              <GlassControls />
 
               <Section title="Appearance" icon={Palette}>
                 {glass && (

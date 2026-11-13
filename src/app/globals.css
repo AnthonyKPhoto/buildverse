@@ -176,25 +176,45 @@ html.light ::-webkit-scrollbar-thumb:hover { background: hsl(213, 20%, 58%); }
 
 html[data-material] {
   --g-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif;
-  --g-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  --g-thin-filter:  blur(12px);
-  --g-reg-filter:   blur(24px) saturate(180%);
-  --g-heavy-filter: blur(40px) saturate(200%);
+
+  /* User tuning (Settings → Glass & background). applyGlassVars() in src/lib/prefs.ts overrides these
+     inline; the values here are the neutral defaults. They are multipliers on each theme's base values. */
+  --g-k-opacity: 1;  --g-k-blur: 1;  --g-k-sat: 1;  --g-k-edge: 1;  --g-k-shadow: 1;
   --g-r-card: 24px;
-  --g-r-modal: 28px;
+  --g-r-modal: calc(var(--g-r-card) + 4px);
+  --g-bg-dim: 0.3;  --g-bg-blur: 0px;
+
+  /* Theme base values — each theme below overrides the ones that differ. */
+  --g-thin-blur: 12px;  --g-reg-blur: 24px;  --g-heavy-blur: 40px;
+  --g-thin-sat: 100%;   --g-reg-sat: 180%;    --g-heavy-sat: 200%;
+  --g-edge-rgb: 255 255 255;
+  --g-shadow-rgb: 0 0 0;  --g-shadow-a: 0.12;
   --g-gloss: none;
+
+  /* Derived — what the rules further down actually use. */
+  --g-thin-bg:  rgb(var(--g-thin-rgb)  / min(1, calc(var(--g-thin-a)  * var(--g-k-opacity))));
+  --g-reg-bg:   rgb(var(--g-reg-rgb)   / min(1, calc(var(--g-reg-a)   * var(--g-k-opacity))));
+  --g-heavy-bg: rgb(var(--g-heavy-rgb) / min(1, calc(var(--g-heavy-a) * var(--g-k-opacity))));
+  --g-border:    rgb(var(--g-edge-rgb) / min(1, calc(var(--g-edge-a)    * var(--g-k-edge))));
+  --g-border-hi: rgb(var(--g-edge-rgb) / min(1, calc(var(--g-edge-hi-a) * var(--g-k-edge))));
+  --g-shine:     rgb(255 255 255       / min(1, calc(var(--g-shine-a)   * var(--g-k-edge))));
+  --g-shadow: 0 calc(8px * var(--g-k-shadow)) calc(32px * var(--g-k-shadow))
+              rgb(var(--g-shadow-rgb) / min(1, calc(var(--g-shadow-a) * var(--g-k-shadow))));
+  --g-thin-filter:  blur(calc(var(--g-thin-blur)  * var(--g-k-blur)));
+  --g-reg-filter:   blur(calc(var(--g-reg-blur)   * var(--g-k-blur))) saturate(calc(var(--g-reg-sat)   * var(--g-k-sat)));
+  --g-heavy-filter: blur(calc(var(--g-heavy-blur) * var(--g-k-blur))) saturate(calc(var(--g-heavy-sat) * var(--g-k-sat)));
+
   background-attachment: fixed;
 }
 
 /* ── Light Frosted — airy white translucent glass over a pastel mesh ──────── */
 html[data-material="light-frosted"] {
+  --g-thin-rgb: 255 255 255;  --g-thin-a: 0.15;
+  --g-reg-rgb:  255 255 255;  --g-reg-a:  0.25;
+  --g-heavy-rgb:255 255 255;  --g-heavy-a:0.45;
+  --g-edge-a: 0.35;  --g-edge-hi-a: 0.85;  --g-shine-a: 0.70;
+  --g-dim-rgb: 255 255 255;   /* veil over a custom picture: white, since text here is dark */
   color-scheme: light;
-  --g-thin-bg:  rgba(255, 255, 255, 0.15);
-  --g-reg-bg:   rgba(255, 255, 255, 0.25);
-  --g-heavy-bg: rgba(255, 255, 255, 0.45);
-  --g-border:    rgba(255, 255, 255, 0.35);
-  --g-border-hi: rgba(255, 255, 255, 0.85);
-  --g-shine:     rgba(255, 255, 255, 0.70);
   --g-scrim: rgba(60, 70, 110, 0.22);
   --g-base: #e8ebff;
   --g-mesh:
@@ -215,14 +235,13 @@ html[data-material="light-frosted"] {
 
 /* ── Dark Frosted — deep smoked obsidian glass over a dark, glowing mesh ──── */
 html[data-material="dark-frosted"] {
+  --g-thin-rgb: 20 20 25;  --g-thin-a: 0.38;
+  --g-reg-rgb:  20 20 25;  --g-reg-a:  0.55;
+  --g-heavy-rgb:20 20 25;  --g-heavy-a:0.72;
+  --g-edge-a: 0.20;  --g-edge-hi-a: 0.42;  --g-shine-a: 0.22;
+  --g-shadow-a: 0.38;
+  --g-dim-rgb: 0 0 0;
   color-scheme: dark;
-  --g-thin-bg:  rgba(20, 20, 25, 0.38);
-  --g-reg-bg:   rgba(20, 20, 25, 0.55);
-  --g-heavy-bg: rgba(20, 20, 25, 0.72);
-  --g-border:    rgba(255, 255, 255, 0.20);
-  --g-border-hi: rgba(255, 255, 255, 0.42);
-  --g-shine:     rgba(255, 255, 255, 0.22);
-  --g-shadow: 0 8px 32px rgba(0, 0, 0, 0.38);
   --g-scrim: rgba(0, 0, 8, 0.45);
   --g-base: #06060c;
   --g-mesh:
@@ -242,18 +261,16 @@ html[data-material="dark-frosted"] {
 
 /* ── Clear Crystal — high transparency, low blur, sharp glassy reflections ── */
 html[data-material="clear-crystal"] {
+  --g-thin-rgb: 70 50 160;   --g-thin-a: 0.14;
+  --g-reg-rgb:  56 36 150;   --g-reg-a:  0.24;
+  --g-heavy-rgb:48 28 135;   --g-heavy-a:0.40;
+  --g-edge-a: 0.35;  --g-edge-hi-a: 0.80;  --g-shine-a: 0.60;
+  --g-shadow-rgb: 8 4 40;  --g-shadow-a: 0.28;
+  --g-thin-blur: 5px;  --g-reg-blur: 9px;  --g-heavy-blur: 16px;
+  --g-reg-sat: 170%;   --g-heavy-sat: 190%;
+  --g-dim-rgb: 10 6 40;
   color-scheme: dark;
   /* a faint violet tint (not pure white) keeps white text readable over the brightest mesh colours */
-  --g-thin-bg:  rgba(70, 50, 160, 0.14);
-  --g-reg-bg:   rgba(56, 36, 150, 0.24);
-  --g-heavy-bg: rgba(48, 28, 135, 0.40);
-  --g-border:    rgba(255, 255, 255, 0.35);
-  --g-border-hi: rgba(255, 255, 255, 0.80);
-  --g-shine:     rgba(255, 255, 255, 0.60);
-  --g-shadow: 0 8px 32px rgba(8, 4, 40, 0.28);
-  --g-thin-filter:  blur(5px);
-  --g-reg-filter:   blur(9px) saturate(170%);
-  --g-heavy-filter: blur(16px) saturate(190%);
   --g-gloss: linear-gradient(125deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.06) 32%, rgba(255,255,255,0) 52%, rgba(255,255,255,0.10) 100%);
   --g-scrim: rgba(12, 6, 50, 0.30);
   --g-base: #2a1672;
@@ -301,6 +318,20 @@ html[data-material] body::after {
 @keyframes bv-orbs {
   from { transform: translate3d(-3%, -2%, 0) scale(1); }
   to   { transform: translate3d(4%, 3%, 0) scale(1.08); }
+}
+
+/* The user's own picture replaces the mesh. body::after becomes the tint laid over it, and
+   body::before is oversized so blurring the picture doesn't leave soft, transparent edges. */
+html[data-material][data-bg="image"] body::before {
+  background: var(--g-bg-image) center / cover no-repeat;
+  inset: calc(var(--g-bg-blur) * -2);
+  filter: blur(var(--g-bg-blur));
+}
+html[data-material][data-bg="image"] body::after {
+  inset: 0;
+  animation: none;
+  filter: none;
+  background: rgb(var(--g-dim-rgb) / var(--g-bg-dim));
 }
 
 /* Decorative opaque gradients (page hero banners) would hide the mesh */

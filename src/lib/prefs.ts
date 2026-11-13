@@ -7,6 +7,7 @@ export type UiScale = "compact" | "default" | "large";
 export type SidebarWidth = "narrow" | "default" | "wide";
 export type DateFormat = "us" | "eu" | "iso";
 export type Material = "classic" | "light-frosted" | "dark-frosted" | "clear-crystal";
+export type BgMode = "mesh" | "image";
 export type Currency = "USD" | "EUR" | "GBP" | "CAD" | "AUD" | "JPY";
 
 export interface Prefs {
@@ -18,6 +19,19 @@ export interface Prefs {
   dateFormat: DateFormat;
   /** Surface style: the original look, or one of three frosted-glass materials. */
   material: Material;
+
+  // ── Glass tuning (only visible in a frosted material). Percentages are multipliers on each theme's base values. ──
+  glassOpacity: number;     // % — how strong the glass tint is (lower = more see-through)
+  glassBlur: number;        // % — blur radius
+  glassSaturation: number;  // % — colour boost of what shows through
+  glassEdge: number;        // % — brightness of the specular border and top/left highlight
+  glassShadow: number;      // % — drop-shadow depth
+  glassRadius: number;      // px — card corner radius
+
+  // ── Background ──
+  bgMode: BgMode;           // the theme's gradient mesh, or the user's own picture
+  bgDim: number;            // % — tint laid over the picture (dark veil on dark themes, white veil on light)
+  bgBlur: number;           // px — blur applied to the picture itself
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -28,7 +42,23 @@ export const DEFAULT_PREFS: Prefs = {
   showCents: false,
   dateFormat: "us",
   material: "classic",
+  glassOpacity: 100, glassBlur: 100, glassSaturation: 100, glassEdge: 100, glassShadow: 100, glassRadius: 24,
+  bgMode: "mesh", bgDim: 30, bgBlur: 0,
 };
+
+/** Allowed range for each numeric glass/background preference (also enforced server-side via sanitizePrefs). */
+export const GLASS_LIMITS = {
+  glassOpacity:    { min: 30, max: 220, unit: "%" },
+  glassBlur:       { min: 0,  max: 250, unit: "%" },
+  glassSaturation: { min: 0,  max: 220, unit: "%" },
+  glassEdge:       { min: 0,  max: 250, unit: "%" },
+  glassShadow:     { min: 0,  max: 250, unit: "%" },
+  glassRadius:     { min: 6,  max: 44,  unit: "px" },
+  bgDim:           { min: 0,  max: 85,  unit: "%" },
+  bgBlur:          { min: 0,  max: 40,  unit: "px" },
+} as const;
+export type GlassKey = keyof typeof GLASS_LIMITS;
+export const GLASS_KEYS = Object.keys(GLASS_LIMITS) as GlassKey[];
 
 export const MATERIALS: { id: Material; label: string; hint: string; swatch: string; scheme: "light" | "dark" | "user" }[] = [
   { id: "classic",       label: "Classic",       hint: "Your current look — solid surfaces", swatch: "linear-gradient(135deg,#1b2333,#0a0e17)", scheme: "user" },
@@ -74,6 +104,13 @@ export function sanitizePrefs(input: unknown): Partial<Prefs> {
   if (typeof o.showCents === "boolean") out.showCents = o.showCents;
   if (DATE_FORMATS.some((x) => x.id === o.dateFormat)) out.dateFormat = o.dateFormat as DateFormat;
   if (MATERIALS.some((x) => x.id === o.material)) out.material = o.material as Material;
+  if (o.bgMode === "mesh" || o.bgMode === "image") out.bgMode = o.bgMode;
+  for (const k of GLASS_KEYS) {
+    const v = o[k];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      out[k] = Math.round(Math.min(GLASS_LIMITS[k].max, Math.max(GLASS_LIMITS[k].min, v)));
+    }
+  }
   return out;
 }
 
@@ -99,7 +136,62 @@ export function applyPrefs(prefs: Prefs) {
   root.classList.toggle("reduce-motion", prefs.reduceMotion);
   if (prefs.material === "classic") root.removeAttribute("data-material");
   else root.setAttribute("data-material", prefs.material);
+  applyGlassVars(prefs);
   syncSchemeClass(prefs);
+}
+
+/** Pushes the glass-tuning numbers and the background picture into CSS custom properties. */
+export function applyGlassVars(prefs: Prefs) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  const set = (k: string, v: string) => root.style.setProperty(k, v);
+  set("--g-k-opacity", String(prefs.glassOpacity / 100));
+  set("--g-k-blur", String(prefs.glassBlur / 100));
+  set("--g-k-sat", String(prefs.glassSaturation / 100));
+  set("--g-k-edge", String(prefs.glassEdge / 100));
+  set("--g-k-shadow", String(prefs.glassShadow / 100));
+  set("--g-r-card", `${prefs.glassRadius}px`);
+  set("--g-bg-dim", String(prefs.bgDim / 100));
+  set("--g-bg-blur", `${prefs.bgBlur}px`);
+
+  const img = prefs.material !== "classic" && prefs.bgMode === "image" ? getBackgroundImage() : null;
+  if (img) {
+    root.setAttribute("data-bg", "image");
+    set("--g-bg-image", `url("${img}")`);
+  } else {
+    root.removeAttribute("data-bg");
+    root.style.removeProperty("--g-bg-image");
+  }
+}
+
+// ── The user's own background picture ─────────────────────────────────────────
+// Kept in THIS browser's localStorage only (never uploaded): it's large, and the
+// mere preferences (mode / tint / blur) are what follow the account. It's a data
+// URL so the inline first-paint script in layout.tsx can apply it with no flash.
+const BG_KEY = "bv-bg-image";
+// Only the formats our own encoder produces — nothing that could carry markup or break out of url("…").
+const SAFE_BG = /^data:image\/(jpeg|webp|png);base64,[A-Za-z0-9+/=]+$/;
+
+export function getBackgroundImage(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = localStorage.getItem(BG_KEY);
+    return v && SAFE_BG.test(v) ? v : null;
+  } catch { return null; }
+}
+
+/** Saves (or clears) the picture. Returns false if the browser refused (storage quota). */
+export function setBackgroundImage(dataUrl: string | null): boolean {
+  try {
+    if (dataUrl === null) localStorage.removeItem(BG_KEY);
+    else {
+      if (!SAFE_BG.test(dataUrl)) return false;
+      localStorage.setItem(BG_KEY, dataUrl);
+    }
+  } catch { return false; }
+  applyGlassVars(getPrefs());
+  notify();
+  return true;
 }
 
 /**
@@ -125,18 +217,33 @@ export function subscribePrefs(cb: () => void): () => void {
 const notify = () => { if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENT)); };
 
 /** Merge a change in, persist locally, apply it, and (best effort) save to the account. */
+// Dragging a slider fires dozens of changes a second — apply them instantly but send to the
+// account once, shortly after the last one (merging everything changed in between).
+let pendingRemote: Partial<Prefs> = {};
+let remoteTimer: ReturnType<typeof setTimeout> | undefined;
+function queueRemoteSave(partial: Partial<Prefs>) {
+  pendingRemote = { ...pendingRemote, ...partial };
+  if (remoteTimer) clearTimeout(remoteTimer);
+  remoteTimer = setTimeout(() => {
+    const body = pendingRemote;
+    pendingRemote = {};
+    // No-op (401, swallowed) in local mode / when signed out — same as the theme sync.
+    fetch("/api/user/theme", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prefs: body }),
+    }).catch(() => {});
+  }, 500);
+}
+
 export function setPrefs(partial: Partial<Prefs>) {
-  const next = { ...getPrefs(), ...sanitizePrefs(partial) };
+  const clean = sanitizePrefs(partial);
+  const next = { ...getPrefs(), ...clean };
   cached = next;
   try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* private mode etc. */ }
   applyPrefs(next);
   notify();
-  // No-op (401, swallowed) in local mode / when signed out — same as the theme sync.
-  fetch("/api/user/theme", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prefs: partial }),
-  }).catch(() => {});
+  queueRemoteSave(clean);
   return next;
 }
 

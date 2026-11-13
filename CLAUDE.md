@@ -326,6 +326,16 @@ lives at the bottom of `src/app/globals.css` and is scoped to `html[data-materia
   `usePrefs()` is in `src/hooks/use-prefs.ts` — keep React out of `prefs.ts` (server code imports it via `utils.ts`).
 - Contrast: the tokens were tuned against measured WCAG ratios (all key text ≥ 4.5:1 in the three glass modes). If you change
   a mesh colour or alpha, re-check — Clear Crystal in particular needs its violet tint to keep white text readable.
+- **Tuning + custom background** (`GlassControls.tsx`): sliders for opacity / blur / saturation / edge shine / shadow /
+  corner radius, plus the user's own picture with tint and blur. Every glass colour is a *channel + alpha* token
+  (`--g-reg-rgb` + `--g-reg-a`) and the derived `--g-*-bg` / `--g-*-filter` multiply by `--g-k-*` factors that
+  `applyGlassVars()` sets inline — so never hard-code an `rgba()` for glass; add/scale a token. Limits live in
+  `GLASS_LIMITS` and are enforced by `sanitizePrefs` (also on the server). Slider changes apply instantly but are saved to the
+  account debounced (`queueRemoteSave`).
+- The **picture** is stored only in this browser (`localStorage["bv-bg-image"]`, a JPEG data URL), never uploaded.
+  `processBackgroundFile()` (`src/lib/background-image.ts`) re-encodes it through a canvas (≤2560px, ≤2.4 MB, EXIF/GPS dropped),
+  and `getBackgroundImage()` only returns strings matching a strict `data:image/(jpeg|webp|png);base64,…` pattern. The inline
+  script in `layout.tsx` applies it before first paint — keep it backslash-free (it lives in a template literal).
 - `body::before` = the fixed gradient mesh, `body::after` = slow drifting orbs (off under reduce-motion).
 
 ## Logo & icons
