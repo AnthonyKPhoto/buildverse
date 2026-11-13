@@ -4,7 +4,13 @@ on:
   push:
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
+  # Manual run: publishes the image under the given version (and :latest) from `main`, without needing a git tag.
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish, without the v (e.g. 1.15.0). Required when running from a branch."
+        required: false
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -12,6 +18,8 @@ env:
 
 jobs:
   build-and-push:
+    # Tag pushes, or a manual run from main / a version tag — never from an arbitrary feature branch.
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,6 +28,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate version
+        if: github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/')
+        env:
+          VER_INPUT: ${{ inputs.version }}
+        run: |
+          if ! [[ "$VER_INPUT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "::error::A version like 1.2.3 is required when running from a branch"; exit 1; fi
+          pkg=$(grep -m1 '"version"' package.json | sed 's/.*: *"\(.*\)".*/\1/')
+          if [ "$pkg" != "$VER_INPUT" ]; then echo "::error::Publishing $VER_INPUT but package.json says $pkg"; exit 1; fi
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -41,6 +58,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest
+            type=raw,value=${{ inputs.version || github.ref_name }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

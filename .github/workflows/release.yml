@@ -24,6 +24,16 @@ on:
   push:
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
+  # Manual run ("Run workflow" button, or the API): releases the version given, from `main`. It creates the
+  # vX.Y.Z tag at that commit itself when the release is created, so no git tag push is needed. Used when
+  # a tag can't be pushed from where you are. Refuses to run from any other branch, and refuses a version
+  # that doesn't match package.json.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the v (e.g. 1.15.0) — must match package.json"
+        required: true
+        type: string
 
 permissions:
   contents: write   # required to create releases and upload assets
@@ -31,6 +41,7 @@ permissions:
 jobs:
   release:
     name: Package Windows installer
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 30
     # prisma/schema.prisma reads its datasource from DATABASE_URL (needed for
@@ -57,6 +68,17 @@ jobs:
           cache: "npm"
 
       # ── 3. Cache Electron & electron-builder downloads ───────────────────
+      - name: Validate release version
+        shell: bash
+        env:
+          VER_INPUT: ${{ inputs.version }}
+        run: |
+          ver="${VER_INPUT:-${GITHUB_REF_NAME#v}}"
+          if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "::error::'$ver' is not a version like 1.2.3"; exit 1; fi
+          pkg=$(grep -m1 '"version"' package.json | sed 's/.*: *"\(.*\)".*/\1/')
+          if [ "$pkg" != "$ver" ]; then echo "::error::Releasing $ver but package.json says $pkg — bump the version first"; exit 1; fi
+          echo "Releasing v$ver (package.json matches)"
+
       - name: Cache Electron binaries
         uses: actions/cache@v4
         with:
@@ -110,10 +132,12 @@ jobs:
           Write-Host "Bundled $nodePath ($((Get-Item $nodePath).Length) bytes)"
 
       # ── 8. Create GitHub Release and upload artifacts ─────────────────────
-      - name: Get version from tag
+      - name: Get version
         id: version
         shell: bash
-        run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        env:
+          VER_INPUT: ${{ inputs.version }}
+        run: echo "ver=${VER_INPUT:-${GITHUB_REF_NAME#v}}" >> "$GITHUB_OUTPUT"
 
       - name: Compose release notes
         shell: bash
@@ -163,6 +187,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: "Upshift Garage v${{ steps.version.outputs.ver }}"
+          tag_name: v${{ steps.version.outputs.ver }}
+          target_commitish: ${{ github.sha }}
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -174,6 +200,7 @@ jobs:
 
   release-linux:
     name: Package Linux AppImage + deb
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     # Runs after the Windows job so it appends to the release that job
     # creates, instead of both jobs racing to create it at the same time.
     needs: release
@@ -240,14 +267,18 @@ jobs:
           fi
           echo "Bundled $NODE_PATH ($(stat -c%s "$NODE_PATH") bytes)"
 
-      - name: Get version from tag
+      - name: Get version
         id: version
-        run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        env:
+          VER_INPUT: ${{ inputs.version }}
+        run: echo "ver=${VER_INPUT:-${GITHUB_REF_NAME#v}}" >> "$GITHUB_OUTPUT"
 
       - name: Upload Linux artifacts to the release
         uses: softprops/action-gh-release@v2
         with:
           name: "Upshift Garage v${{ steps.version.outputs.ver }}"
+          tag_name: v${{ steps.version.outputs.ver }}
+          target_commitish: ${{ github.sha }}
           draft: false
           prerelease: false
           fail_on_unmatched_files: false
@@ -258,6 +289,7 @@ jobs:
 
   release-mac:
     name: Package macOS (${{ matrix.arch }})
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     needs: release
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
@@ -317,14 +349,18 @@ jobs:
           fi
           echo "Bundled $NODE_PATH"
 
-      - name: Get version from tag
+      - name: Get version
         id: version
-        run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        env:
+          VER_INPUT: ${{ inputs.version }}
+        run: echo "ver=${VER_INPUT:-${GITHUB_REF_NAME#v}}" >> "$GITHUB_OUTPUT"
 
       - name: Upload macOS artifacts to the release
         uses: softprops/action-gh-release@v2
         with:
           name: "Upshift Garage v${{ steps.version.outputs.ver }}"
+          tag_name: v${{ steps.version.outputs.ver }}
+          target_commitish: ${{ github.sha }}
           draft: false
           prerelease: false
           fail_on_unmatched_files: false
