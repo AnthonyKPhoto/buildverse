@@ -6,6 +6,7 @@
 export type UiScale = "compact" | "default" | "large";
 export type SidebarWidth = "narrow" | "default" | "wide";
 export type DateFormat = "us" | "eu" | "iso";
+export type Material = "classic" | "light-frosted" | "dark-frosted" | "clear-crystal";
 export type Currency = "USD" | "EUR" | "GBP" | "CAD" | "AUD" | "JPY";
 
 export interface Prefs {
@@ -15,6 +16,8 @@ export interface Prefs {
   currency: Currency;
   showCents: boolean;
   dateFormat: DateFormat;
+  /** Surface style: the original look, or one of three frosted-glass materials. */
+  material: Material;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -24,7 +27,15 @@ export const DEFAULT_PREFS: Prefs = {
   currency: "USD",
   showCents: false,
   dateFormat: "us",
+  material: "classic",
 };
+
+export const MATERIALS: { id: Material; label: string; hint: string; swatch: string; scheme: "light" | "dark" | "user" }[] = [
+  { id: "classic",       label: "Classic",       hint: "Your current look — solid surfaces", swatch: "linear-gradient(135deg,#1b2333,#0a0e17)", scheme: "user" },
+  { id: "light-frosted", label: "Light Frosted", hint: "Airy white translucent glass",       swatch: "linear-gradient(135deg,#ffd1ea,#b9d7ff 55%,#c9f5dc)", scheme: "light" },
+  { id: "dark-frosted",  label: "Dark Frosted",  hint: "Smoked obsidian glass",              swatch: "linear-gradient(135deg,#7c3aed,#ec4899 50%,#0ea5e9)", scheme: "dark" },
+  { id: "clear-crystal", label: "Clear Crystal", hint: "Near-transparent, sharp reflections", swatch: "linear-gradient(135deg,#ff3d81,#ffb300 45%,#00d4ff)", scheme: "dark" },
+];
 
 export const UI_SCALES: { id: UiScale; label: string; fontSize: string }[] = [
   { id: "compact", label: "Compact", fontSize: "93.75%" },
@@ -62,6 +73,7 @@ export function sanitizePrefs(input: unknown): Partial<Prefs> {
   if (CURRENCIES.some((x) => x.id === o.currency)) out.currency = o.currency as Currency;
   if (typeof o.showCents === "boolean") out.showCents = o.showCents;
   if (DATE_FORMATS.some((x) => x.id === o.dateFormat)) out.dateFormat = o.dateFormat as DateFormat;
+  if (MATERIALS.some((x) => x.id === o.material)) out.material = o.material as Material;
   return out;
 }
 
@@ -85,7 +97,32 @@ export function applyPrefs(prefs: Prefs) {
   root.style.fontSize = UI_SCALES.find((s) => s.id === prefs.uiScale)?.fontSize ?? "100%";
   root.style.setProperty("--sidebar-width", `${SIDEBAR_WIDTHS.find((s) => s.id === prefs.sidebarWidth)?.px ?? 240}px`);
   root.classList.toggle("reduce-motion", prefs.reduceMotion);
+  if (prefs.material === "classic") root.removeAttribute("data-material");
+  else root.setAttribute("data-material", prefs.material);
+  syncSchemeClass(prefs);
 }
+
+/**
+ * Light/dark is normally the user's own "Color mode" choice. A frosted material
+ * dictates its own scheme (Light Frosted is light; the other two are dark), and the
+ * user's saved choice is restored when they go back to Classic.
+ */
+export function syncSchemeClass(prefs: Prefs = getPrefs()) {
+  if (typeof document === "undefined") return;
+  const m = MATERIALS.find((x) => x.id === prefs.material);
+  let saved = "dark";
+  try { saved = localStorage.getItem("bv-scheme") ?? "dark"; } catch { /* ignore */ }
+  const light = m && m.scheme !== "user" ? m.scheme === "light" : saved === "light";
+  document.documentElement.classList.toggle("light", light);
+}
+
+const EVENT = "bv-prefs-changed";
+/** Subscribe to preference changes (used by the usePrefs() hook in src/hooks/use-prefs.ts). */
+export function subscribePrefs(cb: () => void): () => void {
+  window.addEventListener(EVENT, cb);
+  return () => window.removeEventListener(EVENT, cb);
+}
+const notify = () => { if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENT)); };
 
 /** Merge a change in, persist locally, apply it, and (best effort) save to the account. */
 export function setPrefs(partial: Partial<Prefs>) {
@@ -93,6 +130,7 @@ export function setPrefs(partial: Partial<Prefs>) {
   cached = next;
   try { localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* private mode etc. */ }
   applyPrefs(next);
+  notify();
   // No-op (401, swallowed) in local mode / when signed out — same as the theme sync.
   fetch("/api/user/theme", {
     method: "PUT",
@@ -108,4 +146,5 @@ export function loadServerPrefs(server: unknown) {
   cached = merged;
   try { localStorage.setItem(KEY, JSON.stringify(merged)); } catch { /* ignore */ }
   applyPrefs(merged);
+  notify();
 }

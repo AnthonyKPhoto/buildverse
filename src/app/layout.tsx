@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var s=localStorage.getItem('bv-scheme');if(s==='light')document.documentElement.classList.add('light');var p=JSON.parse(localStorage.getItem('bv-prefs')||'{}');var r=document.documentElement;if(p.uiScale==='compact')r.style.fontSize='93.75%';if(p.uiScale==='large')r.style.fontSize='109.375%';if(p.sidebarWidth==='narrow')r.style.setProperty('--sidebar-width','208px');if(p.sidebarWidth==='wide')r.style.setProperty('--sidebar-width','280px');if(p.reduceMotion)r.classList.add('reduce-motion');}catch(e){}`,
+            __html: `try{var s=localStorage.getItem('bv-scheme');var p=JSON.parse(localStorage.getItem('bv-prefs')||'{}');var r=document.documentElement;var m=p.material;var glass=m==='light-frosted'||m==='dark-frosted'||m==='clear-crystal';if(glass)r.setAttribute('data-material',m);if(m==='light-frosted'||(!glass&&s==='light'))r.classList.add('light');if(p.uiScale==='compact')r.style.fontSize='93.75%';if(p.uiScale==='large')r.style.fontSize='109.375%';if(p.sidebarWidth==='narrow')r.style.setProperty('--sidebar-width','208px');if(p.sidebarWidth==='wide')r.style.setProperty('--sidebar-width','280px');if(p.reduceMotion)r.classList.add('reduce-motion');}catch(e){}`,
           }}
         />
       </head>

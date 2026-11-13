@@ -311,6 +311,23 @@ daily, keep 7. Admin-only API under `/api/admin/backups` (a backup contains pass
 `-wal`/`-shm`, and exits so the container restarts onto it. Backup names come from URLs: always go through
 `backupPath()` (strict allow-list), never `path.join` with the raw name.
 
+## Materials (frosted-glass themes)
+
+`Prefs.material` (`src/lib/prefs.ts`): `classic` (the original solid look, default) · `light-frosted` · `dark-frosted` ·
+`clear-crystal`. Set via the floating pill (`src/components/settings/MaterialSwitcher.tsx`, Settings → General) and
+synced per account like the other display prefs. A non-classic material sets `data-material` on `<html>`; **all glass CSS
+lives at the bottom of `src/app/globals.css` and is scoped to `html[data-material]`, so Classic is untouched.**
+
+- Three levels, like Apple's thin/regular/thick materials, driven by per-theme tokens (`--g-thin-bg`, `--g-reg-filter`,
+  `--g-heavy-bg`, `--g-border-hi`, `--g-mesh`…): *thin* = `bg-secondary`/`bg-muted`/inputs/pills, *regular* = `bg-card`,
+  *heavy* = sidebar/bottom nav, `[role=dialog|menu|listbox]`, `bg-popover`, toasts. Don't hand-style glass in components —
+  use the existing `bg-card` / `bg-secondary` classes and the CSS maps them. The `.btn` class on `Button` makes it a pill.
+- A material dictates light vs dark (`syncSchemeClass()`); the user's own Color mode is restored when they return to Classic.
+  `usePrefs()` is in `src/hooks/use-prefs.ts` — keep React out of `prefs.ts` (server code imports it via `utils.ts`).
+- Contrast: the tokens were tuned against measured WCAG ratios (all key text ≥ 4.5:1 in the three glass modes). If you change
+  a mesh colour or alpha, re-check — Clear Crystal in particular needs its violet tint to keep white text readable.
+- `body::before` = the fixed gradient mesh, `body::after` = slow drifting orbs (off under reduce-motion).
+
 ## Logo & icons
 
 One source of truth: **`public/logo.svg`** (512×512 rounded-square mark — garage outline, H-pattern gate with reverse

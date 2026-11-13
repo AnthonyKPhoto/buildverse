@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPrefs, applyPrefs, loadServerPrefs } from "@/lib/prefs";
+import { getPrefs, applyPrefs, loadServerPrefs, syncSchemeClass } from "@/lib/prefs";
 
 export const ACCENT_PRESETS = [
   { id: "blue",    label: "Blue",         value: "217 91% 60%",  hex: "#3b82f6" },
@@ -78,12 +78,9 @@ export function applyFont(id: string) {
 }
 
 export function applyScheme(id: string) {
-  if (id === "light") {
-    document.documentElement.classList.add("light");
-  } else {
-    document.documentElement.classList.remove("light");
-  }
   localStorage.setItem("bv-scheme", id);
+  // A frosted material overrides light/dark; syncSchemeClass() decides the final class.
+  syncSchemeClass();
 }
 
 // Best-effort push to the signed-in account's own record, so their look

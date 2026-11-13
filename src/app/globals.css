@@ -160,3 +160,270 @@ html.light ::-webkit-scrollbar-thumb:hover { background: hsl(213, 20%, 58%); }
 
 .animate-fade-in  { animation: fade-in  0.2s ease-out; }
 .animate-slide-up { animation: slide-up 0.25s ease-out; }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Frosted-glass materials  (Settings → Appearance → Material)
+   iOS 18 / visionOS-style translucent surfaces. Everything below is scoped to
+   html[data-material], so the Classic look is untouched when it's selected.
+
+   Three material levels, like Apple's thin / regular / thick materials:
+     thin    floating pills, chips, inputs, inner tiles
+     regular main cards and panels
+     heavy   navigation (sidebar, tab bar), modals, menus, toasts
+   Each theme only defines the tokens; the rules further down apply them.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+html[data-material] {
+  --g-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  --g-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --g-thin-filter:  blur(12px);
+  --g-reg-filter:   blur(24px) saturate(180%);
+  --g-heavy-filter: blur(40px) saturate(200%);
+  --g-r-card: 24px;
+  --g-r-modal: 28px;
+  --g-gloss: none;
+  background-attachment: fixed;
+}
+
+/* ── Light Frosted — airy white translucent glass over a pastel mesh ──────── */
+html[data-material="light-frosted"] {
+  color-scheme: light;
+  --g-thin-bg:  rgba(255, 255, 255, 0.15);
+  --g-reg-bg:   rgba(255, 255, 255, 0.25);
+  --g-heavy-bg: rgba(255, 255, 255, 0.45);
+  --g-border:    rgba(255, 255, 255, 0.35);
+  --g-border-hi: rgba(255, 255, 255, 0.85);
+  --g-shine:     rgba(255, 255, 255, 0.70);
+  --g-scrim: rgba(60, 70, 110, 0.22);
+  --g-base: #e8ebff;
+  --g-mesh:
+    radial-gradient(60% 55% at 10% 8%,  #ffb4d8 0%, transparent 62%),
+    radial-gradient(55% 50% at 92% 6%,  #a9d6ff 0%, transparent 60%),
+    radial-gradient(60% 55% at 86% 92%, #ffd3a6 0%, transparent 60%),
+    radial-gradient(55% 55% at 6%  88%, #b6f0cb 0%, transparent 60%),
+    radial-gradient(45% 45% at 50% 46%, #d9c6ff 0%, transparent 65%),
+    radial-gradient(40% 40% at 70% 40%, hsl(var(--theme) / 0.35) 0%, transparent 65%);
+  --foreground: 224 40% 10%;          --card-foreground: 224 40% 10%;
+  --popover-foreground: 224 40% 10%;  --accent-foreground: 224 40% 10%;
+  --secondary-foreground: 224 30% 18%;
+  --muted-foreground: 223 16% 30%;
+  --secondary: 0 0% 100%;  --muted: 0 0% 100%;  --accent: 0 0% 100%;
+  --border: 222 18% 52%;   --input: 222 18% 52%;
+  --card: 0 0% 100%;       --popover: 0 0% 100%;  --background: 232 100% 96%;
+}
+
+/* ── Dark Frosted — deep smoked obsidian glass over a dark, glowing mesh ──── */
+html[data-material="dark-frosted"] {
+  color-scheme: dark;
+  --g-thin-bg:  rgba(20, 20, 25, 0.38);
+  --g-reg-bg:   rgba(20, 20, 25, 0.55);
+  --g-heavy-bg: rgba(20, 20, 25, 0.72);
+  --g-border:    rgba(255, 255, 255, 0.20);
+  --g-border-hi: rgba(255, 255, 255, 0.42);
+  --g-shine:     rgba(255, 255, 255, 0.22);
+  --g-shadow: 0 8px 32px rgba(0, 0, 0, 0.38);
+  --g-scrim: rgba(0, 0, 8, 0.45);
+  --g-base: #06060c;
+  --g-mesh:
+    radial-gradient(55% 48% at 12% 8%,  rgba(124, 58, 237, 0.80) 0%, transparent 62%),
+    radial-gradient(50% 45% at 92% 12%, rgba(236, 72, 153, 0.60) 0%, transparent 60%),
+    radial-gradient(58% 52% at 88% 92%, rgba(14, 165, 233, 0.58) 0%, transparent 62%),
+    radial-gradient(52% 50% at 6%  90%, rgba(16, 185, 129, 0.42) 0%, transparent 62%),
+    radial-gradient(40% 40% at 55% 50%, hsl(var(--theme) / 0.30) 0%, transparent 65%);
+  --foreground: 220 25% 96%;          --card-foreground: 220 25% 96%;
+  --popover-foreground: 220 25% 96%;  --accent-foreground: 220 25% 96%;
+  --secondary-foreground: 220 20% 88%;
+  --muted-foreground: 220 14% 68%;
+  --secondary: 240 6% 20%;  --muted: 240 6% 18%;  --accent: 240 6% 24%;
+  --border: 220 12% 32%;    --input: 220 12% 32%;
+  --card: 240 8% 9%;        --popover: 240 8% 9%;  --background: 240 20% 4%;
+}
+
+/* ── Clear Crystal — high transparency, low blur, sharp glassy reflections ── */
+html[data-material="clear-crystal"] {
+  color-scheme: dark;
+  /* a faint violet tint (not pure white) keeps white text readable over the brightest mesh colours */
+  --g-thin-bg:  rgba(70, 50, 160, 0.14);
+  --g-reg-bg:   rgba(56, 36, 150, 0.24);
+  --g-heavy-bg: rgba(48, 28, 135, 0.40);
+  --g-border:    rgba(255, 255, 255, 0.35);
+  --g-border-hi: rgba(255, 255, 255, 0.80);
+  --g-shine:     rgba(255, 255, 255, 0.60);
+  --g-shadow: 0 8px 32px rgba(8, 4, 40, 0.28);
+  --g-thin-filter:  blur(5px);
+  --g-reg-filter:   blur(9px) saturate(170%);
+  --g-heavy-filter: blur(16px) saturate(190%);
+  --g-gloss: linear-gradient(125deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.06) 32%, rgba(255,255,255,0) 52%, rgba(255,255,255,0.10) 100%);
+  --g-scrim: rgba(12, 6, 50, 0.30);
+  --g-base: #2a1672;
+  --g-mesh:
+    linear-gradient(rgba(14, 8, 56, 0.34), rgba(14, 8, 56, 0.34)),
+    radial-gradient(60% 52% at 8%  6%,  #e4226d 0%, transparent 62%),
+    radial-gradient(55% 50% at 94% 8%,  #0aa8e6 0%, transparent 60%),
+    radial-gradient(62% 55% at 88% 94%, #f08400 0%, transparent 60%),
+    radial-gradient(56% 56% at 4%  92%, #6a30f0 0%, transparent 62%),
+    radial-gradient(46% 46% at 50% 48%, #2a5fe6 0%, transparent 66%),
+    radial-gradient(34% 34% at 30% 62%, hsl(var(--theme) / 0.50) 0%, transparent 66%);
+  --foreground: 0 0% 100%;            --card-foreground: 0 0% 100%;
+  --popover-foreground: 0 0% 100%;    --accent-foreground: 0 0% 100%;
+  --secondary-foreground: 0 0% 96%;
+  --muted-foreground: 225 60% 96%;
+  --secondary: 0 0% 100%;   --muted: 0 0% 100%;   --accent: 0 0% 100%;
+  --border: 220 40% 70%;    --input: 220 40% 70%;
+  --card: 250 40% 20%;      --popover: 250 40% 20%;  --background: 255 60% 14%;
+}
+
+/* ── Backdrop: the mesh the glass sits on ────────────────────────────────── */
+html[data-material] { background-color: var(--g-base); }
+html[data-material] body {
+  background: transparent !important;
+  font-family: var(--g-font) !important;
+}
+html[data-material] body::before {
+  content: "";
+  position: fixed; inset: 0; z-index: -2;
+  background: var(--g-mesh);
+  pointer-events: none;
+}
+/* Slowly drifting colour orbs under the glass so the blur always has something to blur */
+html[data-material] body::after {
+  content: "";
+  position: fixed; inset: -20%; z-index: -1;
+  background:
+    radial-gradient(circle at 25% 30%, hsl(var(--theme) / 0.28) 0, transparent 22%),
+    radial-gradient(circle at 78% 24%, rgba(255, 255, 255, 0.16) 0, transparent 20%),
+    radial-gradient(circle at 62% 78%, hsl(var(--theme) / 0.22) 0, transparent 24%);
+  filter: blur(40px);
+  animation: bv-orbs 38s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes bv-orbs {
+  from { transform: translate3d(-3%, -2%, 0) scale(1); }
+  to   { transform: translate3d(4%, 3%, 0) scale(1.08); }
+}
+
+/* Decorative opaque gradients (page hero banners) would hide the mesh */
+html[data-material] [class*="from-background"],
+html[data-material] [class*="to-background"] { background-image: none !important; }
+html[data-material] .fixed[class*="bg-background"] { background: transparent !important; }
+
+/* ── Typography: San Francisco-style system fonts ─────────────────────────── */
+html[data-material] h1, html[data-material] h2, html[data-material] h3,
+html[data-material] button, html[data-material] input,
+html[data-material] select, html[data-material] textarea { font-family: var(--g-font) !important; }
+html[data-material] h1, html[data-material] h2 { letter-spacing: -0.022em; }
+html[data-material="clear-crystal"] main,
+html[data-material="clear-crystal"] aside { text-shadow: 0 1px 2px rgba(10, 5, 50, 0.45); }
+
+/* ── Material levels ──────────────────────────────────────────────────────── */
+/* Regular: main cards and panels */
+html[data-material] [class*="bg-card"] {
+  background-color: var(--g-reg-bg) !important;
+  background-image: var(--g-gloss);
+  -webkit-backdrop-filter: var(--g-reg-filter); backdrop-filter: var(--g-reg-filter);
+  border-color: var(--g-border);
+  border-top-color: var(--g-border-hi); border-left-color: var(--g-border-hi);
+  box-shadow: var(--g-shadow), inset 0 1px 0 var(--g-shine), inset 1px 0 0 var(--g-shine);
+}
+html[data-material] [class*="bg-card"].rounded-xl,
+html[data-material] [class*="bg-card"].rounded-2xl,
+html[data-material] [class*="bg-card"].rounded-lg { border-radius: var(--g-r-card); }
+
+/* Thin: pills, chips, inputs, inner tiles */
+html[data-material] [class*="bg-secondary"],
+html[data-material] [class*="bg-muted"],
+html[data-material] input[class*="bg-background"],
+html[data-material] textarea[class*="bg-background"],
+html[data-material] select[class*="bg-background"] {
+  background-color: var(--g-thin-bg) !important;
+  -webkit-backdrop-filter: var(--g-thin-filter); backdrop-filter: var(--g-thin-filter);
+  border-color: var(--g-border);
+  border-top-color: var(--g-border-hi); border-left-color: var(--g-border-hi);
+  box-shadow: inset 0 1px 0 var(--g-shine);
+}
+/* A glass tile inside a glass card needn't blur again (and is cheaper) — just tint */
+html[data-material] [class*="bg-card"] [class*="bg-secondary"],
+html[data-material] [class*="bg-card"] [class*="bg-muted"] {
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+
+/* Heavy: navigation, modals, menus, toasts */
+html[data-material] aside[class*="bg-card"],
+html[data-material] nav[class*="bg-card"],
+html[data-material] [role="dialog"],
+html[data-material] [role="menu"],
+html[data-material] [role="listbox"],
+html[data-material] [class*="bg-popover"],
+html[data-material] .group.pointer-events-auto[class*="bg-card"],
+html[data-material] .fixed [class*="bg-card"] {
+  background-color: var(--g-heavy-bg) !important;
+  -webkit-backdrop-filter: var(--g-heavy-filter); backdrop-filter: var(--g-heavy-filter);
+}
+html[data-material] aside[class*="bg-card"], html[data-material] nav[class*="bg-card"] { border-radius: 0; }
+html[data-material] [role="dialog"] { border-radius: var(--g-r-modal) !important; border: 1px solid var(--g-border); border-top-color: var(--g-border-hi); border-left-color: var(--g-border-hi); box-shadow: var(--g-shadow), inset 0 1px 0 var(--g-shine); }
+html[data-material] [role="menu"], html[data-material] [role="listbox"], html[data-material] [class*="bg-popover"] { border-radius: 20px; }
+/* The dimmed scrim behind a modal: light enough that the mesh still shows through */
+html[data-material] [class*="bg-black/60"], html[data-material] [class*="bg-black/80"] {
+  background-color: var(--g-scrim) !important;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+
+/* ── Shapes: pills for buttons and single-line inputs ──────────────────────── */
+html[data-material] .btn,
+html[data-material] button[role="combobox"],
+html[data-material] input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]) { border-radius: 9999px; }
+html[data-material] textarea { border-radius: 20px; }
+html[data-material] .btn:is(.bg-theme) {
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0) 60%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), 0 6px 18px hsl(var(--theme) / 0.40);
+}
+
+/* Hover/focus states that used a solid fill become a soft white veil */
+html[data-material] [class*="hover:bg-secondary"]:hover,
+html[data-material] [class*="hover:bg-accent"]:hover,
+html[data-material] [class*="focus:bg-secondary"]:focus { background-color: rgba(255, 255, 255, 0.18) !important; }
+html[data-material="light-frosted"] [class*="hover:bg-secondary"]:hover,
+html[data-material="light-frosted"] [class*="hover:bg-accent"]:hover,
+html[data-material="light-frosted"] [class*="focus:bg-secondary"]:focus { background-color: rgba(255, 255, 255, 0.45) !important; }
+
+/* Status colours tuned for legibility on light glass (the -400 shades wash out) */
+html[data-material="light-frosted"] .text-green-400  { color: #15803d; }
+html[data-material="light-frosted"] .text-red-400    { color: #b91c1c; }
+html[data-material="light-frosted"] .text-blue-400   { color: #1d4ed8; }
+html[data-material="light-frosted"] .text-amber-400,
+html[data-material="light-frosted"] .text-yellow-400,
+html[data-material="light-frosted"] .text-yellow-500 { color: #a16207; }
+html[data-material="light-frosted"] .text-purple-400 { color: #7e22ce; }
+html[data-material="light-frosted"] .text-orange-400 { color: #c2410c; }
+html[data-material="light-frosted"] .text-cyan-400   { color: #0e7490; }
+
+/* Accent-coloured text/icons: lifted on dark glass, deepened on light glass so they stay readable
+   over any accent and any mesh colour. Tinted accent pills stay subtle so the text on them keeps contrast. */
+html[data-material="dark-frosted"] .text-theme { color: color-mix(in srgb, hsl(var(--theme)) 42%, white); }
+html[data-material="clear-crystal"] .text-theme { color: color-mix(in srgb, hsl(var(--theme)) 30%, white); }
+html[data-material="light-frosted"] .text-theme { color: color-mix(in srgb, hsl(var(--theme)) 62%, black); }
+html[data-material="dark-frosted"] [class*="bg-theme/"],
+html[data-material="clear-crystal"] [class*="bg-theme/"] { background-color: hsl(var(--theme) / 0.16) !important; }
+html[data-material="light-frosted"] [class*="bg-theme/"] { background-color: hsl(var(--theme) / 0.14) !important; }
+
+/* The app uses low-opacity text classes (text-muted-foreground/60…) for hierarchy; over glass that
+   washes out. Keep them at the full muted colour — size and weight carry the hierarchy instead. */
+html[data-material] [class*="text-muted-foreground/"] { color: hsl(var(--muted-foreground)); }
+html[data-material="light-frosted"] { --muted-foreground: 223 22% 24%; }
+
+/* Solid accent fills (primary buttons, the switcher thumb) carry white text — darken slightly so it's ≥4.5:1 */
+html[data-material] [class~="bg-theme"] { background-color: color-mix(in srgb, hsl(var(--theme)) 74%, black); }
+
+/* Scrollbars on glass */
+html[data-material] ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.28); }
+html[data-material="light-frosted"] ::-webkit-scrollbar-thumb { background: rgba(60, 70, 110, 0.35); }
+
+/* No backdrop-filter support (old engines): fall back to a sturdier tint so text stays readable */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-material="light-frosted"] [class*="bg-card"] { background-color: rgba(255, 255, 255, 0.82) !important; }
+  html[data-material="dark-frosted"]  [class*="bg-card"] { background-color: rgba(20, 20, 25, 0.88) !important; }
+  html[data-material="clear-crystal"] [class*="bg-card"] { background-color: rgba(40, 22, 110, 0.80) !important; }
+}
+@media (prefers-reduced-motion: reduce) { html[data-material] body::after { animation: none; } }
+html.reduce-motion[data-material] body::after { animation: none; }

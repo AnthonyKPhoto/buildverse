@@ -16,6 +16,8 @@ import { LubeLoggerSettings } from "@/components/integrations/LubeLoggerSettings
 import { AppearanceExtras } from "@/components/settings/AppearanceExtras";
 import { PriceAlertsSettings } from "@/components/settings/PriceAlertsSettings";
 import { AutoBackups } from "@/components/settings/AutoBackups";
+import { MaterialSwitcher } from "@/components/settings/MaterialSwitcher";
+import { usePrefs } from "@/hooks/use-prefs";
 import {
   ACCENT_PRESETS, RADIUS_PRESETS, FONT_PRESETS,
   useCurrentAccent, useCurrentRadius, useCurrentFont, useCurrentScheme,
@@ -221,6 +223,8 @@ export default function SettingsPage() {
   const { radius, setRadius } = useCurrentRadius();
   const { font, setFont } = useCurrentFont();
   const { scheme, setScheme } = useCurrentScheme();
+  const { material } = usePrefs();
+  const glass = material !== "classic"; // a frosted material sets its own colour mode, font and shapes
 
   const loadStats = useCallback(() => {
     Promise.all([
@@ -834,9 +838,17 @@ export default function SettingsPage() {
           {/* ══════════════════════════ GENERAL ══════════════════════════ */}
           {section === "general" && (
             <>
+              <MaterialSwitcher />
+
               <Section title="Appearance" icon={Palette}>
+                {glass && (
+                  <p className="mb-4 text-xs text-muted-foreground rounded-xl border border-border bg-secondary/60 px-3.5 py-2.5">
+                    Frosted themes set their own colour mode, font and corner shapes — switch back to <strong>Classic</strong> to change those.
+                    Your accent colour, interface size and everything else still apply.
+                  </p>
+                )}
                 {/* Color mode */}
-                <div className="mb-5">
+                <div className={cn("mb-5", glass && "opacity-40 pointer-events-none")} aria-disabled={glass}>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Color Mode</p>
                   <div className="flex gap-2">
                     {(["dark", "light"] as const).map(s => (
@@ -876,7 +888,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 {/* Font */}
-                <div className="mb-5">
+                <div className={cn("mb-5", glass && "opacity-40 pointer-events-none")} aria-disabled={glass}>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Font</p>
                   <div className="grid grid-cols-2 gap-2">
                     {FONT_PRESETS.map(p => (
@@ -890,7 +902,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 {/* Radius */}
-                <div>
+                <div className={cn(glass && "opacity-40 pointer-events-none")} aria-disabled={glass}>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">Corner radius</p>
                   <div className="flex gap-2">
                     {RADIUS_PRESETS.map(p => (
