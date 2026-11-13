@@ -2,6 +2,7 @@
 # BuildVerse — electron-builder packaging configuration
 #
 # Build locally:    npm run package:win     (Windows)
+#                    npm run package:mac     (must run on a Mac)
 #                    npm run package:linux   (must run on Linux — electron-builder
 #                                             can't cross-compile the native Prisma
 #                                             query engine from Windows)
@@ -119,6 +120,31 @@ nsis:
 # ── Portable (no install, run anywhere) ──────────────────────────────────────
 portable:
   artifactName: "BuildVerse-${version}-Portable.exe"
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+# Must be built on a Mac (npm run package:mac) or the macos CI runners — the
+# bundled Node runtime and Prisma query engine are per-arch/per-OS. CI builds
+# x64 and arm64 on separate runners (see .github/workflows/release.yml).
+# UNSIGNED by default: first launch needs right-click → Open (or
+# `xattr -cr /Applications/BuildVerse.app`). To sign + notarize, set
+# CSC_LINK / CSC_KEY_PASSWORD / APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
+# APPLE_TEAM_ID and remove `identity: null`.
+mac:
+  target:
+    - target: "dmg"
+    - target: "zip"
+  icon: "public/icon-512.png"   # electron-builder converts to .icns (needs >=512px)
+  category: "public.app-category.utilities"
+  identity: null
+  extraResources:
+    - from: "resources-extra/node"
+      to: "node"
+    - from: "public/icon-512.png"
+      to: "icon.png"
+  artifactName: "BuildVerse-${version}-mac-${arch}.${ext}"
+
+dmg:
+  title: "BuildVerse ${version}"
 
 # ── Linux ─────────────────────────────────────────────────────────────────────
 linux:

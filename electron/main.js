@@ -10,7 +10,8 @@ process.on('uncaughtException', (err) => {
 const { app, BrowserWindow, Tray, Menu, nativeImage, shell, ipcMain, dialog } = require("electron");
 let autoUpdater = null;
 try { autoUpdater = require("electron-updater").autoUpdater; } catch (_) { /* not bundled — updates disabled */ }
-const { spawn, execFileSync } = require("child_process");
+const { spawn } = require("child_process");
+const AdmZip = require("adm-zip");
 const path = require("path");
 const http = require("http");
 const https = require("https");
@@ -337,10 +338,11 @@ ipcMain.handle("transfer:export-zip", async () => {
     }));
 
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    execFileSync("powershell.exe", [
-      "-NonInteractive", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-      `Add-Type -Assembly System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('${tmpDir.replace(/'/g, "''")}', '${filePath.replace(/'/g, "''")}')`,
-    ], { timeout: 120000 });
+    // adm-zip instead of PowerShell so this works on macOS/Linux too. It
+    // writes forward-slash entry names (server-side import normalizes both).
+    const zip = new AdmZip();
+    zip.addLocalFolder(tmpDir);
+    zip.writeZip(filePath);
 
     return { success: true, filePath };
   } catch (err) {
@@ -364,10 +366,18 @@ ipcMain.handle("transfer:import-zip", async () => {
     if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
     fs.mkdirSync(tmpDir, { recursive: true });
 
-    execFileSync("powershell.exe", [
-      "-NonInteractive", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
-      `Add-Type -Assembly System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('${filePaths[0].replace(/'/g, "''")}', '${tmpDir.replace(/'/g, "''")}')`,
-    ], { timeout: 120000 });
+    // Manual extraction (not extractAllTo): packs made by older Windows builds
+    // use backslash separators, so normalize each name, and refuse any entry
+    // that would land outside tmpDir (zip-slip).
+    const zip = new AdmZip(filePaths[0]);
+    const tmpRoot = path.resolve(tmpDir) + path.sep;
+    for (const entry of zip.getEntries()) {
+      if (entry.isDirectory) continue;
+      const dest = path.resolve(tmpDir, entry.entryName.replace(/\\/g, "/"));
+      if (!dest.startsWith(tmpRoot)) continue;
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, entry.getData());
+    }
 
     let baseDir = tmpDir;
     if (!fs.existsSync(path.join(tmpDir, "buildverse.db"))) {
@@ -458,7 +468,9 @@ async function checkGitHubForUpdates() {
 }
 
 function initAutoUpdater() {
-  if (!autoUpdater) {
+  if (!autoUpdater || process.platform === "darwin") {
+    // macOS builds are unsigned, and Squirrel.Mac refuses unsigned updates —
+    // just tell the user a new release exists and link to it.
     setTimeout(() => checkGitHubForUpdates(), 5000);
     return;
   }
@@ -502,7 +514,7 @@ function initAutoUpdater() {
 
 ipcMain.handle("update:check", async () => {
   sendUpdateStatus("checking");
-  if (!autoUpdater || IS_DEV) { await checkGitHubForUpdates(); return; }
+  if (!autoUpdater || IS_DEV || process.platform === "darwin") { await checkGitHubForUpdates(); return; }
   try {
     await autoUpdater.checkForUpdates();
   } catch {
@@ -511,7 +523,7 @@ ipcMain.handle("update:check", async () => {
 });
 
 ipcMain.handle("update:install", () => {
-  if (IS_DEV || !autoUpdater) return;
+  if (IS_DEV || !autoUpdater || process.platform === "darwin") return;
   autoUpdater.quitAndInstall(false, true);
 });
 
@@ -654,12 +666,14 @@ function createWindow(targetUrl) {
     title: APP_NAME,
     icon: loadIcon(),
     autoHideMenuBar: true,
-    titleBarStyle: "hidden",
-    titleBarOverlay: {
-      color: "#090d14",
-      symbolColor: "#94a3b8",
-      height: 64,
-    },
+    // Windows/Linux: hidden bar with an overlay for the caption buttons.
+    // macOS: keep the native traffic lights, inset into the content area.
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 18, y: 24 } }
+      : {
+          titleBarStyle: "hidden",
+          titleBarOverlay: { color: "#090d14", symbolColor: "#94a3b8", height: 64 },
+        }),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -669,6 +683,13 @@ function createWindow(targetUrl) {
   });
 
   mainWindow.loadURL(targetUrl);
+
+  // Leave room for the macOS traffic lights over the sidebar logo row.
+  if (process.platform === "darwin") {
+    mainWindow.webContents.on("did-finish-load", () => {
+      mainWindow.webContents.insertCSS("aside > div:first-child { padding-left: 84px !important; }").catch(() => {});
+    });
+  }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith(targetOrigin)) {
@@ -827,6 +848,8 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
+  // Windows/Linux stay alive in the tray; on macOS quit so the dock icon
+  // doesn't linger without a window.
   if (process.platform === "darwin") app.quit();
 });
 

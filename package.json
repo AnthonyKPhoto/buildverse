@@ -21,6 +21,8 @@
     "electron:release:linux": "npm run electron:bundle && npm run build && npm run fetch-node-runtime && electron-builder --linux --publish always",
     "package:win": "npm run electron:build",
     "package:linux": "npm run electron:build:linux",
+    "electron:build:mac": "npm run electron:bundle && npm run build && npm run fetch-node-runtime && electron-builder --mac --publish never",
+    "package:mac": "npm run electron:build:mac",
     "gen-icons": "node scripts/gen-icons.js"
   },
   "dependencies": {

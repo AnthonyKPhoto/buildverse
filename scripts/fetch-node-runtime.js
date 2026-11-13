@@ -116,12 +116,37 @@ async function fetchLinux() {
   console.log(`[fetch-node-runtime] Wrote ${dest} (${fs.statSync(dest).size} bytes)`);
 }
 
+async function fetchMac() {
+  const dest = path.join(OUT_DIR, "node");
+  if (fs.existsSync(dest)) {
+    console.log("[fetch-node-runtime] node already present, skipping download");
+    return;
+  }
+  // Intel runners/builds use x64, Apple Silicon uses arm64 — bundle whichever
+  // matches the machine (CI builds each arch on its own runner).
+  const arch = process.arch === "arm64" ? "arm64" : "x64";
+  const tarPath = path.join(OUT_DIR, "_node-mac.tar.gz");
+  const extractDir = path.join(OUT_DIR, "_node-mac-extract");
+  const url = `https://nodejs.org/dist/${VERSION}/node-${VERSION}-darwin-${arch}.tar.gz`;
+  console.log(`[fetch-node-runtime] Fetching ${url}`);
+  await download(url, tarPath);
+  fs.mkdirSync(extractDir, { recursive: true });
+  execFileSync("tar", ["-xzf", tarPath, "-C", extractDir, "--strip-components=2", `node-${VERSION}-darwin-${arch}/bin/node`]);
+  fs.copyFileSync(path.join(extractDir, "node"), dest);
+  fs.chmodSync(dest, 0o755);
+  fs.rmSync(extractDir, { recursive: true, force: true });
+  fs.unlinkSync(tarPath);
+  console.log(`[fetch-node-runtime] Wrote ${dest} (${fs.statSync(dest).size} bytes)`);
+}
+
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   if (process.platform === "win32") {
     await fetchWindows();
   } else if (process.platform === "linux") {
     await fetchLinux();
+  } else if (process.platform === "darwin") {
+    await fetchMac();
   } else {
     console.log(`[fetch-node-runtime] Unsupported platform "${process.platform}" — skipping (no packaged build target for it)`);
   }

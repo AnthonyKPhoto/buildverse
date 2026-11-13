@@ -257,3 +257,80 @@ jobs:
             ### System requirements
             - 64-bit Linux, glibc-based (Ubuntu, Debian, Fedora, etc. — not Alpine)
             - No other software required
+
+  release-mac:
+    name: Package macOS (${{ matrix.arch }})
+    needs: release
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-latest   # Apple Silicon
+          - arch: x64
+            runner: macos-13       # Intel
+    env:
+      DATABASE_URL: "file:./dev.db"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22 (LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install npm dependencies
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Create database schema
+        run: npx prisma db push
+
+      - name: Seed demo data
+        run: npx prisma db seed
+
+      - name: Build Next.js application
+        run: npx next build
+
+      - name: Bundle Electron main process
+        run: npx esbuild electron/main.js --bundle --platform=node --external:electron --outfile=electron/main.bundled.js
+
+      - name: Fetch Node.js runtime for bundling
+        run: npm run fetch-node-runtime
+
+      - name: Package macOS app
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
+
+      - name: Verify Node.js runtime was bundled
+        run: |
+          NODE_PATH=$(ls -d dist-electron/mac*/BuildVerse.app/Contents/Resources/node | head -1)
+          if [ ! -f "$NODE_PATH" ]; then
+            echo "node binary missing from packaged resources"
+            exit 1
+          fi
+          echo "Bundled $NODE_PATH"
+
+      - name: Get version from tag
+        id: version
+        run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload macOS artifacts to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "BuildVerse v${{ steps.version.outputs.ver }}"
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: false
+          files: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+
