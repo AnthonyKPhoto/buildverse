@@ -25,6 +25,9 @@ icon: "build/icon.ico"
 # In dev, Electron uses electron/main.js directly.
 # For the packaged asar we point at the esbuild bundle which has electron-updater
 # and all other npm deps inlined — no node_modules needed inside the asar.
+# macOS: ad-hoc sign the unsigned app so Apple Silicon doesn't report it as "damaged" (see scripts/after-pack.js)
+afterPack: "scripts/after-pack.js"
+
 extraMetadata:
   main: electron/main.bundled.js
 
@@ -127,8 +130,8 @@ portable:
 # Must be built on a Mac (npm run package:mac) or the macos CI runners — the
 # bundled Node runtime and Prisma query engine are per-arch/per-OS. CI builds
 # x64 and arm64 on separate runners (see .github/workflows/release.yml).
-# UNSIGNED by default: first launch needs right-click → Open (or
-# `xattr -cr /Applications/Upshift Garage.app`). To sign + notarize, set
+# NOT notarized (no Apple Developer account): the app is ad-hoc signed by scripts/after-pack.js, so first launch needs
+# System Settings → Privacy & Security → "Open Anyway" (or `xattr -cr "/Applications/Upshift Garage.app"`). To sign + notarize, set
 # CSC_LINK / CSC_KEY_PASSWORD / APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD /
 # APPLE_TEAM_ID and remove `identity: null`.
 mac:

@@ -1,0 +1,42 @@
+# Changelog
+
+All notable changes to **Upshift Garage** (formerly BuildVerse). Full release notes, with downloads, are on the
+[Releases page](../../releases). Versions follow [semantic versioning](https://semver.org).
+
+## [1.15.0] — 2026-11-13
+
+BuildVerse is now **Upshift Garage**.
+
+### Added
+- **Product Tracker rebuild** — new layout (stat cards, filters, sort, sparklines), background price checks, optional email alerts
+  (target reached, big drops, back in stock) sent as one digest, bulk alerts dialog, and price data read from schema.org/JSON-LD.
+- **Shop comparison** — group the same part across shops; cheapest in-stock option is highlighted.
+- **Mod ⇄ tracker links** — URL-normalized matching, one-click "Track this price", "use this price" on the mod, and linked mods on tracker cards.
+- **Scheduled backups** — consistent snapshots (SQLite `VACUUM INTO`), configurable interval and retention, download / delete / restore (server mode).
+- **Frosted-glass appearance** — Light Frosted, Dark Frosted and Clear Crystal materials with a floating switcher; custom background picture;
+  sliders for glass opacity, blur, saturation, edge shine, shadow and corner roundness. Classic remains the default.
+- Appearance options: custom accent colour, interface size, sidebar width, reduce motion, currency, show cents, date format.
+- **macOS** desktop builds (Apple Silicon and Intel).
+- New logo and generated icon set for the web app, Windows, macOS, Linux and Android.
+- Docker: pre-update database copy on every boot; `APP_URL` setting; OCI image labels.
+- Repository: SECURITY policy, issue and pull-request templates, screenshots, social-preview image.
+
+### Security
+- Fixed a sign-in bypass in server mode and tightened authorization for admin-only and cross-vehicle actions; roles are re-verified
+  against the database; sessions shortened to 7 days.
+- Hardened password-reset/welcome email links, file serving and upload limits, zip import/restore, product scraping (redirect and
+  IP-literal handling, response size cap), image proxy removal, security headers, and desktop external-link handling.
+- Stopped sending stored integration credentials to caller-supplied URLs; only `http(s)` links are accepted.
+- Updated Next.js to 14.2.35 and applied non-breaking dependency fixes.
+- `docker-compose.yml` now binds to `127.0.0.1` by default.
+
+### Fixed
+- "Refresh all" overwrote each product's all-time lowest price.
+- A failed price check replaced a good price/title with a placeholder.
+- "Out of stock" was styled like "in stock"; product prices were rounded to whole dollars.
+- Desktop transfer-pack export/import relied on Windows-only PowerShell (now works on macOS and Linux).
+- Desktop icons were never committed, so installers and the tray had no icon source.
+
+### Changed
+- Product renamed from BuildVerse to **Upshift Garage**. The desktop data folder (`…/BuildVerse`), database file names, repository,
+  and Docker image path are intentionally unchanged so existing installs keep working.

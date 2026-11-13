@@ -4,14 +4,18 @@
 # Triggers when you push a version tag, e.g.:
 #   git tag v1.0.0 && git push origin v1.0.0
 #
-# Produces:
-#   • UpshiftGarage-Setup-X.X.X.exe — Windows NSIS installer (recommended)
-#   • UpshiftGarage-X.X.X-Portable.exe — Windows portable, no install needed
-#   • UpshiftGarage-X.X.X.AppImage — Linux, self-contained, no install needed
-#   • upshift-garage_X.X.X_amd64.deb — Linux, Debian/Ubuntu package
+# Produces (attached to one GitHub Release):
+#   • UpshiftGarage-Setup-X.X.X.exe            Windows installer (recommended)
+#   • UpshiftGarage-X.X.X-Portable.exe          Windows portable, no install needed
+#   • UpshiftGarage-X.X.X-mac-arm64.dmg / .zip  macOS, Apple Silicon
+#   • UpshiftGarage-X.X.X-mac-x64.dmg / .zip    macOS, Intel
+#   • UpshiftGarage-X.X.X.AppImage              Linux, self-contained
+#   • upshift-garage_X.X.X_amd64.deb            Linux, Debian/Ubuntu
+# (The Docker image is published by docker-publish.yml, triggered by the same tag.)
 #
-# The Linux job runs after (needs:) the Windows job so it appends its
-# artifacts to the same GitHub Release instead of racing to create it.
+# The release page text is composed ONCE, in the Windows job, from RELEASE_NOTES.md plus a download table.
+# The Linux and macOS jobs run after it (needs:) and only upload files — never touch the body — because
+# several jobs appending to one release description at the same time would overwrite each other.
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: Build & Release
@@ -111,6 +115,50 @@ jobs:
         shell: bash
         run: echo "ver=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Compose release notes
+        shell: bash
+        env:
+          VER: ${{ steps.version.outputs.ver }}
+        run: |
+          {
+            cat RELEASE_NOTES.md
+            cat <<EOF
+
+          ---
+
+          ## Download
+
+          | Platform | File |
+          |---|---|
+          | **Windows** | \`UpshiftGarage-Setup-${VER}.exe\` (installer, recommended) · \`UpshiftGarage-${VER}-Portable.exe\` (no install) |
+          | **macOS — Apple Silicon** (M1 and newer) | \`UpshiftGarage-${VER}-mac-arm64.dmg\` |
+          | **macOS — Intel** | \`UpshiftGarage-${VER}-mac-x64.dmg\` |
+          | **Linux** | \`UpshiftGarage-${VER}.AppImage\` · \`upshift-garage_${VER}_amd64.deb\` |
+          | **Docker / self-hosted** | \`ghcr.io/anthonykphoto/buildverse:${VER}\` (or \`:latest\`) |
+
+          **No prerequisites** — Node.js, the browser engine and everything else are bundled in each desktop download.
+
+          ### First launch
+
+          - **Windows** — SmartScreen may warn because the app isn't code-signed yet: **More info → Run anyway**.
+          - **macOS** — the app isn't notarized (no Apple Developer account yet). Open the \`.dmg\`, drag **Upshift Garage** into Applications, then open it once; if macOS blocks it, go to **System Settings → Privacy & Security → Open Anyway**. Or run: \`xattr -cr "/Applications/Upshift Garage.app"\`. macOS builds don't auto-update — the app tells you when a new release is out.
+          - **Linux** — AppImage: \`chmod +x UpshiftGarage-${VER}.AppImage && ./UpshiftGarage-${VER}.AppImage\`. Debian/Ubuntu: \`sudo apt install ./upshift-garage_${VER}_amd64.deb\`. Needs a glibc-based 64-bit distro (not Alpine).
+          - **Docker** — see the [self-hosting guide](https://github.com/${GITHUB_REPOSITORY}#self-hosting-with-docker).
+
+          ### Where your data lives
+
+          | Install | Location |
+          |---|---|
+          | Windows | \`%APPDATA%\\BuildVerse\\\` |
+          | macOS | \`~/Library/Application Support/BuildVerse/\` |
+          | Linux | \`~/.config/BuildVerse/\` |
+          | Docker | the \`/data\` volume |
+
+          The folder keeps its original "BuildVerse" name on purpose, so installing this version over an older one never loses anything.
+          EOF
+          } > release-body.md
+          echo "--- release-body.md ---"; cat release-body.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -119,43 +167,10 @@ jobs:
           prerelease: false
           generate_release_notes: true
           fail_on_unmatched_files: false
+          body_path: release-body.md
           files: |
             dist-electron/*.exe
             dist-electron/latest.yml
-          body: |
-            ## Upshift Garage v${{ steps.version.outputs.ver }}
-
-            ### Download
-
-            | File | Description |
-            |------|-------------|
-            | `UpshiftGarage-Setup-${{ steps.version.outputs.ver }}.exe` | **Installer (recommended)** — installs to your user profile, creates Desktop + Start Menu shortcuts |
-            | `UpshiftGarage-${{ steps.version.outputs.ver }}-Portable.exe` | **Portable** — run from any folder, no install needed |
-
-            ---
-
-            ### How to install
-
-            1. Click the installer `.exe` above to download it
-            2. Double-click the file — Windows may show a blue SmartScreen warning
-               > Click **"More info"** → **"Run anyway"**
-               > *(This appears because the app is not yet code-signed. It is safe.)*
-            3. Follow the wizard: **Next → Next → Install → Finish**
-            4. Launch **Upshift Garage** from the Desktop shortcut or Start Menu
-
-            ---
-
-            ### What's included
-
-            - **No prerequisites** — Node.js, Chromium, and all dependencies are bundled inside the installer
-            - Demo garage included: 2002 Honda S2000 AP1
-            - Your data is stored at `%APPDATA%\BuildVerse\buildverse.db` and is **never touched by updates**
-            - Auto-updates: the installed app will detect and download this release automatically
-            - Runs in the background — close the window to minimise to the system tray
-
-            ### System requirements
-            - Windows 10 / 11 (64-bit)
-            - No other software required
 
   release-linux:
     name: Package Linux AppImage + deb
@@ -235,28 +250,11 @@ jobs:
           name: "Upshift Garage v${{ steps.version.outputs.ver }}"
           draft: false
           prerelease: false
-          append_body: true
           fail_on_unmatched_files: false
           files: |
             dist-electron/*.AppImage
             dist-electron/*.deb
-          body: |
-            ---
-
-            ### Linux
-
-            | File | Description |
-            |------|-------------|
-            | `UpshiftGarage-${{ steps.version.outputs.ver }}.AppImage` | **AppImage (recommended)** — download, `chmod +x`, then run. No install needed |
-            | `upshift-garage_${{ steps.version.outputs.ver }}_amd64.deb` | **Debian/Ubuntu package** — `sudo apt install ./upshift-garage_${{ steps.version.outputs.ver }}_amd64.deb` |
-
-            **No prerequisites** — Node.js and all dependencies are bundled inside the package.
-
-            Your data is stored at `~/.config/BuildVerse/buildverse.db` and is never touched by updates.
-
-            ### System requirements
-            - 64-bit Linux, glibc-based (Ubuntu, Debian, Fedora, etc. — not Alpine)
-            - No other software required
+            dist-electron/latest-linux.yml
 
   release-mac:
     name: Package macOS (${{ matrix.arch }})
@@ -270,7 +268,7 @@ jobs:
           - arch: arm64
             runner: macos-latest   # Apple Silicon
           - arch: x64
-            runner: macos-13       # Intel
+            runner: macos-15-intel # Intel (macos-13 was retired by GitHub)
     env:
       DATABASE_URL: "file:./dev.db"
 

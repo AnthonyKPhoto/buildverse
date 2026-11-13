@@ -33,6 +33,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          labels: |
+            org.opencontainers.image.title=Upshift Garage
+            org.opencontainers.image.description=Self-hosted vehicle modification manager — plan, track and budget your build
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#self-hosting-with-docker
           tags: |
             type=semver,pattern={{version}}
             type=raw,value=latest

@@ -1,366 +1,227 @@
-<p align="center"><img src="public/icon-192.png" alt="Upshift Garage" width="96" height="96"></p>
+<p align="center">
+  <img src="public/icon-192.png" alt="Upshift Garage logo" width="112" height="112">
+</p>
 
-# Upshift Garage — Intelligent Vehicle Modification Manager
+<h1 align="center">Upshift Garage</h1>
 
-Plan, track, budget, research, and organize your vehicle modifications.
-Runs **100% locally by default** — no cloud, no accounts, no internet required.
-Optionally, self-host it as a server (Docker) so the desktop app and your phone
-share the same live data instead of each keeping a separate copy.
+<p align="center">
+  <b>Plan, track and budget your car build.</b><br>
+  A local-first vehicle modification manager — track mods, watch prices, log maintenance, and keep it all on your own machine or your own server.
+</p>
 
-Available as:
-- **Windows Desktop App** (Electron) — install from GitHub Releases, system tray, fully self-contained
-- **Linux Desktop App** (Electron) — AppImage or .deb, install from GitHub Releases, system tray
-- **Browser App** — run via Node.js / `npm run dev`
-- **Self-hosted Server** (Docker) — one shared database with real per-user accounts, reachable from the desktop app, a browser, and the Android app
+<p align="center">
+  <img alt="Platforms" src="https://img.shields.io/badge/Windows%20·%20macOS%20·%20Linux%20·%20Docker-555">
+  <a href="../../actions/workflows/ci.yml"><img alt="Type check" src="https://github.com/AnthonyKPhoto/buildverse/actions/workflows/ci.yml/badge.svg"></a>
+</p>
 
----
+<p align="center">
+  <img src="docs/screenshots/tracker.jpg" alt="Upshift Garage — Product Tracker in the Dark Frosted theme" width="860">
+</p>
 
-## ⬇️ Download (Windows)
+> **Formerly BuildVerse.** The app was renamed to Upshift Garage in v1.15.0. Nothing was lost in the move: the desktop app keeps its original `BuildVerse` data folder, and the repository, Docker image path and database file names are unchanged, so existing installs and servers keep working. Details in the [release notes](../../releases/latest).
 
-**Go to [Releases](../../releases) and download the latest `UpshiftGarage-Setup-x.x.x.exe`.**
-
-1. Download the installer
-2. Double-click it — Windows may show a SmartScreen warning; click **"More info" → "Run anyway"**
-   *(The app is not code-signed yet. It is safe.)*
-3. Follow the wizard → Finish
-4. Launch from the Desktop or Start Menu shortcut
-
-**No Node.js, no npm, no prerequisites.** Everything is bundled inside the installer.
-
-> **Portable option:** Download `UpshiftGarage-x.x.x-Portable.exe` — runs from any folder without installing.
+Runs **100% locally by default** — no cloud, no accounts, no internet required. Optionally self-host it (Docker) so your desktop app, phone and friends all share one live garage.
 
 ---
 
-## ⬇️ Download (Linux)
+## Download
 
-**Go to [Releases](../../releases) and download the latest `UpshiftGarage-x.x.x.AppImage` or `upshift-garage_x.x.x_amd64.deb`.**
+Get the latest build from **[Releases](../../releases/latest)**. No Node.js, no prerequisites — everything is bundled.
 
-**No Node.js, no prerequisites.** Everything is bundled inside the package.
+| Platform | Download |
+|---|---|
+| **Windows 10/11** | `UpshiftGarage-Setup-x.x.x.exe` (installer) or `UpshiftGarage-x.x.x-Portable.exe` |
+| **macOS — Apple Silicon** (M1 and newer) | `UpshiftGarage-x.x.x-mac-arm64.dmg` |
+| **macOS — Intel** | `UpshiftGarage-x.x.x-mac-x64.dmg` |
+| **Linux** (64-bit, glibc) | `UpshiftGarage-x.x.x.AppImage` or `upshift-garage_x.x.x_amd64.deb` |
+| **Docker / self-hosted** | `ghcr.io/anthonykphoto/buildverse` — see [Self-hosting](#self-hosting-with-docker) |
 
-**AppImage** (works on most distros, no install):
+<details>
+<summary><b>First-launch notes (Windows, macOS, Linux)</b></summary>
+
+**Windows** — SmartScreen may warn because the app isn't code-signed yet: **More info → Run anyway**. Installs per-user, no admin rights needed.
+
+**macOS** — the app isn't notarized (that requires a paid Apple Developer account), so macOS will block the first launch. Open the `.dmg`, drag **Upshift Garage** into *Applications*, open it once, then go to **System Settings → Privacy & Security → Open Anyway**. Or from Terminal:
 ```bash
-chmod +x UpshiftGarage-x.x.x.AppImage
-./UpshiftGarage-x.x.x.AppImage
+xattr -cr "/Applications/Upshift Garage.app"
 ```
+macOS builds don't auto-update; the app shows a notice when a new release is available.
 
-**Debian/Ubuntu (.deb)**:
+**Linux**
 ```bash
+# AppImage — runs on most distros, no install
+chmod +x UpshiftGarage-x.x.x.AppImage && ./UpshiftGarage-x.x.x.AppImage
+
+# Debian / Ubuntu
 sudo apt install ./upshift-garage_x.x.x_amd64.deb
 ```
+</details>
+
+On first launch a small demo garage (a 2002 Honda S2000 with a sample build) is created so you can look around — remove it any time from **Settings → Data & Backup**.
 
 ---
 
 ## Features
 
-- **Garage** — Add multiple vehicles with full specs (year/make/model/trim/engine/platform)
-- **Modification Tracker** — Wishlist → Research → Order → Purchase → Install pipeline
-- **Build Planner** — Cross-vehicle mod planning with category grouping and filters
-- **Budget Planner** — Planned vs actual spend per category with bar and pie charts
-- **Product Tracker** — Paste any vendor URL to monitor prices over time
-- **Maintenance Logs** — Full service history with next-due alerts
-- **Vendor Directory** — Curated list of trusted automotive vendors
-- **Data Export** — JSON backup from the Settings page
-- **Per-user appearance** (server mode) — each account's accent color, corner style, font, and light/dark mode is saved to their own account and follows them across devices/browsers
+- **Garage** — multiple vehicles with full specs, photos, VIN decode and recall lookup
+- **Modification tracker** — Researching → Planned → Ordered → Purchased → Installed, with priorities, dependencies, install dates/mileage, labor cost and DIY tracking
+- **Build planner & Kanban** — see every mod across every vehicle, grouped and filterable
+- **Budget planner** — planned vs. actual spend per category, with charts
+- **Product tracker** *(new look in 1.15)* — paste any product page and watch the price over time
+  - background checks, price history sparklines, target-price alerts
+  - optional **email alerts** (target reached, big drops, back in stock) as a single digest
+  - **shop comparison** — track the same part at several shops; the cheapest in-stock one is flagged
+  - **linked to your mods** — a mod's product link is matched to its tracked price
+- **Maintenance logs** — service history with next-due tracking, plus [LubeLogger](https://lubelogger.com) import
+- **Build sheet PDF** and a shareable **build card**
+- **Files & tune logs** — attach documents, receipts, and dyno/tune logs to each vehicle
+- **Scheduled backups** — consistent database snapshots on a schedule, with one-click download and (on a server) restore
+- **Make it yours** — accent colour, interface size, currency, date format, and three frosted-glass themes with your own background picture ([see below](#appearance))
+- **Multi-user server mode** — real accounts, admin-managed, per-vehicle edit permissions
+
+<p align="center">
+  <img src="docs/screenshots/garage.jpg" alt="Vehicle page in the Light Frosted theme" width="420">
+  <img src="docs/screenshots/dashboard.png" alt="Dashboard in the Classic theme" width="420">
+</p>
+
+### Appearance
+
+Settings → General has a floating switcher for four materials — **Classic** (solid, the original look), **Light Frosted**, **Dark Frosted** and **Clear Crystal** — plus sliders for glass opacity, blur, saturation, edge shine, shadow depth and corner roundness, and an option to use **your own picture** as the background. Pictures are resized in your browser and stay on that device; nothing is uploaded.
+
+<p align="center">
+  <img src="docs/screenshots/materials.jpg" alt="Light Frosted, Dark Frosted and Clear Crystal side by side" width="860">
+</p>
 
 ---
 
-## Development Setup
+## Self-hosting with Docker
 
-### Prerequisites
-- [Node.js 18+](https://nodejs.org/en/download)
-- [Git](https://git-scm.com)
+Running Upshift Garage as a server makes it the single source of truth: the desktop app (in *Connect to Server* mode), your phone's browser and other people's logins all use the same live database — nothing to sync or merge.
 
-```powershell
-# Clone the repo
-git clone https://github.com/AnthonyKPhoto/buildverse.git
-cd buildverse
+### 1. Put HTTPS in front of it
 
-# Install dependencies
-npm install
-
-# Set up database and load demo data (run once)
-npm run setup
-
-# Start development server
-npm run dev
-```
-
-Open **http://localhost:3000** in your browser.
-
-### Run in Electron (dev mode)
-
-```powershell
-# Starts Next.js dev server + opens the Electron desktop window
-npm run electron:dev
-```
-
----
-
-## Self-Hosting with Docker
-
-Running Upshift Garage as a server makes it the single source of truth: the desktop
-app (in "Connect to Server" mode) and a phone browser both talk to the same
-live database, so an edit made on one shows up on the other immediately —
-nothing to sync or merge, because there's only one database.
-
-### 1. Point a domain at your server
-
-Set up a reverse proxy (Caddy, nginx, Nginx Proxy Manager, a Cloudflare
-Tunnel — whatever you already use) in front of this container's port 3456,
-terminating HTTPS. `docker-compose.yml` doesn't bundle a proxy itself, since
-most self-hosters already have one.
+Use a reverse proxy you already run (Caddy, nginx, Nginx Proxy Manager, a Cloudflare Tunnel…) pointing at the container's port. `docker-compose.yml` publishes the port on **`127.0.0.1:3456`** by default so it isn't exposed to your network by accident; if your proxy runs on another machine, change the mapping to `"3456:3000"`.
 
 ### 2. Configure
 
-Create a `.env` file **in the same directory as `docker-compose.yml`** (copy
-`.env.example` — `docker compose` loads a `.env` file next to it automatically,
-no extra flags needed):
-```powershell
-cp .env.example .env
-```
+Copy `.env.example` to `.env` **next to `docker-compose.yml`** and fill it in (compose loads it automatically):
 
-Then set, in that `.env` file:
-```
-AUTH_SESSION_SECRET=<any long random string>
-```
+| Variable | Required | Purpose |
+|---|---|---|
+| `AUTH_SESSION_SECRET` | **Yes** | Any long random string (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). **Setting it turns login on. Without it the server has no login at all.** |
+| `APP_URL` | **Strongly recommended** | Your public URL, e.g. `https://garage.example.com`. Used for links in reset/welcome emails so they can't be forged via the `Host` header. |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD_HASH` | Optional | Pre-create the first admin (`node scripts/hash-password.js "your-password"`). If unset, the first visitor to the site creates the admin account — do that promptly after first boot. |
 
-That's the only variable that's actually required — setting it turns on
-login for everyone except local connections (auth is completely inert, and
-local dev/Electron completely unaffected, if it's left unset). **Without
-this set, the server runs with no login at all — anyone with the URL can
-view and edit everything.**
-
-Optionally, pre-provision a specific admin account before your first visit:
-```powershell
-node scripts/hash-password.js "your-password"
-```
-```
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD_HASH=<output from hash-password.js>
-```
-If you skip this, the first person to visit the site gets a "create the
-admin account" form instead of a login form — whoever submits it first
-becomes admin. Simplest for a fresh deploy; just don't leave that window
-open on the public internet longer than it takes you to sign up.
-
-If you're already running and want to turn auth on now: create/edit `.env`
-next to `docker-compose.yml` as above, then `docker compose up -d` to
-recreate the container with the new values (a plain restart isn't enough —
-compose only re-reads `.env` on `up`).
+> Changed `.env` on a running server? Run `docker compose up -d` (a plain restart doesn't re-read it) and check `/api/health` — `"mode":"server"` confirms login is on.
 
 ### 3. Start it
 
-```powershell
+```bash
 docker compose up -d
 ```
 
-The schema is applied automatically on every boot (a no-op once already up
-to date, so this is always safe to re-run, not just on first start). Visit
-your domain and either sign in with the admin account above, or create the
-admin account if you didn't pre-provision one.
+The schema is applied automatically on every boot, and the previous database is copied to `buildverse.db.pre-update.bak` first, so upgrades are reversible.
 
-### 4. Update later
+### 4. Update
 
-Watchtower (bundled in `docker-compose.yml`) polls for new images hourly and
-updates automatically. To update immediately:
-```powershell
-docker compose pull
-docker compose up -d
+Watchtower in `docker-compose.yml` checks for new images hourly. It needs the Docker socket mounted, which is root-equivalent on the host — delete that service if you'd rather update by hand:
+```bash
+docker compose pull && docker compose up -d
 ```
 
-### Multiple users
+### Accounts and permissions
 
-Everyone can *view* the same shared garage — separate logins are for
-individual accountability and per-vehicle *edit* permissions, not separate
-data. Sign in as the admin account, then **Settings → Access & Sync →
-Users** to add an account for each person (member or admin role), remove
-accounts, or reset someone's password.
+Everyone can **view** the shared garage. **Settings → Access & Sync → Users** (admin) creates accounts — give a password, or give an email and Upshift Garage sends a temporary one (configure SMTP under the same tab or in **Settings → Price Alerts**). By default a member can edit vehicles they created; an admin can grant edit access to others under **Vehicle Access**. Admins can edit everything.
 
-Adding a user with just a username/password works immediately. Give an
-email instead of typing a password and Upshift Garage generates a temporary one
-and emails it (configure SMTP first under **Settings → Access & Sync →
-Email (SMTP)**) — that account is asked to set its own password on first
-sign-in. If email delivery fails, the temp password is shown once so you
-can hand it over yourself.
+### Backups
 
-By default a member can edit any vehicle they created; anyone else's
-vehicles are view-only for them unless an admin grants edit access under
-**Settings → Access & Sync → Vehicle Access**. Admins can always edit
-everything.
+Automatic backups are on by default (daily, newest 7 kept) and written to `/data/backups` on your volume. Manage them in **Settings → Data & Backup**: download, delete, or **restore** (admin password required; a safety copy of the current data is taken first).
 
-### Bringing in vehicles from separate local installs
+<details>
+<summary><b>Bringing in vehicles from separate local installs</b></summary>
 
-If you and someone else have each been tracking your own vehicles locally
-and want them both in the shared server:
+1. On each source install: **Settings → Data & Backup → Export Data** (JSON) or **Export Transfer Pack** (.zip — use this if you have uploaded files or tune logs).
+2. On the server, signed in as the person who should own those vehicles: **Import Data** (JSON) or **Add Vehicles from Transfer Pack** (.zip). Both *add* vehicles and never touch anyone else's data.
 
-1. Each person signs in on their own PC's Upshift Garage app (local mode is
-   fine) and goes to **Settings → Data & Backup → Export Data** (JSON) or
-   **Export Transfer Pack** (.zip) — use the zip if you've uploaded any
-   vehicle files or tune logs, since those live on disk and the JSON export
-   doesn't include them.
-2. Each person signs in to the server (their own account) and uses
-   **Settings → Data & Backup → Import Data** (for a JSON file) or
-   **Add Vehicles from Transfer Pack** (for a .zip). Both *add* vehicles —
-   neither touches anyone else's data, and vehicles imported this way are
-   owned by whoever's signed in when they import them.
-
-This is different from **Settings → Access & Sync → Server Data**
-(admin-only), which replaces the server's *entire* database from a backup —
-use that only once, for your own primary migration onto the server, not for
-bringing in a second person's cars. It accepts either a `.db` file (database
-only) or a `.zip` transfer pack from Electron's **Export Transfer Pack**
-(database *and* any uploaded vehicle files/tune logs, which live on disk and
-aren't included in a plain `.db` backup or the JSON export above) — use the
-zip if you have any of those, or they won't come across.
+**Settings → Access & Sync → Server Data** (admin) is different: it *replaces the entire server database* from a `.db` backup or transfer pack. Use it once, for your own primary migration.
+</details>
 
 ---
 
-## Publishing a New Release
+## Security
 
-GitHub Actions automatically builds and publishes the Windows and Linux installers whenever you push a version tag.
+Server mode is built to be reachable from the internet: signed, expiring session cookies; scrypt password hashing; rate-limited sign-in and password reset; per-vehicle edit permissions re-checked against the database; SSRF-guarded product scraping; and hardened file and import handling. See **[SECURITY.md](SECURITY.md)** for the details and how to report a problem.
 
-```powershell
-# 1. Bump the version in package.json (edit manually or use npm version)
-npm version patch     # 1.0.0 → 1.0.1
-# or
-npm version minor     # 1.0.0 → 1.1.0
-# or
-npm version major     # 1.0.0 → 2.0.0
+---
 
-# 2. Push the commit AND the generated tag
-git push origin main --follow-tags
-```
+## Development
 
-GitHub Actions (`.github/workflows/release.yml`) will:
-1. Run the Windows job on `windows-latest`, package the installer, and create the GitHub Release
-2. Then run the Linux job on `ubuntu-latest` (after the Windows job, so it appends to the same release instead of racing to create it) and attach the AppImage + .deb
-
-> **First time?** Make sure your repository has **Actions** enabled (Settings → Actions → Allow all actions).
-> The workflow uses `GITHUB_TOKEN` which is provided automatically — no extra secrets needed.
-
-### Building locally
-
-```powershell
-npm run package:win
-# Output: dist-electron/UpshiftGarage-Setup-x.x.x.exe
-#         dist-electron/UpshiftGarage-x.x.x-Portable.exe
-```
+Requires [Node.js 22.19+](https://nodejs.org) and Git.
 
 ```bash
-# Linux only — must run on Linux (electron-builder can't cross-compile the
-# native Prisma query engine from Windows)
-npm run package:linux
-# Output: dist-electron/UpshiftGarage-x.x.x.AppImage
-#         dist-electron/upshift-garage_x.x.x_amd64.deb
+git clone https://github.com/AnthonyKPhoto/buildverse.git
+cd buildverse
+npm install
+npm run setup        # generate Prisma client, create the database, load demo data
+npm run dev          # http://localhost:3000
+npm run electron:dev # same, in the desktop window
+```
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Next.js dev server (browser) |
+| `npm run build` / `npm start` | Production build / run it |
+| `npm run setup` | Prisma client + schema push + demo data |
+| `npm run db:studio` / `db:reset` | Visual DB editor / wipe and re-seed |
+| `npm run electron:dev` | Dev server + Electron window |
+| `npm run package:win` / `package:mac` / `package:linux` | Build that platform's installer locally (each must run on its own OS) |
+| `npm run gen-icons` | Regenerate every logo/icon asset from `public/logo.svg` |
+
+### Where data lives
+
+| Mode | Location |
+|---|---|
+| Browser / dev | `prisma/dev.db` |
+| Windows app | `%APPDATA%\BuildVerse\` |
+| macOS app | `~/Library/Application Support/BuildVerse/` |
+| Linux app | `~/.config/BuildVerse/` |
+| Docker | the `/data` volume (`buildverse.db`, `vehicle-files/`, `tune-logs/`, `backups/`) |
+
+The desktop folder keeps its original name deliberately — see the note at the top.
+
+### Publishing a release
+
+1. Update `RELEASE_NOTES.md` (becomes the top of the GitHub release page) and add an entry to `CHANGELOG.md`.
+2. `npm version minor --no-git-tag-version` (or `patch`/`major`), commit, push to `main`.
+3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+Pushing the tag runs **Build & Release** (Windows, macOS ×2, Linux → one GitHub Release) and **Docker** (publishes `ghcr.io/anthonykphoto/buildverse:X.Y.Z` and `:latest`). No extra secrets are needed. Code signing / macOS notarization are optional — see the comments in `electron-builder.yml`.
+
+### Tech stack
+
+Next.js 14 (App Router) · React 18 · TypeScript · Tailwind CSS · Radix UI · Recharts · Prisma + SQLite · Electron 33 · Cheerio (scraping) · jose + scrypt (auth) · Docker · GitHub Actions.
+
+### Project layout
+
+```
+.github/            workflows (CI, release, docker) and issue / PR templates
+docs/               screenshots and the repository social-preview image
+electron/           desktop shell: window, tray, bundled-server lifecycle
+prisma/             schema and demo-data seed
+scripts/            Docker init, icon generator, password tools, packaging hooks
+src/app/            pages and API routes (garage, builds, budget, products, maintenance, vendors, settings, auth…)
+src/components/     UI: layout, vehicles, modifications, products, settings, ui primitives
+src/lib/            auth, scraper, price tracker, backups, preferences, helpers
 ```
 
 ---
 
-## All Scripts
+## Supported shops (Product Tracker)
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Next.js dev server (browser) |
-| `npm run build` | Build Next.js for production |
-| `npm start` | Start built Next.js server |
-| `npm run setup` | Generate Prisma client + push schema + seed demo data |
-| `npm run db:studio` | Open Prisma Studio (visual DB editor) |
-| `npm run db:reset` | Wipe database and re-seed demo data |
-| `npm run electron` | Launch Electron (requires `npm run dev` to be running) |
-| `npm run electron:dev` | Start Next.js dev server + open Electron (one command) |
-| `npm run package:win` | Build Windows installer locally |
-| `npm run package:linux` | Build Linux AppImage + .deb locally (must run on Linux) |
+ECS Tuning · FCP Euro · 034Motorsport · Integrated Engineering · APR · Unitronic · CTS Turbo · UROTuning · BMP Tuning · AutoZone · RockAuto · Amazon · Tire Rack — and most shops that publish schema.org / Open Graph product data. Some shops block automated checks.
 
 ---
 
-## Data Storage
+## Contributing & feedback
 
-| Mode | Database location |
-|------|------------------|
-| Browser / dev | `prisma/dev.db` (project directory) |
-| Electron (installed) | `%APPDATA%\BuildVerse\buildverse.db` |
-| Electron (portable) | `%APPDATA%\BuildVerse\buildverse.db` |
-| Docker | named volume (`/data/buildverse.db` inside the container) |
-
-On first launch the installer's demo database (Example S2000 with a sample build) is copied to the AppData location automatically. Your data persists across app updates.
-
-**Backup:** Settings → Data & Backup → Export Data → downloads a full JSON backup.
-
----
-
-## Code Signing (optional)
-
-Without a certificate, Windows shows a SmartScreen warning. To remove it:
-
-1. Obtain a code-signing certificate (e.g. from DigiCert, Sectigo, or similar, ~$200–400/yr)
-2. Export as `cert.pfx`
-3. Uncomment and configure the `certificateFile` lines in `electron-builder.yml`
-4. For CI, store the certificate as a base64 GitHub Secret and set `CSC_LINK` / `CSC_KEY_PASSWORD`
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Desktop wrapper | Electron 33 |
-| Frontend | Next.js 14, React 18, TypeScript |
-| Styling | TailwindCSS 3, Radix UI |
-| Charts | Recharts |
-| Backend | Next.js API Routes |
-| Database | SQLite via Prisma ORM |
-| Scraping | Cheerio (product price tracking) |
-| Self-hosted server | Docker, Watchtower (auto-update) |
-| Auth (server mode only) | Signed session cookie (jose), `scrypt` password hash — real per-user accounts, admin-managed, self-service first-admin setup, optional SMTP temp-password emails |
-| CI/CD | GitHub Actions |
-
----
-
-## Supported Vendors (Product Tracker)
-
-ECS Tuning · FCP Euro · 034Motorsport · Integrated Engineering · APR · Unitronic ·
-CTS Turbo · UROTuning · BMP Tuning · AutoZone · RockAuto · Amazon · Tire Rack ·
-and most sites that use Open Graph or JSON-LD structured data.
-
----
-
-## Folder Structure
-
-```
-buildverse/
-├── .github/
-│   └── workflows/
-│       ├── release.yml   # Builds + publishes installer on git tag push
-│       └── ci.yml        # TypeScript check on PRs
-├── electron/
-│   ├── main.js           # Electron main process (window, tray, server lifecycle)
-│   └── preload.js        # Secure context bridge for renderer
-├── build/
-│   └── ICON_README.txt   # How to add a custom app icon
-├── prisma/
-│   ├── schema.prisma     # Database models
-│   ├── seed.ts           # Demo data (Example S2000 with sample build)
-│   └── dev.db            # SQLite (auto-created by npm run setup)
-├── src/
-│   ├── app/
-│   │   ├── api/          # API routes
-│   │   ├── garage/       # Garage + vehicle detail
-│   │   ├── builds/       # Cross-vehicle build planner
-│   │   ├── budget/       # Budget dashboard with charts
-│   │   ├── products/     # Product price tracker
-│   │   ├── maintenance/  # Service history
-│   │   ├── vendors/      # Vendor directory
-│   │   └── settings/     # App settings + data export
-│   ├── components/
-│   │   ├── ui/           # Radix UI base components
-│   │   ├── vehicles/     # AddVehicleDialog
-│   │   ├── modifications/ # AddModDialog
-│   │   └── maintenance/  # AddMaintenanceDialog
-│   └── lib/
-│       ├── prisma.ts     # Prisma client singleton
-│       ├── scraper.ts    # Product URL scraper (Cheerio)
-│       └── utils.ts      # Helpers, constants, formatters
-├── electron-builder.yml  # Windows + Linux packaging config
-├── next.config.mjs       # Next.js config (standalone output)
-└── package.json
-```
+Bug reports and ideas are welcome — use the [issue templates](../../issues/new/choose). For security problems please follow [SECURITY.md](SECURITY.md) instead of opening a public issue.

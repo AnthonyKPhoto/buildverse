@@ -402,27 +402,14 @@ npm run setup
 
 ## Release workflow
 
-Every change pushed to `main` should be:
-1. Committed with a descriptive message
-2. Version bumped in `package.json`
-3. Tagged as `v{version}` and pushed
+1. Update `RELEASE_NOTES.md` (it becomes the top of the GitHub release page) and add a `CHANGELOG.md` entry.
+2. Bump the version: `npm version <patch|minor|major> --no-git-tag-version`; commit with a descriptive message and push to `main`.
+3. Wait for the **Type Check** run on `main` to pass, then tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
-```powershell
-# After making changes:
-git add <files>
-git commit -m "feat/fix/chore: description"
-
-# Bump version in package.json, then:
-git add package.json
-git commit -m "chore: bump version to X.X.X"
-git tag vX.X.X
-git push origin main
-git push origin vX.X.X
-```
-
-GitHub Actions picks up version tags and builds the Electron installer + Docker image automatically.
-
----
+The tag triggers **Build & Release** (`release.yml`: Windows → then Linux and macOS arm64/x64 in parallel, all attached to one release)
+and **Docker** (`docker-publish.yml`: `ghcr.io/anthonykphoto/buildverse:X.Y.Z` + `:latest`, which Watchtower deploys to the live server).
+The release body is composed once in the Windows job; the other jobs only upload files (parallel body-appends overwrite each other).
+macOS builds are ad-hoc signed by `scripts/after-pack.js` (no Apple Developer certificate); they don't auto-update.
 
 ## Key patterns & conventions
 

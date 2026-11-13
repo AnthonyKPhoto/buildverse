@@ -1,0 +1,41 @@
+name: Bug report
+description: Something in Upshift Garage isn't working
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please **don't** include passwords, API keys or private URLs. For security problems, use the private reporting link on the previous page instead.
+  - type: dropdown
+    id: where
+    attributes:
+      label: How are you running it?
+      options: [Windows desktop app, macOS desktop app, Linux desktop app, Docker / self-hosted server, Browser (npm run dev)]
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Settings → General → About (e.g. 1.15.0)
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you see instead?
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Go to …\n2. Click …\n3. See …"
+  - type: dropdown
+    id: theme
+    attributes:
+      label: Appearance (if it's a visual problem)
+      options: [Classic, Light Frosted, Dark Frosted, Clear Crystal, Not sure / not visual]
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs
+      description: Drag images in here. For server problems, `docker compose logs buildverse --tail 100` helps.

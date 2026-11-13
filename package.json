@@ -1,6 +1,6 @@
 {
   "name": "buildverse",
-  "version": "1.14.3",
+  "version": "1.15.0",
   "description": "Upshift Garage — Intelligent Vehicle Modification Manager",
   "private": true,
   "main": "electron/main.js",
@@ -95,6 +95,10 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/AnthonyKPhoto/buildverse.git"
+  },
+  "homepage": "https://github.com/AnthonyKPhoto/buildverse#readme",
+  "bugs": {
+    "url": "https://github.com/AnthonyKPhoto/buildverse/issues"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
