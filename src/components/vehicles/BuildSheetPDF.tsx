@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
+import { LOGO_PNG_DATA_URI } from "@/lib/logo-data";
 import type { BuildSheetOptions } from "./PDFExportDialog";
 
 interface Modification {
@@ -179,7 +180,10 @@ export function BuildSheetDocument({
 
   const Footer = () => (
     <View style={mk.footer} fixed>
-      <Text style={mk.footerText}>Upshift Garage — {vehicleTitle}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <Image src={LOGO_PNG_DATA_URI} style={{ width: 11, height: 11, marginRight: 5 }} />
+        <Text style={mk.footerText}>Upshift Garage — {vehicleTitle}</Text>
+      </View>
       <Text style={mk.footerText}>
         Generated {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
       </Text>

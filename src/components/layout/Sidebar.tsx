@@ -10,10 +10,10 @@ import {
   ShoppingBag, Settings, Store,
   ArrowUpCircle, Loader2, Search,
 } from "lucide-react";
-import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
 import { GlobalSearch } from "@/components/layout/GlobalSearch";
 import { AccountMenu } from "@/components/layout/AccountMenu";
+import { Logo } from "@/components/Logo";
 
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
@@ -150,7 +150,7 @@ export function Sidebar() {
         className="flex items-center gap-3 px-5 h-16 border-b border-border shrink-0"
         style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
       >
-        <Image src="/logo.svg" alt="Upshift Garage" width={34} height={34} className="rounded-xl shrink-0 ring-1 ring-white/10 shadow-md shadow-black/20" />
+        <Logo size={36} className="rounded-xl shrink-0 ring-1 ring-white/10 shadow-md shadow-black/20" />
         <div className="leading-none">
           <p className="font-semibold text-sm tracking-tight">
             Upshift<span className="text-theme"> Garage</span>

@@ -311,6 +311,16 @@ daily, keep 7. Admin-only API under `/api/admin/backups` (a backup contains pass
 `-wal`/`-shm`, and exits so the container restarts onto it. Backup names come from URLs: always go through
 `backupPath()` (strict allow-list), never `path.join` with the raw name.
 
+## Logo & icons
+
+One source of truth: **`public/logo.svg`** (512×512 rounded-square mark — garage outline, H-pattern gate with reverse
+top-left, first gear lit). `npm run gen-icons` (`scripts/gen-icons.js`, uses `@resvg/resvg-js` only) regenerates everything
+from it: `build/icon.{ico,png}` + `build/icon-mac.png` (committed — the installers read them; `.gitignore` uses `/build/*`
++ negations because git can't re-include files inside an ignored directory), favicons / `apple-touch-icon.png`,
+`src/lib/logo-data.ts` (inline PNG for the PDF), `capacitor-app/logo.svg`, and the Android launcher/splash images.
+In the web UI use `<Logo />` (`src/components/Logo.tsx`) — same artwork drawn inline so its blue follows the user's accent
+colour (`fixed` pins the brand blue). If you change the artwork, edit `public/logo.svg` **and** `Logo.tsx`, then re-run the script.
+
 ## Per-user display prefs
 
 `src/lib/prefs.ts` — interface size (root font-size), sidebar width, reduce motion, currency, show cents, date

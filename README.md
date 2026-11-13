@@ -1,3 +1,5 @@
+<p align="center"><img src="public/icon-192.png" alt="Upshift Garage" width="96" height="96"></p>
+
 # Upshift Garage — Intelligent Vehicle Modification Manager
 
 Plan, track, budget, research, and organize your vehicle modifications.

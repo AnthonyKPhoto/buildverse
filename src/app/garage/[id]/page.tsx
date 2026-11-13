@@ -37,6 +37,7 @@ import {
 } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useCategories } from "@/hooks/use-categories";
+import { Logo } from "@/components/Logo";
 
 interface ModDep {
   id: string;
@@ -1309,7 +1310,7 @@ export default function VehicleDetailPage() {
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setBuildCardOpen(false)}>
             <div className="bg-card rounded-2xl overflow-hidden shadow-2xl max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
               <div className="flex justify-between items-center px-5 pt-4 pb-0">
-                <p className="text-xs text-muted-foreground">Upshift Garage · Build Card</p>
+                <p className="flex items-center gap-2 text-xs text-muted-foreground"><Logo size={18} className="rounded-md" />Upshift Garage · Build Card</p>
                 <button onClick={() => setBuildCardOpen(false)} className="text-muted-foreground hover:text-foreground">
                   <X className="w-4 h-4" />
                 </button>

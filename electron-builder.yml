@@ -135,13 +135,13 @@ mac:
   target:
     - target: "dmg"
     - target: "zip"
-  icon: "public/icon-512.png"   # electron-builder converts to .icns (needs >=512px)
+  icon: "build/icon-mac.png"   # 1024px, macOS-style padding; electron-builder converts to .icns
   category: "public.app-category.utilities"
   identity: null
   extraResources:
     - from: "resources-extra/node"
       to: "node"
-    - from: "public/icon-512.png"
+    - from: "build/icon.png"
       to: "icon.png"
   artifactName: "UpshiftGarage-${version}-mac-${arch}.${ext}"
 

@@ -3,6 +3,7 @@
 import { useState, FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { UserPlus, User, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { Logo } from "@/components/Logo";
 
 export function SetupForm() {
   const searchParams = useSearchParams();
@@ -47,9 +48,7 @@ export function SetupForm() {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
       <div className="w-full max-w-sm px-6">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-theme/10 border border-theme/20 flex items-center justify-center mx-auto mb-4">
-            <UserPlus className="w-7 h-7 text-theme" />
-          </div>
+          <Logo size={72} className="mx-auto mb-4 rounded-[20px] shadow-lg shadow-black/30" />
           <h1 className="text-2xl font-bold tracking-tight">Welcome to Upshift Garage</h1>
           <p className="text-sm text-muted-foreground mt-1">
             You're the first one here — create the admin account

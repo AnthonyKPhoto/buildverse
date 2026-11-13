@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { CheckCircle2, ArrowRight, ChevronRight } from "lucide-react";
 import { ACCENT_PRESETS, applyAccent } from "@/components/ThemeProvider";
+import { Logo } from "@/components/Logo";
 
 const STORAGE_KEY = "bv_setup_complete";
 
@@ -62,9 +63,7 @@ export function SetupWizard() {
         {/* ── Welcome ─────────────────────────────────── */}
         {step === "welcome" && (
           <div className="text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="w-20 h-20 rounded-2xl bg-theme/10 border border-theme/20 flex items-center justify-center mx-auto">
-              <span className="text-4xl">🔧</span>
-            </div>
+            <Logo size={96} className="mx-auto rounded-[26px] shadow-xl shadow-black/30" />
             <div>
               <h1 className="text-3xl font-bold tracking-tight mb-2">Welcome to Upshift Garage</h1>
               <p className="text-muted-foreground">Your intelligent vehicle modification manager. Let&apos;s get you set up in about 30 seconds.</p>
