@@ -200,6 +200,11 @@ export async function applySelfMigrations(client: PrismaClient): Promise<void> {
 
   const trackedProductCols = await existingColumns(client, "TrackedProduct");
   await addColumn(client, trackedProductCols, "alertThreshold", "REAL", "TrackedProduct");
+  await addColumn(client, trackedProductCols, "previousPrice",     "REAL",     "TrackedProduct");
+  await addColumn(client, trackedProductCols, "notifyEmail",       "BOOLEAN NOT NULL DEFAULT 0", "TrackedProduct");
+  await addColumn(client, trackedProductCols, "lastNotifiedPrice", "REAL",     "TrackedProduct");
+  await addColumn(client, trackedProductCols, "lastNotifiedAt",    "DATETIME", "TrackedProduct");
+  await addColumn(client, trackedProductCols, "lastError",         "TEXT",     "TrackedProduct");
 
   const maintenanceCols = await existingColumns(client, "MaintenanceLog");
   await addColumn(client, maintenanceCols, "externalId", "TEXT", "MaintenanceLog");
@@ -218,6 +223,7 @@ export async function applySelfMigrations(client: PrismaClient): Promise<void> {
   await addColumn(client, userCols, "radius",             "TEXT",                     "User");
   await addColumn(client, userCols, "font",               "TEXT",                     "User");
   await addColumn(client, userCols, "colorScheme",        "TEXT",                     "User");
+  await addColumn(client, userCols, "prefs",              "TEXT",                     "User");
 
   // ── Data backfills ──────────────────────────────────────────────────────────
 

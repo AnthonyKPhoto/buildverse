@@ -7,15 +7,18 @@ import {
   Archive, RotateCcw, Trash2, ArrowUpCircle,
   CheckCircle2, AlertCircle, Loader2, X, Save, ShoppingBag,
   Tag, Plus, GripVertical,
-  Shield, Plug, Key, Cloud, Mail, Send, Copy,
+  Shield, Plug, Key, Cloud, Mail, Send, Copy, Bell,
 } from "lucide-react";
 import { MOD_CATEGORIES } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { LubeLoggerSettings } from "@/components/integrations/LubeLoggerSettings";
+import { AppearanceExtras } from "@/components/settings/AppearanceExtras";
+import { PriceAlertsSettings } from "@/components/settings/PriceAlertsSettings";
 import {
   ACCENT_PRESETS, RADIUS_PRESETS, FONT_PRESETS,
   useCurrentAccent, useCurrentRadius, useCurrentFont, useCurrentScheme,
+  isCustomAccent, CUSTOM_PREFIX,
 } from "@/components/ThemeProvider";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -29,7 +32,7 @@ interface ManagedUser { id: string; username: string; email: string | null; role
 interface SmtpConfigForm { host: string; port: number; secure: boolean; username: string; from: string; hasPassword: boolean; }
 interface AccessVehicle { id: string; name: string | null; year: number; make: string; model: string; createdByUserId: string | null; }
 interface VehicleAccessData { vehicles: AccessVehicle[]; users: ManagedUser[]; grants: { vehicleId: string; userId: string }[]; }
-type Section = "general" | "access" | "integrations" | "data";
+type Section = "general" | "access" | "integrations" | "alerts" | "data";
 type UpdateStatus =
   | { status: "idle" } | { status: "checking" } | { status: "current" }
   | { status: "available"; version: string; downloadUrl?: string; manual?: boolean }
@@ -736,6 +739,7 @@ export default function SettingsPage() {
   const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
     { id: "general",      label: "General",       icon: Palette   },
     { id: "access",       label: "Access & Sync", icon: Cloud     },
+    { id: "alerts",       label: "Price Alerts",  icon: Bell      },
     { id: "integrations", label: "Integrations",  icon: Plug      },
     { id: "data",         label: "Data & Backup", icon: HardDrive },
   ];
@@ -774,7 +778,7 @@ export default function SettingsPage() {
         <div className="relative">
           <p className="text-xs font-medium text-muted-foreground/60 tracking-wider uppercase mb-1">BuildVerse</p>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
-          <p className="text-sm text-muted-foreground mt-1">Appearance, remote access, integrations &amp; data</p>
+          <p className="text-sm text-muted-foreground mt-1">Appearance, price alerts, remote access, integrations &amp; data</p>
         </div>
       </div>
 
@@ -858,7 +862,17 @@ export default function SettingsPage() {
                       </button>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2 capitalize">{ACCENT_PRESETS.find(p => p.id === accent)?.label ?? accent}</p>
+                  <div className="flex items-center gap-3 mt-3">
+                    <label className={cn("flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full border text-xs font-medium cursor-pointer transition-colors",
+                      isCustomAccent(accent) ? "border-theme bg-theme/10 text-theme" : "border-border bg-secondary text-muted-foreground hover:text-foreground")}>
+                      <input type="color" aria-label="Custom accent color"
+                        value={isCustomAccent(accent) ? accent.slice(CUSTOM_PREFIX.length) : "#3b82f6"}
+                        onChange={(e) => setAccent(`${CUSTOM_PREFIX}${e.target.value}`)}
+                        className="w-6 h-6 rounded-full border-0 p-0 bg-transparent cursor-pointer" />
+                      Custom color
+                    </label>
+                    <p className="text-xs text-muted-foreground capitalize">{isCustomAccent(accent) ? accent.slice(CUSTOM_PREFIX.length) : (ACCENT_PRESETS.find(p => p.id === accent)?.label ?? accent)}</p>
+                  </div>
                 </div>
                 {/* Font */}
                 <div className="mb-5">
@@ -890,6 +904,7 @@ export default function SettingsPage() {
                     ))}
                   </div>
                 </div>
+                <AppearanceExtras />
               </Section>
 
               <Section title="Mod Categories" icon={Tag}
@@ -1329,6 +1344,8 @@ export default function SettingsPage() {
 
 
           {/* ════════════════════════ INTEGRATIONS ═══════════════════════ */}
+          {section === "alerts" && <PriceAlertsSettings />}
+
           {section === "integrations" && (
             <>
               <Section title="Product Tracking" icon={ShoppingBag}>

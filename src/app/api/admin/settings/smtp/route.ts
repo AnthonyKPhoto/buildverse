@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 
 export async function GET(req: NextRequest) {
-  const denied = await requireAdmin(req);
+  const denied = await requireAdmin(req, true);
   if (denied) return denied;
 
   const config = await getSmtpConfigMasked();
@@ -27,7 +27,7 @@ const smtpSchema = z.object({
 });
 
 export async function PUT(req: NextRequest) {
-  const denied = await requireAdmin(req);
+  const denied = await requireAdmin(req, true);
   if (denied) return denied;
 
   try {

@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { getPrefs } from "@/lib/prefs";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -7,17 +8,35 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatCurrency(amount: number | null | undefined): string {
   if (amount == null) return "—";
+  const { currency, showCents } = getPrefs();
+  const digits = currency === "JPY" ? 0 : showCents ? 2 : 0;
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    currency,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(amount);
+}
+
+/** Always shows cents — for individual product prices like $12.99, where rounding to $13 would be wrong. */
+export function formatPrice(amount: number | null | undefined): string {
+  if (amount == null) return "—";
+  const { currency } = getPrefs();
+  const digits = currency === "JPY" ? 0 : 2;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   }).format(amount);
 }
 
 export function formatDate(date: string | Date | null | undefined): string {
   if (!date) return "—";
-  return new Date(date).toLocaleDateString("en-US", {
+  const d = new Date(date);
+  const { dateFormat } = getPrefs();
+  if (dateFormat === "iso") return d.toISOString().slice(0, 10);
+  return d.toLocaleDateString(dateFormat === "eu" ? "en-GB" : "en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",

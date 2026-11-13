@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getPrefs, applyPrefs, loadServerPrefs } from "@/lib/prefs";
 
 export const ACCENT_PRESETS = [
   { id: "blue",    label: "Blue",         value: "217 91% 60%",  hex: "#3b82f6" },
@@ -33,13 +34,35 @@ export const FONT_PRESETS = [
   { id: "mono",    label: "Mono",          value: "ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace" },
 ];
 
+// "custom:#rrggbb" — a user-picked color, stored in the same field as a preset id.
+export const CUSTOM_PREFIX = "custom:";
+export function isCustomAccent(id: string) { return /^custom:#[0-9a-fA-F]{6}$/.test(id); }
+
+export function hexToHslString(hex: string): string {
+  const n = parseInt(hex.replace("#", ""), 16);
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+  }
+  return `${Math.round(h)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+}
+
 export function applyAccent(id: string) {
-  const preset = ACCENT_PRESETS.find((p) => p.id === id) ?? ACCENT_PRESETS[0];
+  const preset = ACCENT_PRESETS.find((p) => p.id === id);
+  const value = preset ? preset.value : isCustomAccent(id) ? hexToHslString(id.slice(CUSTOM_PREFIX.length)) : ACCENT_PRESETS[0].value;
   const root = document.documentElement;
-  root.style.setProperty("--theme", preset.value);
-  root.style.setProperty("--ring",  preset.value);
-  root.style.setProperty("--primary", preset.value);
-  localStorage.setItem("bv-accent", id);
+  root.style.setProperty("--theme", value);
+  root.style.setProperty("--ring",  value);
+  root.style.setProperty("--primary", value);
+  localStorage.setItem("bv-accent", preset || isCustomAccent(id) ? id : ACCENT_PRESETS[0].id);
 }
 
 export function applyRadius(id: string) {
@@ -131,6 +154,7 @@ export function ThemeProvider() {
     applyRadius(localStorage.getItem("bv-radius") ?? "default");
     applyFont(localStorage.getItem("bv-font") ?? "inter");
     applyScheme(localStorage.getItem("bv-scheme") ?? "dark");
+    applyPrefs(getPrefs());
 
     // Authoritative: in server mode with a real signed-in identity, the
     // account's own saved theme (if any) overrides the local fallback above
@@ -143,6 +167,7 @@ export function ThemeProvider() {
         if (user.radius) applyRadius(user.radius);
         if (user.font) applyFont(user.font);
         if (user.colorScheme) applyScheme(user.colorScheme);
+        if (user.prefs) loadServerPrefs(user.prefs);
       })
       .catch(() => {});
   }, []);

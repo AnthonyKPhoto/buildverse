@@ -19,6 +19,8 @@ const nextConfig = {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
   experimental: {
+    // Enables src/instrumentation.ts (background price checks)
+    instrumentationHook: true,
     serverComponentsExternalPackages: ["@prisma/client", "prisma"],
   },
 };

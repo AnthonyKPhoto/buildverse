@@ -57,6 +57,7 @@ export async function POST() {
             availability: scraped.availability,
             sku: scraped.sku,
             lastChecked: new Date(),
+            lastError: scraped.failed ? scraped.error ?? "Couldn't load the page" : scraped.price == null ? "Couldn't read a price from this page" : null,
             priceHistory: scraped.price ? { create: { price: scraped.price } } : undefined,
           },
         });

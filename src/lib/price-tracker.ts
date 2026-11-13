@@ -1,0 +1,350 @@
+import { prisma } from "@/lib/prisma";
+import { scrapeProduct } from "@/lib/scraper";
+import { sendMail, isSmtpConfigured } from "@/lib/mailer";
+
+// Everything the Product Tracker does server-side: reading/saving the alert
+// settings, refreshing a product's price, deciding whether an email is due, and
+// the background check run by src/instrumentation.ts.
+
+// ── Settings (stored in the generic Setting table) ───────────────────────────
+
+const SETTINGS_KEY = "price_alerts";
+
+export interface PriceAlertSettings {
+  /** Master switch for emails. Off by default — nothing is ever sent unless the user turns it on. */
+  emailEnabled: boolean;
+  /** Who gets the emails. If empty, admins with an email address on file are used. */
+  recipients: string[];
+  /** Re-check products in the background, even when nobody has the app open. */
+  autoCheck: boolean;
+  /** How often each product is re-checked (hours). */
+  intervalHours: number;
+  /** Also email when a product drops by at least this % since its last check (0 = off). */
+  dropPercent: number;
+}
+
+export const DEFAULT_PRICE_ALERT_SETTINGS: PriceAlertSettings = {
+  emailEnabled: false,
+  recipients: [],
+  autoCheck: true,
+  intervalHours: 12,
+  dropPercent: 0,
+};
+
+const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+
+export function sanitizeSettings(input: Partial<PriceAlertSettings>, base: PriceAlertSettings): PriceAlertSettings {
+  const next = { ...base };
+  if (typeof input.emailEnabled === "boolean") next.emailEnabled = input.emailEnabled;
+  if (typeof input.autoCheck === "boolean") next.autoCheck = input.autoCheck;
+  if (Array.isArray(input.recipients)) {
+    next.recipients = Array.from(new Set(
+      input.recipients.map((r) => String(r).trim()).filter((r) => EMAIL_RE.test(r) && r.length <= 254)
+    )).slice(0, 10);
+  }
+  if (typeof input.intervalHours === "number" && Number.isFinite(input.intervalHours)) {
+    next.intervalHours = Math.min(168, Math.max(1, Math.round(input.intervalHours)));
+  }
+  if (typeof input.dropPercent === "number" && Number.isFinite(input.dropPercent)) {
+    next.dropPercent = Math.min(90, Math.max(0, Math.round(input.dropPercent)));
+  }
+  return next;
+}
+
+export async function getPriceAlertSettings(): Promise<PriceAlertSettings> {
+  const row = await prisma.setting.findUnique({ where: { key: SETTINGS_KEY } }).catch(() => null);
+  if (!row) return { ...DEFAULT_PRICE_ALERT_SETTINGS };
+  try {
+    return sanitizeSettings(JSON.parse(row.value), DEFAULT_PRICE_ALERT_SETTINGS);
+  } catch {
+    return { ...DEFAULT_PRICE_ALERT_SETTINGS };
+  }
+}
+
+export async function savePriceAlertSettings(input: Partial<PriceAlertSettings>): Promise<PriceAlertSettings> {
+  const next = sanitizeSettings(input, await getPriceAlertSettings());
+  const value = JSON.stringify(next);
+  await prisma.setting.upsert({
+    where: { key: SETTINGS_KEY },
+    update: { value },
+    create: { key: SETTINGS_KEY, value },
+  });
+  return next;
+}
+
+/** Recipients to actually use: the configured list, else admin accounts that have an email. */
+export async function resolveRecipients(settings: PriceAlertSettings): Promise<string[]> {
+  if (settings.recipients.length > 0) return settings.recipients;
+  const admins = await prisma.user
+    .findMany({ where: { role: "admin", email: { not: null } }, select: { email: true } })
+    .catch(() => []);
+  return admins.map((a) => a.email!).filter(Boolean);
+}
+
+// ── Refreshing one product ───────────────────────────────────────────────────
+
+const PRODUCT_INCLUDE = { priceHistory: { orderBy: { createdAt: "desc" as const }, take: 60 } };
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isPlaceholderTitle(t: string | null | undefined): boolean {
+  return !t || t === "Unknown Product" || /^Product from /.test(t);
+}
+
+/**
+ * Re-scrapes a product and updates it.
+ *
+ * Unlike the old inline logic this never destroys good data: a failed fetch,
+ * or a page where no price could be read, only records `lastError` — the
+ * previous price, title and image are kept. All-time low/high are only ever
+ * widened, and a history point is only written when the price actually moved
+ * (or once a day), so the chart isn't a flat line of duplicates.
+ */
+export async function refreshProduct(id: string) {
+  const p = await prisma.trackedProduct.findUnique({ where: { id } });
+  if (!p) return null;
+  const now = new Date();
+
+  let scraped;
+  try {
+    scraped = await scrapeProduct(p.url);
+  } catch (err) {
+    return prisma.trackedProduct.update({
+      where: { id },
+      data: { lastChecked: now, lastError: err instanceof Error ? err.message : "Check failed" },
+      include: PRODUCT_INCLUDE,
+    });
+  }
+
+  if (scraped.failed) {
+    return prisma.trackedProduct.update({
+      where: { id },
+      data: { lastChecked: now, lastError: scraped.error ?? "Couldn't load the page" },
+      include: PRODUCT_INCLUDE,
+    });
+  }
+
+  const data: Record<string, unknown> = {
+    lastChecked: now,
+    lastError: null,
+    title: isPlaceholderTitle(scraped.title) ? undefined : scraped.title,
+    brand: scraped.brand || undefined,
+    imageUrl: scraped.imageUrl || undefined,
+    description: scraped.description || undefined,
+    availability: scraped.availability || undefined,
+    sku: scraped.sku || undefined,
+  };
+
+  const price = scraped.price;
+  if (price == null) {
+    data.lastError = "Couldn't read a price from this page";
+  } else {
+    const changed = p.currentPrice == null || Math.abs(p.currentPrice - price) > 0.004;
+    data.currentPrice = price;
+    if (changed && p.currentPrice != null) data.previousPrice = p.currentPrice;
+    if (p.lowestPrice == null || price < p.lowestPrice) data.lowestPrice = price;
+    if (p.highestPrice == null || price > p.highestPrice) data.highestPrice = price;
+
+    const last = await prisma.priceHistory.findFirst({ where: { productId: id }, orderBy: { createdAt: "desc" } });
+    if (changed || !last || now.getTime() - last.createdAt.getTime() > DAY_MS) {
+      data.priceHistory = { create: { price } };
+    }
+  }
+
+  return prisma.trackedProduct.update({ where: { id }, data, include: PRODUCT_INCLUDE });
+}
+
+// ── Alert evaluation ─────────────────────────────────────────────────────────
+
+export interface AlertItem {
+  id: string;
+  title: string;
+  url: string;
+  vendor: string | null;
+  price: number;
+  previousPrice: number | null;
+  threshold: number | null;
+  reason: "threshold" | "drop";
+}
+
+type Tracked = NonNullable<Awaited<ReturnType<typeof refreshProduct>>>;
+
+/**
+ * Decides whether `after` (the product post-refresh) warrants an email.
+ * `before` is the price prior to this refresh. Re-arming: once a price climbs
+ * back above the alert, the next dip below it emails again — but repeated
+ * checks at the same low price don't.
+ */
+export function evaluateAlert(
+  before: { currentPrice: number | null },
+  after: Tracked,
+  settings: PriceAlertSettings
+): { item: AlertItem | null; rearm: boolean } {
+  const price = after.currentPrice;
+  if (price == null) return { item: null, rearm: false };
+
+  const tripped = after.alertThreshold != null && price <= after.alertThreshold;
+  const rearm = !tripped && after.lastNotifiedPrice != null;
+  if (!settings.emailEnabled || !after.notifyEmail) return { item: null, rearm };
+
+  const prev = before.currentPrice;
+  const dropPct = prev != null && prev > 0 && price < prev ? ((prev - price) / prev) * 100 : 0;
+
+  let reason: AlertItem["reason"] | null = null;
+  if (tripped && (after.lastNotifiedPrice == null || price < after.lastNotifiedPrice - 0.005)) reason = "threshold";
+  else if (settings.dropPercent > 0 && dropPct >= settings.dropPercent) reason = "drop";
+
+  if (!reason) return { item: null, rearm };
+  return {
+    rearm: false,
+    item: {
+      id: after.id, title: after.title, url: after.url, vendor: after.vendor,
+      price, previousPrice: prev, threshold: after.alertThreshold, reason,
+    },
+  };
+}
+
+// ── Email ────────────────────────────────────────────────────────────────────
+
+// Titles/vendors come from scraped web pages — untrusted. Always escape.
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+const money = (n: number) => `$${n.toFixed(2)}`;
+const safeHref = (u: string) => (/^https?:\/\//i.test(u) ? esc(u) : "#");
+
+export function buildAlertEmail(items: AlertItem[], appUrl?: string) {
+  const subject =
+    items.length === 1
+      ? `Price alert: ${items[0].title.slice(0, 80)} is now ${money(items[0].price)}`
+      : `Price alerts: ${items.length} products hit your target`;
+
+  const text =
+    items
+      .map((i) => {
+        const was = i.previousPrice != null && i.previousPrice !== i.price ? ` (was ${money(i.previousPrice)})` : "";
+        const tgt = i.reason === "threshold" && i.threshold != null ? ` — your alert: ${money(i.threshold)}` : "";
+        return `• ${i.title}\n  ${money(i.price)}${was}${tgt}\n  ${i.url}`;
+      })
+      .join("\n\n") + (appUrl ? `\n\nOpen your tracker: ${appUrl}/products` : "") +
+    "\n\nYou're getting this because email price alerts are on in BuildVerse (Settings → Price Alerts).";
+
+  const rows = items
+    .map((i) => {
+      const was = i.previousPrice != null && i.previousPrice !== i.price
+        ? `<span style="color:#888;text-decoration:line-through">${money(i.previousPrice)}</span> ` : "";
+      const tgt = i.reason === "threshold" && i.threshold != null
+        ? `<div style="color:#888;font-size:12px">Your alert: ${money(i.threshold)}</div>` : "";
+      return `<tr><td style="padding:12px 0;border-bottom:1px solid #eee">
+        <a href="${safeHref(i.url)}" style="font-weight:600;color:#111;text-decoration:none">${esc(i.title)}</a>
+        ${i.vendor ? `<div style="color:#888;font-size:12px">${esc(i.vendor)}</div>` : ""}
+        <div style="margin-top:4px;font-size:18px">${was}<strong style="color:#16a34a">${money(i.price)}</strong></div>${tgt}
+      </td></tr>`;
+    })
+    .join("");
+  const html =
+    `<div style="font-family:system-ui,sans-serif;max-width:520px">` +
+    `<h2 style="margin:0 0 8px">Price ${items.length === 1 ? "alert" : "alerts"} 🎯</h2>` +
+    `<table style="width:100%;border-collapse:collapse">${rows}</table>` +
+    (appUrl ? `<p><a href="${safeHref(appUrl + "/products")}">Open your tracker</a></p>` : "") +
+    `<p style="color:#888;font-size:12px">You're getting this because email price alerts are on in BuildVerse (Settings → Price Alerts).</p></div>`;
+  return { subject, text, html };
+}
+
+export async function sendAlertDigest(items: AlertItem[], settings: PriceAlertSettings) {
+  const to = await resolveRecipients(settings);
+  if (to.length === 0) return { ok: false as const, error: "No recipient email addresses configured" };
+  const appUrl = process.env.APP_URL?.trim().replace(/\/+$/, "") || undefined;
+  return sendMail({ to: to.join(", "), ...buildAlertEmail(items, appUrl) });
+}
+
+export async function sendTestAlert(settings: PriceAlertSettings) {
+  return sendAlertDigest(
+    [{
+      id: "test", title: "Example Coilover Kit (test message)", url: "https://example.com/product",
+      vendor: "Example Vendor", price: 849, previousPrice: 999, threshold: 900, reason: "threshold",
+    }],
+    settings
+  );
+}
+
+// ── Background / bulk check ──────────────────────────────────────────────────
+
+const g = globalThis as unknown as { __bvPriceCheckRunning?: boolean };
+
+export interface CheckSummary {
+  checked: number;
+  failed: number;
+  alerts: number;
+  emailed: boolean;
+  emailError?: string;
+  skipped?: "busy";
+}
+
+/**
+ * Checks every product that's due (or all of them with `force`), then sends
+ * ONE digest email for anything that newly crossed an alert. Products are
+ * fetched a couple at a time with a short pause — polite to the shops.
+ */
+export async function runPriceCheck(opts: { force?: boolean; notify?: boolean } = {}): Promise<CheckSummary> {
+  if (g.__bvPriceCheckRunning) return { checked: 0, failed: 0, alerts: 0, emailed: false, skipped: "busy" };
+  g.__bvPriceCheckRunning = true;
+  try {
+    const settings = await getPriceAlertSettings();
+    const cutoff = Date.now() - settings.intervalHours * 60 * 60 * 1000;
+    const all = await prisma.trackedProduct.findMany({ select: { id: true, lastChecked: true, currentPrice: true } });
+    const due = all.filter((p) => opts.force || !p.lastChecked || p.lastChecked.getTime() <= cutoff);
+
+    const alerts: AlertItem[] = [];
+    let checked = 0, failed = 0;
+
+    const work = async (p: (typeof due)[number]) => {
+      const after = await refreshProduct(p.id).catch(() => null);
+      if (!after) { failed++; return; }
+      checked++;
+      if (after.lastError) {
+        // No fresh price this time — never alert (or re-arm) off a stale one
+        failed++;
+        return;
+      }
+      const { item, rearm } = evaluateAlert({ currentPrice: p.currentPrice }, after, settings);
+      if (rearm) await prisma.trackedProduct.update({ where: { id: p.id }, data: { lastNotifiedPrice: null } }).catch(() => {});
+      if (item && opts.notify !== false) alerts.push(item);
+    };
+
+    const CONCURRENCY = 2;
+    let idx = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, due.length) }, async () => {
+        while (idx < due.length) {
+          const p = due[idx++];
+          await work(p);
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      })
+    );
+
+    let emailed = false;
+    let emailError: string | undefined;
+    if (alerts.length > 0) {
+      if (!(await isSmtpConfigured())) {
+        emailError = "Email server isn't set up (Settings → Price Alerts → Email server)";
+      } else {
+        const res = await sendAlertDigest(alerts, settings);
+        if (res.ok) {
+          emailed = true;
+          const now = new Date();
+          await Promise.all(alerts.map((a) =>
+            prisma.trackedProduct.update({ where: { id: a.id }, data: { lastNotifiedPrice: a.price, lastNotifiedAt: now } }).catch(() => {})
+          ));
+        } else {
+          emailError = res.error;
+        }
+      }
+      if (emailError) console.error("[price-tracker] alert email not sent:", emailError);
+    }
+
+    return { checked, failed, alerts: alerts.length, emailed, emailError };
+  } finally {
+    g.__bvPriceCheckRunning = false;
+  }
+}

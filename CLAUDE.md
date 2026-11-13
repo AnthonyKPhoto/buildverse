@@ -101,7 +101,7 @@ electron/
 | `Vehicle` | year, make, model, trim, engine, transmission, drivetrain, vin, mileage, platform, color, photoUrl, instagramUrl, facebookUrl, notes | photoUrl accepts `data:image/` base64 or https:// |
 | `Modification` | name, category, vendor, brand, price, actualPrice, status, priority, link, imageUrl, difficulty, installDate, installMileage, laborCost, diyInstall, partNumber, orderNumber | Cascade-deleted with vehicle |
 | `ModDependency` | modId, dependsOnId | Many-to-many self-ref. **Must** delete these before deleting a Modification (SQLite doesn't cascade FK automatically — see `DELETE /api/modifications/[id]`) |
-| `TrackedProduct` | url (unique), title, currentPrice, lowestPrice, highestPrice, alertThreshold, vendor, priceHistory[] | |
+| `TrackedProduct` | url (unique), title, currentPrice, lowestPrice, highestPrice, previousPrice, alertThreshold, notifyEmail, lastNotifiedPrice, lastError, vendor, priceHistory[] | See "Product tracker" below |
 | `Budget` | vehicleId, category (unique pair), planned, actual | upsert by vehicleId+category |
 | `MaintenanceLog` | service, date, mileage, cost, shop, diy, nextDue, nextMiles, externalId | externalId used for LubeLogger dedup |
 | `DynoRun` | hp, torque, label, date | |
@@ -110,7 +110,7 @@ electron/
 | `VehicleNote` | title, content, color, importance | Sticky-note board |
 | `VehicleLink` | title, url, description, category | External links per vehicle |
 | `Setting` | key, value | App-wide key/value store (custom categories, LubeLogger config, SMTP config under key `"smtp"`) |
-| `User` | username (unique), email, passwordHash, role (admin\|member), mustChangePassword, accentColor, radius, font, colorScheme | Server mode only — see Authentication below. Everyone shares the same garage; this is per-person login identity, not data isolation. Theme fields are this account's own saved appearance (see "Per-user theme"). |
+| `User` | username (unique), email, passwordHash, role (admin\|member), mustChangePassword, accentColor, radius, font, colorScheme, prefs (JSON) | Server mode only — see Authentication below. Everyone shares the same garage; this is per-person login identity, not data isolation. Theme fields are this account's own saved appearance (see "Per-user theme"). |
 | `VehicleAccess` | vehicleId, userId (unique pair) | Explicit "this user may edit this vehicle" grant set by an admin. `Vehicle.createdByUserId` (nullable, `SetNull` on user delete) tracks the creator, who always keeps edit access alongside admins and anyone with a grant. |
 
 **Schema changes:** edit `prisma/schema.prisma` then run `npx prisma db push`. No migrations needed (SQLite + `db push`).
@@ -269,6 +269,30 @@ their swatch-highlight state, so on a brand-new browser the highlighted swatch c
 corrects on any interaction or reload — not worth a shared theme context for this.
 
 ---
+
+## Product tracker & price alerts
+
+- **All server logic is in `src/lib/price-tracker.ts`**: `refreshProduct()` (never overwrites a good price/title
+  on a failed scrape — it only sets `lastError`; all-time low/high are only ever widened; a history row is
+  written only when the price moves or once a day), `evaluateAlert()` (pure, unit-testable), `runPriceCheck()`
+  (a few products at a time, one digest email per run) and the settings (`Setting` key `price_alerts`).
+- **Background checks:** `src/instrumentation.ts` → `src/lib/price-scheduler.ts` ticks every 15 min and checks
+  whatever is older than the configured interval. Requires `experimental.instrumentationHook` in `next.config.mjs`.
+  Runs in Docker and in Electron's spawned server; nothing runs during `next build`.
+- **Email is opt-in twice:** global switch (Settings → Price Alerts) AND per-product `notifyEmail`. Fires once when
+  a price first reaches the target, again only if it drops lower; re-arms after the price rises above the target.
+  Never alerts off a failed check. Scraped titles are HTML-escaped in the email (untrusted input).
+- **SMTP** is shared with the account-email feature (`src/lib/mailer.ts`) and can be set up from Settings → Price
+  Alerts (works in local/Electron mode too, via `requireAdmin(req, true)`).
+- **Scraper** prefers schema.org JSON-LD (`extractJsonLd`) over CSS-class guessing, and returns `failed: true` when
+  the page couldn't be fetched — callers must check it.
+
+## Per-user display prefs
+
+`src/lib/prefs.ts` — interface size (root font-size), sidebar width, reduce motion, currency, show cents, date
+format. Stored in `localStorage` (`bv-prefs`) and, when signed in, `User.prefs`. `formatCurrency`/`formatDate` read
+them, so currency/date changes reload the page. Use `formatPrice()` (always 2 decimals) for individual product prices.
+Custom accent colors are stored in the accent field as `custom:#rrggbb`.
 
 ## Environment variables
 

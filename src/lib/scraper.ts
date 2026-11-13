@@ -12,6 +12,9 @@ interface ScrapedProduct {
   availability: string | null;
   vendor: string | null;
   sku: string | null;
+  /** True when the page couldn't be fetched at all (network error, bot block, 4xx/5xx). */
+  failed?: boolean;
+  error?: string;
 }
 
 function extractDomain(url: string): string {
@@ -192,6 +195,88 @@ function sanitizeImageUrl(url: string | null | undefined): string | null {
 
 // ── Scraper ───────────────────────────────────────────────────────────────────
 
+// ── Structured data (schema.org JSON-LD) ──────────────────────────────────────
+// Most shops publish a machine-readable Product block. It's far more reliable
+// than guessing at CSS classes ("[class*=price]" happily matches strikethrough
+// list prices, shipping thresholds, etc.), so it's preferred when present.
+
+interface LdProduct {
+  name?: string; price?: number; availability?: string;
+  image?: string; brand?: string; sku?: string; description?: string;
+}
+
+function asArray<T>(v: T | T[] | undefined | null): T[] {
+  return v == null ? [] : Array.isArray(v) ? v : [v];
+}
+
+function firstString(v: unknown): string | undefined {
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) return firstString(v[0]);
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    return firstString(o.url ?? o.contentUrl ?? o.name);
+  }
+  return undefined;
+}
+
+function ldPrice(offer: Record<string, unknown>): number | undefined {
+  const spec = asArray(offer.priceSpecification as Record<string, unknown> | undefined)[0] as Record<string, unknown> | undefined;
+  const raw = offer.price ?? offer.lowPrice ?? spec?.price;
+  if (raw == null) return undefined;
+  const n = typeof raw === "number" ? raw : parseFloat(String(raw).replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+function prettyAvailability(a: unknown): string | undefined {
+  if (typeof a !== "string") return undefined;
+  const key = a.replace(/^https?:\/\/schema\.org\//i, "");
+  const map: Record<string, string> = {
+    InStock: "In Stock", OutOfStock: "Out of Stock", SoldOut: "Sold Out",
+    PreOrder: "Pre-order", BackOrder: "Backorder", LimitedAvailability: "Limited Stock",
+    InStoreOnly: "In Store Only", OnlineOnly: "Online Only", Discontinued: "Discontinued",
+  };
+  return map[key] ?? key.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function extractJsonLd($: any): LdProduct | null {
+  const nodes: Record<string, unknown>[] = [];
+  const walk = (v: unknown) => {
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (v && typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      nodes.push(o);
+      if (o["@graph"]) walk(o["@graph"]);
+    }
+  };
+  $('script[type="application/ld+json"]').each((_: number, el: unknown) => {
+    try { walk(JSON.parse($(el).contents().text())); } catch { /* malformed block — skip */ }
+  });
+
+  const product = nodes.find((n) => asArray(n["@type"] as string | string[]).some((t) => /^(Product|ProductGroup|IndividualProduct)$/i.test(String(t))));
+  if (!product) return null;
+
+  // Prefer the lowest valid offer price across variants
+  const recs = (v: unknown): Record<string, unknown>[] => asArray<Record<string, unknown>>(v as Record<string, unknown> | Record<string, unknown>[] | undefined);
+  const offers: Record<string, unknown>[] = recs(product.offers).concat(
+    recs(product.hasVariant).flatMap((v) => recs(v.offers))
+  );
+  const priced = offers.map((o) => ({ o, p: ldPrice(o) })).filter((x) => x.p != null) as { o: Record<string, unknown>; p: number }[];
+  priced.sort((a, b) => a.p - b.p);
+  const best = priced[0];
+  const brand = product.brand as unknown;
+
+  return {
+    name: firstString(product.name),
+    price: best?.p,
+    availability: prettyAvailability(best?.o.availability ?? offers[0]?.availability),
+    image: firstString(product.image),
+    brand: typeof brand === "string" ? brand : firstString((brand as Record<string, unknown> | undefined)?.name),
+    sku: firstString(product.sku) ?? firstString(product.mpn),
+    description: firstString(product.description),
+  };
+}
+
 const MAX_REDIRECTS = 4;
 const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2 MB
 
@@ -259,9 +344,11 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
 
     const { load } = await import("cheerio");
     const $ = load(html);
+    const ld = extractJsonLd($);
 
     // Title
     const title =
+      ld?.name ||
       $('meta[property="og:title"]').attr("content") ||
       $('meta[name="title"]').attr("content") ||
       $("h1").first().text().trim() ||
@@ -269,7 +356,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
       "Unknown Product";
 
     // Price
-    let price: number | null = null;
+    let price: number | null = ld?.price ?? null;
     const priceSelectors = [
       '[itemprop="price"]',
       ".price",
@@ -278,7 +365,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
       'meta[property="og:price:amount"]',
       'meta[name="twitter:data1"]',
     ];
-    for (const sel of priceSelectors) {
+    for (const sel of price != null ? [] : priceSelectors) {
       const el = $(sel).first();
       const val = el.attr("content") || el.attr("data-price") || el.text();
       if (val) {
@@ -289,6 +376,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
 
     // Image — sanitized to prevent javascript:/data: storage
     const rawImageUrl =
+      ld?.image ||
       $('meta[property="og:image"]').attr("content") ||
       $('meta[property="og:image:url"]').attr("content") ||
       $(".product-image img, .main-image img, [class*=\"product\"] img").first().attr("src") ||
@@ -296,6 +384,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
 
     // Description
     const description =
+      ld?.description ||
       $('meta[property="og:description"]').attr("content") ||
       $('meta[name="description"]').attr("content") ||
       $('[itemprop="description"]').first().text().trim() ||
@@ -303,6 +392,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
 
     // Brand
     const brand =
+      ld?.brand ||
       $('meta[property="og:brand"]').attr("content") ||
       $('[itemprop="brand"]').first().text().trim() ||
       $('[class*="brand"]').first().text().trim() ||
@@ -310,12 +400,14 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
 
     // Availability
     const availability =
+      ld?.availability ||
       $('[itemprop="availability"]').attr("content") ||
       $('[class*="stock"], [class*="availability"]').first().text().trim() ||
       null;
 
     // SKU
     const sku =
+      ld?.sku ||
       $('[itemprop="sku"]').text().trim() ||
       $('[class*="sku"], [class*="part-number"]').first().text().trim() ||
       null;
@@ -323,7 +415,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     return {
       title: title.slice(0, 255),
       price,
-      imageUrl: sanitizeImageUrl(rawImageUrl),
+      imageUrl: sanitizeImageUrl(rawImageUrl ? new URL(rawImageUrl, url).toString() : null),
       brand: brand ? brand.slice(0, 100) : null,
       description: description ? description.slice(0, 500) : null,
       availability: availability ? availability.slice(0, 50) : null,
@@ -349,6 +441,8 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
       availability: null,
       vendor,
       sku: null,
+      failed: true,
+      error: err instanceof Error ? err.message : "Couldn't load the page",
     };
   }
 }

@@ -7,7 +7,7 @@ import { sendMail } from "@/lib/mailer";
 const testSchema = z.object({ to: z.string().email() });
 
 export async function POST(req: NextRequest) {
-  const denied = await requireAdmin(req);
+  const denied = await requireAdmin(req, true);
   if (denied) return denied;
 
   try {

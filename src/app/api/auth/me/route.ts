@@ -20,8 +20,11 @@ export async function GET(req: NextRequest) {
   // device picks up whatever this account last saved — see ThemeProvider.
   const dbUser = await prisma.user.findUnique({
     where: { id },
-    select: { accentColor: true, radius: true, font: true, colorScheme: true },
+    select: { accentColor: true, radius: true, font: true, colorScheme: true, prefs: true },
   });
+
+  let prefs: unknown = null;
+  try { prefs = dbUser?.prefs ? JSON.parse(dbUser.prefs) : null; } catch { /* ignore bad JSON */ }
 
   return NextResponse.json({
     user: {
@@ -32,6 +35,7 @@ export async function GET(req: NextRequest) {
       radius: dbUser?.radius ?? null,
       font: dbUser?.font ?? null,
       colorScheme: dbUser?.colorScheme ?? null,
+      prefs,
     },
   });
 }

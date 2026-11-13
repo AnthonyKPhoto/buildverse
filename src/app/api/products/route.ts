@@ -22,7 +22,7 @@ export async function GET() {
   try {
     const products = await prisma.trackedProduct.findMany({
       include: {
-        priceHistory: { orderBy: { createdAt: "desc" }, take: 30 },
+        priceHistory: { orderBy: { createdAt: "desc" }, take: 60 },
       },
       orderBy: { updatedAt: "desc" },
     });
@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
         availability: scraped.availability,
         sku: scraped.sku,
         lastChecked: new Date(),
+        lastError: scraped.failed ? scraped.error ?? "Couldn't load the page" : scraped.price == null ? "Couldn't read a price from this page" : null,
         priceHistory: scraped.price ? { create: { price: scraped.price } } : undefined,
       },
       include: { priceHistory: true },

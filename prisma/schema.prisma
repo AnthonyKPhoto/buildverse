@@ -109,6 +109,11 @@ model TrackedProduct {
   lowestPrice     Float?
   highestPrice    Float?
   alertThreshold  Float?
+  previousPrice   Float?     // price before the most recent change (for the "↓ $x" indicator)
+  notifyEmail     Boolean    @default(false) // email the configured recipients when the alert trips
+  lastNotifiedPrice Float?   // price we last emailed about; re-arms when the price rises above the alert
+  lastNotifiedAt  DateTime?
+  lastError       String?    // why the last check failed, if it did
   lastChecked     DateTime?
   vendor          String?
   availability    String?
@@ -262,6 +267,7 @@ model User {
   radius             String?
   font               String?
   colorScheme        String?
+  prefs              String?  // JSON: extra per-user display prefs (interface size, sidebar width, currency, …)
   createdAt          DateTime @default(now())
 
   createdVehicles Vehicle[]
