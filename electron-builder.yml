@@ -141,11 +141,11 @@ mac:
   icon: "build/icon-mac.png"   # 1024px, macOS-style padding; electron-builder converts to .icns
   category: "public.app-category.utilities"
   identity: null
+  # NOTE: icon.png / icon.ico come from the global extraResources above — listing icon.png again here makes
+  # electron-builder copy it twice and fail with EEXIST.
   extraResources:
     - from: "resources-extra/node"
       to: "node"
-    - from: "build/icon.png"
-      to: "icon.png"
   artifactName: "UpshiftGarage-${version}-mac-${arch}.${ext}"
 
 dmg:
