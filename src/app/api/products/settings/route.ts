@@ -30,6 +30,7 @@ const schema = z.object({
   autoCheck: z.boolean().optional(),
   intervalHours: z.number().min(1).max(168).optional(),
   dropPercent: z.number().min(0).max(90).optional(),
+  autoRemoveBought: z.boolean().optional(),
 });
 
 export async function PUT(req: NextRequest) {

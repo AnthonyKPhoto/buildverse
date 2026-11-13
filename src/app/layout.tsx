@@ -11,11 +11,14 @@ export const metadata: Metadata = {
   title: "Upshift Garage — Vehicle Modification Manager",
   description: "Plan, track, budget, and organize your vehicle modifications.",
   icons: {
+    // The ?v= suffix busts browsers' very sticky favicon cache — bump it whenever the logo changes.
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/logo.svg?v=2", type: "image/svg+xml" },
+      { url: "/favicon.ico?v=2", sizes: "any" },
+      { url: "/icon-32.png?v=2", sizes: "32x32", type: "image/png" },
     ],
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: [{ url: "/favicon.ico?v=2" }],
+    apple: [{ url: "/apple-touch-icon.png?v=2", sizes: "180x180", type: "image/png" }],
   },
 };
 

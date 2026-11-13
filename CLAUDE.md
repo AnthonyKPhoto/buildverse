@@ -289,6 +289,12 @@ corrects on any interaction or reload — not worth a shared theme context for t
 - **Scraper** prefers schema.org JSON-LD (`extractJsonLd`) over CSS-class guessing, and returns `failed: true` when
   the page couldn't be fetched — callers must check it.
 
+### Bought products & syncing by car
+
+- `DONE_STATUSES` / `isDoneStatus()` (`src/lib/product-links.ts`) = PURCHASED / INSTALLED / REMOVED. Such mods are skipped by `POST /api/products/sync` (which takes `{vehicleIds?}`; `GET` feeds the car picker), rejected by `POST /api/vehicles/[id]/tracked`, and hidden from the garage page's "Track this price".
+- `pruneBoughtProducts()` (price-tracker.ts) deletes a tracked product when every mod linked to its normalized URL is done (any still-active mod, e.g. on another car, keeps it; hand-added products with no linked mod are never touched). Runs at the start of `runPriceCheck`, in refresh-all and after sync, gated by the `autoRemoveBought` setting (default on). Removals are logged in `Setting` key `price_removed` → `GET/DELETE /api/products/removed` → banner on the tracker page.
+- `DELETE /api/products` `{confirm:true}` (admin) clears everything.
+
 ### Restock alerts, mod links, shop comparison
 
 - **Restock:** `TrackedProduct.notifyRestock` (per product, needs the global email switch). Compared against
@@ -408,6 +414,7 @@ npm run setup
 
 The tag triggers **Build & Release** (`release.yml`: Windows → then Linux and macOS arm64/x64 in parallel, all attached to one release)
 and **Docker** (`docker-publish.yml`: `ghcr.io/anthonykphoto/buildverse:X.Y.Z` + `:latest`, which Watchtower deploys to the live server).
+Where tags can't be pushed (e.g. the Claude sandbox returns 403), run `release.yml` and `docker-publish.yml` via `workflow_dispatch` with `version` (ref `main`) — the release step creates the `vX.Y.Z` tag itself. After the macOS jobs, `update-cask` runs `scripts/update-cask.js` to rewrite `Casks/upshift-garage.rb` (version + per-arch sha256) and commits it to `main`; users install with `brew tap AnthonyKPhoto/buildverse https://github.com/AnthonyKPhoto/buildverse && brew install --cask upshift-garage` (the cask's postflight clears the quarantine flag because the app is only ad-hoc signed).
 The release body is composed once in the Windows job; the other jobs only upload files (parallel body-appends overwrite each other).
 macOS builds are ad-hoc signed by `scripts/after-pack.js` (no Apple Developer certificate); they don't auto-update.
 

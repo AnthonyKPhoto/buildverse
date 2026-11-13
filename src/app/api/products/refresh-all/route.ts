@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { refreshProduct } from "@/lib/price-tracker";
+import { refreshProduct, pruneBoughtProducts, getPriceAlertSettings } from "@/lib/price-tracker";
 
 export const maxDuration = 300;
 
@@ -13,6 +13,7 @@ export const maxDuration = 300;
  */
 export async function POST() {
   try {
+    if ((await getPriceAlertSettings()).autoRemoveBought) await pruneBoughtProducts().catch(() => 0);
     const ids = (await prisma.trackedProduct.findMany({ select: { id: true } })).map((p) => p.id);
     let i = 0;
     await Promise.all(

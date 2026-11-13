@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
-import { normalizeProductUrl } from "@/lib/product-links";
+import { normalizeProductUrl, isDoneStatus } from "@/lib/product-links";
 import { trackUrl } from "@/lib/price-tracker";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +35,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
   try {
     const { modId } = z.object({ modId: z.string().min(1) }).parse(await req.json());
-    const mod = await prisma.modification.findFirst({ where: { id: modId, vehicleId: params.id }, select: { link: true } });
+    const mod = await prisma.modification.findFirst({ where: { id: modId, vehicleId: params.id }, select: { link: true, status: true } });
+    if (mod && isDoneStatus(mod.status)) {
+      return NextResponse.json({ error: "This mod is already purchased, installed or removed — nothing left to price-watch" }, { status: 400 });
+    }
     if (!mod?.link || !/^https?:\/\//i.test(mod.link)) {
       return NextResponse.json({ error: "This mod doesn't have a product link to track" }, { status: 400 });
     }

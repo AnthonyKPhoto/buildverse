@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { scrapeProduct } from "@/lib/scraper";
 import { sendMail, isSmtpConfigured } from "@/lib/mailer";
 import { stockState } from "@/lib/stock";
-import { normalizeProductUrl } from "@/lib/product-links";
+import { normalizeProductUrl, DONE_STATUSES } from "@/lib/product-links";
 
 // Everything the Product Tracker does server-side: reading/saving the alert
 // settings, refreshing a product's price, deciding whether an email is due, and
@@ -23,6 +23,8 @@ export interface PriceAlertSettings {
   intervalHours: number;
   /** Also email when a product drops by at least this % since its last check (0 = off). */
   dropPercent: number;
+  /** Stop tracking a product once the mod it's linked to is Purchased / Installed / Removed. */
+  autoRemoveBought: boolean;
 }
 
 export const DEFAULT_PRICE_ALERT_SETTINGS: PriceAlertSettings = {
@@ -31,6 +33,7 @@ export const DEFAULT_PRICE_ALERT_SETTINGS: PriceAlertSettings = {
   autoCheck: true,
   intervalHours: 12,
   dropPercent: 0,
+  autoRemoveBought: true,
 };
 
 const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
@@ -39,6 +42,7 @@ export function sanitizeSettings(input: Partial<PriceAlertSettings>, base: Price
   const next = { ...base };
   if (typeof input.emailEnabled === "boolean") next.emailEnabled = input.emailEnabled;
   if (typeof input.autoCheck === "boolean") next.autoCheck = input.autoCheck;
+  if (typeof input.autoRemoveBought === "boolean") next.autoRemoveBought = input.autoRemoveBought;
   if (Array.isArray(input.recipients)) {
     next.recipients = Array.from(new Set(
       input.recipients.map((r) => String(r).trim()).filter((r) => EMAIL_RE.test(r) && r.length <= 254)
@@ -296,6 +300,56 @@ export interface CheckSummary {
   emailed: boolean;
   emailError?: string;
   skipped?: "busy";
+  /** Products dropped from the tracker because their mod was bought / installed / removed. */
+  removed?: number;
+}
+
+// ── Auto-removing products that have been bought ─────────────────────────────
+
+const REMOVED_LOG_KEY = "price_removed";
+
+export interface RemovedEntry { title: string; status: string; at: string }
+
+export async function getRemovedLog(): Promise<RemovedEntry[]> {
+  const row = await prisma.setting.findUnique({ where: { key: REMOVED_LOG_KEY } }).catch(() => null);
+  if (!row) return [];
+  try { const v = JSON.parse(row.value); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
+export async function clearRemovedLog(): Promise<void> {
+  await prisma.setting.deleteMany({ where: { key: REMOVED_LOG_KEY } }).catch(() => {});
+}
+
+/**
+ * Deletes tracked products whose linked mod(s) are all Purchased / Installed /
+ * Removed. If ANY other mod (e.g. on another car) still wants the same page and
+ * isn't done, the product stays. Products with no linked mod (added by hand)
+ * are never touched. Returns how many were removed.
+ */
+export async function pruneBoughtProducts(): Promise<number> {
+  const mods = await prisma.modification.findMany({ where: { link: { not: null } }, select: { link: true, status: true } });
+  const active = new Set<string>();
+  const done = new Map<string, string>(); // normalized url → status
+  for (const m of mods) {
+    if (!m.link || !/^https?:\/\//i.test(m.link)) continue;
+    const n = normalizeProductUrl(m.link);
+    if ((DONE_STATUSES as readonly string[]).includes(m.status)) done.set(n, m.status);
+    else active.add(n);
+  }
+  if (done.size === 0) return 0;
+  const products = await prisma.trackedProduct.findMany({ select: { id: true, url: true, title: true } });
+  const doomed = products.filter((p) => {
+    const n = normalizeProductUrl(p.url);
+    return done.has(n) && !active.has(n);
+  });
+  if (doomed.length === 0) return 0;
+  await prisma.trackedProduct.deleteMany({ where: { id: { in: doomed.map((p) => p.id) } } });
+  const at = new Date().toISOString();
+  const entries: RemovedEntry[] = doomed.map((p) => ({ title: p.title || p.url, status: done.get(normalizeProductUrl(p.url))!, at }));
+  const log = [...entries, ...(await getRemovedLog())].slice(0, 30);
+  const value = JSON.stringify(log);
+  await prisma.setting.upsert({ where: { key: REMOVED_LOG_KEY }, update: { value }, create: { key: REMOVED_LOG_KEY, value } });
+  return doomed.length;
 }
 
 /**
@@ -308,6 +362,7 @@ export async function runPriceCheck(opts: { force?: boolean; notify?: boolean } 
   g.__bvPriceCheckRunning = true;
   try {
     const settings = await getPriceAlertSettings();
+    const removed = settings.autoRemoveBought ? await pruneBoughtProducts().catch(() => 0) : 0;
     const cutoff = Date.now() - settings.intervalHours * 60 * 60 * 1000;
     const all = await prisma.trackedProduct.findMany({ select: { id: true, lastChecked: true, currentPrice: true, availability: true, evalPrice: true, stockSeen: true } });
     const due = all.filter((p) => opts.force || !p.lastChecked || p.lastChecked.getTime() <= cutoff);
@@ -375,7 +430,7 @@ export async function runPriceCheck(opts: { force?: boolean; notify?: boolean } 
       if (emailError) console.error("[price-tracker] alert email not sent:", emailError);
     }
 
-    return { checked, failed, alerts: alerts.length, emailed, emailError };
+    return { checked, failed, alerts: alerts.length, emailed, emailError, removed };
   } finally {
     g.__bvPriceCheckRunning = false;
   }

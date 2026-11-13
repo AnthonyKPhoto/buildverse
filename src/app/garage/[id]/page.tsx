@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { isDoneStatus } from "@/lib/product-links";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -464,6 +465,7 @@ export default function VehicleDetailPage() {
           {/* Price tracking */}
           {mod.link && /^https?:\/\//i.test(mod.link) && (() => {
             const t = tracked[mod.id];
+            if (!t && isDoneStatus(mod.status)) return null; // already bought — nothing to price-watch
             if (!t) {
               return (
                 <button onClick={() => trackMod(mod.id)} disabled={trackingMod === mod.id}

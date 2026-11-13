@@ -19,3 +19,9 @@ export function normalizeProductUrl(raw: string | null | undefined): string {
     return raw.trim();
   }
 }
+
+/** Mods in these states are finished business — their product link shouldn't be price-watched any more. */
+export const DONE_STATUSES = ["PURCHASED", "INSTALLED", "REMOVED"] as const;
+export function isDoneStatus(status: string | null | undefined): boolean {
+  return !!status && (DONE_STATUSES as readonly string[]).includes(status);
+}

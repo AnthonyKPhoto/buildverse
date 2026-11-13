@@ -10,12 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Bell, BellRing, Download, Mail, MailX, Package, PiggyBank, Plus, RefreshCw, Search,
-  ShoppingCart, SlidersHorizontal, TrendingDown, AlertTriangle,
+  ShoppingCart, SlidersHorizontal, TrendingDown, AlertTriangle, Trash2, X, Car,
 } from "lucide-react";
 import { cn, formatPrice } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { ProductCard } from "@/components/products/ProductCard";
 import { BulkAlertDialog } from "@/components/products/BulkAlertDialog";
+import { SyncDialog } from "@/components/products/SyncDialog";
 import { CompareGroups } from "@/components/products/CompareGroups";
 import {
   AlertSettingsLite, LinkedMod, TrackedProduct, buildGroups, groupInfoFor, isAlertHit, isDropped, isOutOfStock,
@@ -48,6 +49,11 @@ export default function ProductsPage() {
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [removedLog, setRemovedLog] = useState<{ title: string; status: string; at: string }[]>([]);
+  const [vehicleFilter, setVehicleFilter] = useState("all");
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -76,6 +82,7 @@ export default function ProductsPage() {
         fetch("/api/products/settings").then((r) => r.json()).catch(() => null),
       ]);
       if (s && !s.error) setSettings(s);
+      fetch("/api/products/removed").then((r) => r.json()).then((l) => { if (Array.isArray(l)) setRemovedLog(l); }).catch(() => {});
       fetch("/api/products/links").then((r) => r.json()).then((l) => { if (l && !l.error) setLinks(l); }).catch(() => {});
       const staleHours = Math.min(s?.intervalHours ?? 6, 6);
       const stale = list.filter((p) => !p.lastChecked || Date.now() - new Date(p.lastChecked).getTime() > staleHours * 3_600_000);
@@ -94,16 +101,21 @@ export default function ProductsPage() {
 
   const patchLocal = (u: TrackedProduct) => setProducts((cur) => cur.map((x) => (x.id === u.id ? u : x)));
 
-  const handleSync = async () => {
+  const handleSync = async (vehicleIds: string[]) => {
     setSyncing(true);
     try {
-      const res = await fetch("/api/products/sync", { method: "POST" });
+      const res = await fetch("/api/products/sync", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ vehicleIds }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      setSyncOpen(false);
       await load();
+      fetch("/api/products/links").then((r) => r.json()).then((l) => { if (l && !l.error) setLinks(l); }).catch(() => {});
+      const notes = [data.failed > 0 && `${data.failed} couldn't be read`, data.ignored > 0 && `${data.ignored} skipped (already bought)`, data.removed > 0 && `${data.removed} removed (bought)`].filter(Boolean).join(" · ");
       toast(data.added === 0
-        ? { title: "Already up to date", description: "All mod links are already being tracked." }
-        : { title: `Added ${data.added} product${data.added !== 1 ? "s" : ""} from your mods`, description: data.failed > 0 ? `${data.failed} couldn't be read.` : undefined });
+        ? { title: "Already up to date", description: notes || "All mod links for those cars are already being tracked." }
+        : { title: `Added ${data.added} product${data.added !== 1 ? "s" : ""} from your mods`, description: notes || undefined });
     } catch {
       toast({ title: "Sync failed", variant: "destructive" });
     } finally {
@@ -126,6 +138,25 @@ export default function ProductsPage() {
       setRefreshingAll(false);
     }
   };
+
+  const handleClearAll = async () => {
+    setClearing(true);
+    try {
+      const res = await fetch("/api/products", {
+        method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: true }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error);
+      setProducts([]); setLinks({}); setClearOpen(false);
+      toast({ title: `Stopped tracking ${d.deleted ?? "all"} product${d.deleted === 1 ? "" : "s"}` });
+    } catch (e) {
+      toast({ title: "Couldn't delete", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  const dismissRemoved = () => { setRemovedLog([]); fetch("/api/products/removed", { method: "DELETE" }).catch(() => {}); };
 
   const handleRefresh = async (id: string) => {
     setRefreshingId(id);
@@ -222,9 +253,16 @@ export default function ProductsPage() {
     [products]
   );
 
+  const vehicleOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    Object.values(links).flat().forEach((l) => m.set(l.vehicleId, l.vehicleName));
+    return Array.from(m, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [links]);
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = products.filter((p) => {
+      if (vehicleFilter !== "all" && !(links[p.id] ?? []).some((l) => l.vehicleId === vehicleFilter)) return false;
       if (filter === "alerts" && !isAlertHit(p)) return false;
       if (filter === "drops" && !isDropped(p)) return false;
       if (filter === "stock" && !isOutOfStock(p)) return false;
@@ -242,7 +280,7 @@ export default function ProductsPage() {
       name: (a, b) => a.title.localeCompare(b.title),
     };
     return [...list].sort(by[sort]);
-  }, [products, search, filter, sort]);
+  }, [products, search, filter, sort, vehicleFilter, links]);
 
   if (loading) {
     return (
@@ -278,9 +316,8 @@ export default function ProductsPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" className="gap-2" onClick={handleSync} disabled={syncing}>
-              {syncing ? <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-              {syncing ? "Syncing…" : "Sync from Mods"}
+            <Button variant="outline" className="gap-2" onClick={() => setSyncOpen(true)} disabled={syncing}>
+              <Download className="w-3.5 h-3.5" />Sync from Mods
             </Button>
             {products.length > 0 && (
               <>
@@ -290,6 +327,9 @@ export default function ProductsPage() {
                 <Button variant="outline" className="gap-2" onClick={handleRefreshAll} disabled={refreshingAll}>
                   <RefreshCw className={cn("w-3.5 h-3.5", refreshingAll && "animate-spin")} />
                   {refreshingAll ? "Refreshing…" : "Refresh all"}
+                </Button>
+                <Button variant="outline" className="gap-2 text-destructive hover:text-destructive" onClick={() => setClearOpen(true)}>
+                  <Trash2 className="w-3.5 h-3.5" />Delete all
                 </Button>
               </>
             )}
@@ -301,6 +341,18 @@ export default function ProductsPage() {
       </div>
 
       <div className="space-y-6">
+        {removedLog.length > 0 && (
+          <div className="flex items-start gap-3 rounded-xl border border-green-500/30 bg-green-500/10 p-4 text-sm">
+            <ShoppingCart className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium">{removedLog.length} product{removedLog.length === 1 ? "" : "s"} removed — you bought {removedLog.length === 1 ? "it" : "them"}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                {removedLog.slice(0, 3).map((r) => r.title).join(" · ")}{removedLog.length > 3 ? ` · +${removedLog.length - 3} more` : ""}
+              </p>
+            </div>
+            <button onClick={dismissRemoved} aria-label="Dismiss" className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+          </div>
+        )}
         {products.length > 0 && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {stats.map(({ label, value, sub, icon: Icon, color, stripe }) => (
@@ -345,7 +397,7 @@ export default function ProductsPage() {
               Import every product link from your mods, or paste a product page. We&apos;ll watch the price and can email you when it drops.
             </p>
             <div className="flex gap-3">
-              <Button variant="outline" onClick={handleSync} disabled={syncing} className="gap-2"><Download className="w-4 h-4" />{syncing ? "Syncing…" : "Sync from Mods"}</Button>
+              <Button variant="outline" onClick={() => setSyncOpen(true)} className="gap-2"><Download className="w-4 h-4" />Sync from Mods</Button>
               <Button onClick={() => setAddOpen(true)} className="bg-theme hover:brightness-90 gap-2"><Plus className="w-4 h-4" />Track a product</Button>
             </div>
           </div>
@@ -378,6 +430,17 @@ export default function ProductsPage() {
                     </button>
                   ))}
               </div>
+              {vehicleOptions.length > 1 && (
+                <div className="w-full sm:w-48">
+                  <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
+                    <SelectTrigger aria-label="Filter by car"><Car className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" /><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All cars</SelectItem>
+                      {vehicleOptions.map((v) => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="sm:ml-auto w-full sm:w-52">
                 <Select value={sort} onValueChange={(v) => setSort(v as Sort)}>
                   <SelectTrigger aria-label="Sort products"><SelectValue /></SelectTrigger>
@@ -391,7 +454,7 @@ export default function ProductsPage() {
             {visible.length === 0 ? (
               <div className="py-16 text-center text-sm text-muted-foreground rounded-2xl border border-dashed border-border/60">
                 Nothing matches.{" "}
-                <button className="text-theme hover:underline" onClick={() => { setSearch(""); setFilter("all"); }}>Clear filters</button>
+                <button className="text-theme hover:underline" onClick={() => { setSearch(""); setFilter("all"); setVehicleFilter("all"); }}>Clear filters</button>
               </div>
             ) : (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
@@ -414,6 +477,21 @@ export default function ProductsPage() {
       </div>
 
       <BulkAlertDialog open={bulkOpen} onOpenChange={setBulkOpen} count={products.length} applying={bulkApplying} onApply={applyBulk} />
+
+      <SyncDialog open={syncOpen} onOpenChange={setSyncOpen} syncing={syncing} onSync={handleSync} />
+
+      <Dialog open={clearOpen} onOpenChange={setClearOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Delete all tracking?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This stops tracking all {products.length} product{products.length === 1 ? "" : "s"} and erases their price history. Your mods and their links are not touched — you can sync them again any time.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearOpen(false)}>Cancel</Button>
+            <Button variant="destructive" disabled={clearing} onClick={handleClearAll}>{clearing ? "Deleting…" : "Delete all"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="max-w-lg">

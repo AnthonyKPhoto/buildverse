@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { trackUrl } from "@/lib/price-tracker";
 import { z } from "zod";
+import { requireAdmin } from "@/lib/auth/current-user";
 
 // See src/app/api/health/route.ts for why this matters.
 export const dynamic = "force-dynamic";
@@ -59,5 +60,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     return NextResponse.json({ error: "Failed to track product" }, { status: 500 });
+  }
+}
+
+/** DELETE /api/products  body: { confirm: true } — stop tracking everything (price history goes with it). */
+export async function DELETE(req: NextRequest) {
+  const denied = await requireAdmin(req, true);
+  if (denied) return denied;
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (body?.confirm !== true) return NextResponse.json({ error: "Confirmation required" }, { status: 400 });
+    const { count } = await prisma.trackedProduct.deleteMany({});
+    return NextResponse.json({ deleted: count });
+  } catch {
+    return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
   }
 }

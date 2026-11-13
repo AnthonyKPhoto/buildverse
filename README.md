@@ -31,6 +31,7 @@ Get the latest build from **[Releases](../../releases/latest)**. No Node.js, no 
 | Platform | Download |
 |---|---|
 | **Windows 10/11** | `UpshiftGarage-Setup-x.x.x.exe` (installer) or `UpshiftGarage-x.x.x-Portable.exe` |
+| **macOS — Homebrew** (recommended) | `brew tap AnthonyKPhoto/buildverse https://github.com/AnthonyKPhoto/buildverse && brew install --cask upshift-garage` |
 | **macOS — Apple Silicon** (M1 and newer) | `UpshiftGarage-x.x.x-mac-arm64.dmg` |
 | **macOS — Intel** | `UpshiftGarage-x.x.x-mac-x64.dmg` |
 | **Linux** (64-bit, glibc) | `UpshiftGarage-x.x.x.AppImage` or `upshift-garage_x.x.x_amd64.deb` |
@@ -41,7 +42,13 @@ Get the latest build from **[Releases](../../releases/latest)**. No Node.js, no 
 
 **Windows** — SmartScreen may warn because the app isn't code-signed yet: **More info → Run anyway**. Installs per-user, no admin rights needed.
 
-**macOS** — the app isn't notarized (that requires a paid Apple Developer account), so macOS will block the first launch. Open the `.dmg`, drag **Upshift Garage** into *Applications*, open it once, then go to **System Settings → Privacy & Security → Open Anyway**. Or from Terminal:
+**macOS** — the app isn't notarized (that requires a paid Apple Developer account), so a downloaded `.dmg` is blocked on first launch. **The easy fix is Homebrew**, which installs it ready to run and updates it with the rest of your apps:
+```bash
+brew tap AnthonyKPhoto/buildverse https://github.com/AnthonyKPhoto/buildverse
+brew install --cask upshift-garage
+brew upgrade --cask upshift-garage   # later, to update
+```
+Prefer the `.dmg`? Open the `.dmg`, drag **Upshift Garage** into *Applications*, open it once, then go to **System Settings → Privacy & Security → Open Anyway**. Or from Terminal:
 ```bash
 xattr -cr "/Applications/Upshift Garage.app"
 ```
@@ -72,6 +79,8 @@ On first launch a small demo garage (a 2002 Honda S2000 with a sample build) is 
   - optional **email alerts** (target reached, big drops, back in stock) as a single digest
   - **shop comparison** — track the same part at several shops; the cheapest in-stock one is flagged
   - **linked to your mods** — a mod's product link is matched to its tracked price
+  - **sync by car** — pick which vehicles' mod links to import; anything already purchased, installed or removed is skipped, and products are **dropped automatically** on the next price check once their mod is bought
+  - **delete all tracking** in one click
 - **Maintenance logs** — service history with next-due tracking, plus [LubeLogger](https://lubelogger.com) import
 - **Build sheet PDF** and a shareable **build card**
 - **Files & tune logs** — attach documents, receipts, and dyno/tune logs to each vehicle
@@ -193,9 +202,9 @@ The desktop folder keeps its original name deliberately — see the note at the 
 
 1. Update `RELEASE_NOTES.md` (becomes the top of the GitHub release page) and add an entry to `CHANGELOG.md`.
 2. `npm version minor --no-git-tag-version` (or `patch`/`major`), commit, push to `main`.
-3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z` — or, where tags can't be pushed, run **Build & Release** and **Docker** from the Actions tab (*Run workflow*, version `X.Y.Z`, branch `main`).
 
-Pushing the tag runs **Build & Release** (Windows, macOS ×2, Linux → one GitHub Release) and **Docker** (publishes `ghcr.io/anthonykphoto/buildverse:X.Y.Z` and `:latest`). No extra secrets are needed. Code signing / macOS notarization are optional — see the comments in `electron-builder.yml`.
+That runs **Build & Release** (Windows, macOS ×2, Linux → one GitHub Release; then it updates the Homebrew cask in `Casks/`) and **Docker** (publishes `ghcr.io/anthonykphoto/buildverse:X.Y.Z` and `:latest`). No extra secrets are needed. Code signing / macOS notarization are optional — see the comments in `electron-builder.yml`.
 
 ### Tech stack
 

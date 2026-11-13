@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 interface AlertSettings {
-  emailEnabled: boolean; recipients: string[]; autoCheck: boolean; intervalHours: number; dropPercent: number;
+  emailEnabled: boolean; recipients: string[]; autoCheck: boolean; intervalHours: number; dropPercent: number; autoRemoveBought: boolean;
   smtpConfigured: boolean; effectiveRecipientCount: number; canEdit: boolean;
 }
 
@@ -218,7 +218,7 @@ export function PriceAlertsSettings() {
           <Row label="Check prices in the background" desc="Keeps prices fresh even when Upshift Garage isn't open on your screen. Needed for email alerts.">
             <Switch on={s.autoCheck} disabled={ro} onChange={(v) => save({ autoCheck: v })} label="Automatic checks" />
           </Row>
-          <Row label="How often" desc="Each product is re-checked this often. Longer is gentler on the shops." last>
+          <Row label="How often" desc="Each product is re-checked this often. Longer is gentler on the shops.">
             <select
               value={s.intervalHours} disabled={ro || !s.autoCheck}
               onChange={(e) => save({ intervalHours: Number(e.target.value) })}
@@ -226,6 +226,9 @@ export function PriceAlertsSettings() {
             >
               {INTERVALS.map((i) => <option key={i.h} value={i.h}>{i.label}</option>)}
             </select>
+          </Row>
+          <Row label="Stop tracking once bought" desc="On each check, products whose mod is now Purchased, Installed or Removed are dropped from the tracker (and skipped when syncing). A part still wanted by another car stays." last>
+            <Switch on={s.autoRemoveBought} disabled={ro} onChange={(v) => save({ autoRemoveBought: v })} label="Auto-remove bought products" />
           </Row>
         </div>
       </div>
