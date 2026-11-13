@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { LubeLoggerSettings } from "@/components/integrations/LubeLoggerSettings";
 import { AppearanceExtras } from "@/components/settings/AppearanceExtras";
 import { PriceAlertsSettings } from "@/components/settings/PriceAlertsSettings";
+import { AutoBackups } from "@/components/settings/AutoBackups";
 import {
   ACCENT_PRESETS, RADIUS_PRESETS, FONT_PRESETS,
   useCurrentAccent, useCurrentRadius, useCurrentFont, useCurrentScheme,
@@ -1380,6 +1381,8 @@ export default function SettingsPage() {
                   {appInfo && <p className="text-xs text-muted-foreground mt-3 font-mono opacity-60">{appInfo.dbPath}</p>}
                 </Section>
               )}
+
+              <AutoBackups showList={!isElectron} />
 
               <Section title="Data Management" icon={HardDrive}>
                 <Row label="Export Data" desc="Download all vehicles, mods & products as JSON">

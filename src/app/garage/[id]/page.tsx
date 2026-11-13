@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -32,7 +32,7 @@ import { BuildLog } from "@/components/vehicles/BuildLog";
 import { LinksTab } from "@/components/vehicles/LinksTab";
 import { CSVImportDialog } from "@/components/modifications/CSVImportDialog";
 import {
-  formatCurrency, formatDate, calcBuildCompletion, calcTotalModValue,
+  formatCurrency, formatPrice, formatDate, calcBuildCompletion, calcTotalModValue,
   getStatusConfig, getPriorityConfig, MOD_CATEGORIES, MOD_STATUSES,
 } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -77,9 +77,11 @@ interface RecallResult {
   consequence: string; remedy: string; nhtsaUrl: string; reportDate: string;
 }
 
+// A tracked product matched to one of this vehicle's mods (see /api/vehicles/[id]/tracked)
 interface TrackedPrice {
-  id: string; title: string; currentPrice: number | null;
-  lowestPrice: number | null; highestPrice: number | null;
+  id: string; currentPrice: number | null; previousPrice: number | null;
+  lowestPrice: number | null; highestPrice: number | null; alertThreshold: number | null;
+  availability: string | null; lastError: string | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -285,8 +287,9 @@ export default function VehicleDetailPage() {
   const [recallOpen, setRecallOpen] = useState(false);
   const [recalls, setRecalls] = useState<RecallResult[] | null>(null);
   const [recallLoading, setRecallLoading] = useState(false);
-  // url → tracked price, lazy-loaded when mod card is hovered
-  const [priceCache, setPriceCache] = useState<Record<string, TrackedPrice | null>>({});
+  // modId → tracked product, fetched once for the whole vehicle
+  const [tracked, setTracked] = useState<Record<string, TrackedPrice>>({});
+  const [trackingMod, setTrackingMod] = useState<string | null>(null);
   const { categories: modCategories } = useCategories();
 
   const checkRecalls = async () => {
@@ -304,16 +307,38 @@ export default function VehicleDetailPage() {
     }
   };
 
-  const lookupPrice = async (url: string) => {
-    if (url in priceCache) return;
-    setPriceCache((prev) => ({ ...prev, [url]: null })); // mark as loading
+  const loadTracked = useCallback(() =>
+    fetch(`/api/vehicles/${id}/tracked`)
+      .then((r) => r.json())
+      .then((d) => { if (d && !d.error) setTracked(d); })
+      .catch(() => {}), [id]);
+  useEffect(() => { loadTracked(); }, [loadTracked, vehicle?.modifications?.length]);
+
+  const trackMod = async (modId: string) => {
+    setTrackingMod(modId);
     try {
-      const res = await fetch(`/api/products/lookup?url=${encodeURIComponent(url)}`);
-      const { product } = await res.json();
-      setPriceCache((prev) => ({ ...prev, [url]: product ?? null }));
-    } catch {
-      setPriceCache((prev) => ({ ...prev, [url]: null }));
+      const res = await fetch(`/api/vehicles/${id}/tracked`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ modId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      await loadTracked();
+      toast({ title: data.created ? "Now tracking this price" : "Already being tracked", description: data.product?.lastError ? "Couldn't read a price yet — we'll keep trying." : undefined });
+    } catch (e) {
+      toast({ title: "Couldn't track that link", description: e instanceof Error ? e.message : undefined, variant: "destructive" });
+    } finally {
+      setTrackingMod(null);
     }
+  };
+
+  // Copy the tracked price onto the mod itself (its budgeted/estimated price)
+  const useTrackedPrice = async (modId: string, price: number) => {
+    setVehicle((v) => v ? { ...v, modifications: v.modifications.map((m) => m.id === modId ? { ...m, price } : m) } : v);
+    const res = await fetch(`/api/modifications/${modId}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ price }),
+    }).catch(() => null);
+    if (res?.ok) toast({ title: "Mod price updated", description: formatPrice(price) });
+    else { toast({ title: "Couldn't update the price", variant: "destructive" }); load(); }
   };
 
   if (loading) {
@@ -435,25 +460,38 @@ export default function VehicleDetailPage() {
             {mod.installDate && <span className="text-xs text-muted-foreground">Installed {formatDate(mod.installDate)}</span>}
           </div>
           {mod.notes && <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2 leading-relaxed">{mod.notes}</p>}
-          {/* Price tracking badge */}
-          {mod.link && (() => {
-            const tracked = priceCache[mod.link];
-            if (tracked === undefined && mod.link) {
-              // Trigger lazy lookup on first render of this mod card
-              setTimeout(() => lookupPrice(mod.link!), 0);
+          {/* Price tracking */}
+          {mod.link && /^https?:\/\//i.test(mod.link) && (() => {
+            const t = tracked[mod.id];
+            if (!t) {
+              return (
+                <button onClick={() => trackMod(mod.id)} disabled={trackingMod === mod.id}
+                  className="mt-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-theme transition-colors disabled:opacity-50">
+                  <Tag className="w-3 h-3" />{trackingMod === mod.id ? "Starting…" : "Track this price"}
+                </button>
+              );
             }
-            if (!tracked) return null;
+            const out = !!t.availability && /out of stock|sold out|unavailable|discontinued|backorder/i.test(t.availability);
+            const diff = t.currentPrice != null && mod.price != null ? t.currentPrice - mod.price : null;
+            const dropped = t.previousPrice != null && t.currentPrice != null && t.currentPrice < t.previousPrice - 0.004;
             return (
-              <div className="flex items-center gap-1.5 mt-1.5">
-                <Tag className="w-3 h-3 text-theme" />
-                <span className="text-xs text-theme font-medium">
-                  Tracking: {tracked.currentPrice != null ? `$${tracked.currentPrice.toFixed(2)}` : "No price"}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
+                <span className="inline-flex items-center gap-1 text-xs text-theme font-medium">
+                  <Tag className="w-3 h-3" />
+                  Tracking: {t.currentPrice != null ? formatPrice(t.currentPrice) : "no price yet"}
                 </span>
-                {tracked.lowestPrice != null && tracked.currentPrice != null && tracked.currentPrice <= tracked.lowestPrice && (
-                  <span className="text-xs text-green-400">· Lowest ever!</span>
+                {dropped && <span className="text-xs text-green-400">▼ {formatPrice(t.previousPrice! - t.currentPrice!)}</span>}
+                {t.lowestPrice != null && t.highestPrice != null && t.lowestPrice !== t.highestPrice && t.currentPrice != null && t.currentPrice <= t.lowestPrice && (
+                  <span className="text-xs text-green-400">· Lowest yet</span>
                 )}
-                {tracked.highestPrice != null && tracked.currentPrice != null && tracked.currentPrice < tracked.highestPrice && (
-                  <span className="text-xs text-blue-400">· {Math.round((tracked.highestPrice - tracked.currentPrice) / tracked.highestPrice * 100)}% off peak</span>
+                {t.availability && <span className={`text-xs ${out ? "text-red-400" : "text-muted-foreground"}`}>· {t.availability}</span>}
+                {t.lastError && <span className="text-xs text-amber-400" title={t.lastError}>· couldn&apos;t update</span>}
+                {diff != null && Math.abs(diff) >= 0.5 && (
+                  <button onClick={() => useTrackedPrice(mod.id, t.currentPrice!)}
+                    className="text-xs px-1.5 py-0.5 rounded-md border border-theme/30 bg-theme/10 text-theme hover:bg-theme/20 transition-colors"
+                    title={`This mod is budgeted at ${formatPrice(mod.price)}`}>
+                    {diff < 0 ? `${formatPrice(-diff)} cheaper now` : `${formatPrice(diff)} more now`} — use {formatPrice(t.currentPrice)}
+                  </button>
                 )}
               </div>
             );

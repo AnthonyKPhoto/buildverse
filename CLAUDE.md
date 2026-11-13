@@ -287,6 +287,28 @@ corrects on any interaction or reload — not worth a shared theme context for t
 - **Scraper** prefers schema.org JSON-LD (`extractJsonLd`) over CSS-class guessing, and returns `failed: true` when
   the page couldn't be fetched — callers must check it.
 
+### Restock alerts, mod links, shop comparison
+
+- **Restock:** `TrackedProduct.notifyRestock` (per product, needs the global email switch). Compared against
+  `stockSeen`/`evalPrice`, which only the BACKGROUND check updates — otherwise the silent page-load refresh would
+  swallow a restock or price drop before the scheduler saw it. A restock that is also at the target price is one email.
+- **Mod ↔ product links:** matched by `normalizeProductUrl()` (`src/lib/product-links.ts` — strips `www.`, `#frag`,
+  `utm_*`, trailing slash), never by raw string equality. `GET /api/vehicles/[id]/tracked` (one call per vehicle),
+  `POST` to start tracking a mod's link, `GET /api/products/links` for the tracker side.
+- **Shop comparison:** products sharing a `compareGroup` name (case/space-insensitive) are ranked cheapest-first among
+  in-stock items (`rankGroup`/`groupInfoFor` in `src/components/products/types.ts`); out-of-stock is never "best".
+
+## Backups
+
+`src/lib/backup.ts` — snapshots via SQLite `VACUUM INTO` (consistent under WAL, unlike a file copy), written to
+`<BUILDVERSE_DATA_DIR>/backups/buildverse-<timestamp>.db` (same folder/naming the desktop app's own list reads).
+`src/lib/backup-scheduler.ts` (started from `src/instrumentation.ts`) checks every 30 min and backs up when the newest
+is older than the interval; settings (`Setting` key `auto_backups`: enabled / intervalHours / keep) default to
+daily, keep 7. Admin-only API under `/api/admin/backups` (a backup contains password hashes and secrets). Restore
+(server mode only) needs the admin's password, takes a `before-restore` safety backup, swaps the file, clears stale
+`-wal`/`-shm`, and exits so the container restarts onto it. Backup names come from URLs: always go through
+`backupPath()` (strict allow-list), never `path.join` with the raw name.
+
 ## Per-user display prefs
 
 `src/lib/prefs.ts` — interface size (root font-size), sidebar width, reduce motion, currency, show cents, date

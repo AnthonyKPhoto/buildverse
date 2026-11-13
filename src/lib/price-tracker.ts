@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { scrapeProduct } from "@/lib/scraper";
 import { sendMail, isSmtpConfigured } from "@/lib/mailer";
+import { stockState } from "@/lib/stock";
+import { normalizeProductUrl } from "@/lib/product-links";
 
 // Everything the Product Tracker does server-side: reading/saving the alert
 // settings, refreshing a product's price, deciding whether an email is due, and
@@ -163,19 +165,26 @@ export interface AlertItem {
   price: number;
   previousPrice: number | null;
   threshold: number | null;
-  reason: "threshold" | "drop";
+  reason: "threshold" | "drop" | "restock";
+  /** A restock email that ALSO happens to be at/below the target price. */
+  targetHit?: boolean;
 }
 
 type Tracked = NonNullable<Awaited<ReturnType<typeof refreshProduct>>>;
 
 /**
  * Decides whether `after` (the product post-refresh) warrants an email.
- * `before` is the price prior to this refresh. Re-arming: once a price climbs
- * back above the alert, the next dip below it emails again — but repeated
- * checks at the same low price don't.
+ *
+ * `before` is the state as of the last BACKGROUND check (not the last refresh of
+ * any kind) — otherwise opening the page, which silently refreshes stale
+ * products, would swallow a drop or restock before the background job saw it.
+ *
+ * Target price: emails once when the price first reaches the target, again only
+ * if it drops lower, and re-arms once the price rises back above the target.
+ * Restock: emails when a product we last saw out of stock is now available.
  */
 export function evaluateAlert(
-  before: { currentPrice: number | null },
+  before: { price: number | null; stock: "in" | "out" | null },
   after: Tracked,
   settings: PriceAlertSettings
 ): { item: AlertItem | null; rearm: boolean } {
@@ -184,23 +193,25 @@ export function evaluateAlert(
 
   const tripped = after.alertThreshold != null && price <= after.alertThreshold;
   const rearm = !tripped && after.lastNotifiedPrice != null;
-  if (!settings.emailEnabled || !after.notifyEmail) return { item: null, rearm };
+  if (!settings.emailEnabled) return { item: null, rearm };
 
-  const prev = before.currentPrice;
-  const dropPct = prev != null && prev > 0 && price < prev ? ((prev - price) / prev) * 100 : 0;
-
-  let reason: AlertItem["reason"] | null = null;
-  if (tripped && (after.lastNotifiedPrice == null || price < after.lastNotifiedPrice - 0.005)) reason = "threshold";
-  else if (settings.dropPercent > 0 && dropPct >= settings.dropPercent) reason = "drop";
-
-  if (!reason) return { item: null, rearm };
-  return {
-    rearm: false,
-    item: {
-      id: after.id, title: after.title, url: after.url, vendor: after.vendor,
-      price, previousPrice: prev, threshold: after.alertThreshold, reason,
-    },
+  const base = {
+    id: after.id, title: after.title, url: after.url, vendor: after.vendor,
+    price, previousPrice: before.price, threshold: after.alertThreshold,
   };
+
+  const thresholdDue = after.notifyEmail && tripped && (after.lastNotifiedPrice == null || price < after.lastNotifiedPrice - 0.005);
+
+  if (after.notifyRestock && before.stock === "out" && stockState(after.availability) === "in") {
+    return { rearm: false, item: { ...base, reason: "restock", targetHit: thresholdDue } };
+  }
+  if (thresholdDue) return { rearm: false, item: { ...base, reason: "threshold" } };
+
+  if (after.notifyEmail && settings.dropPercent > 0 && before.price != null && before.price > 0 && price < before.price) {
+    const dropPct = ((before.price - price) / before.price) * 100;
+    if (dropPct >= settings.dropPercent) return { rearm, item: { ...base, reason: "drop" } };
+  }
+  return { item: null, rearm };
 }
 
 // ── Email ────────────────────────────────────────────────────────────────────
@@ -213,17 +224,23 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 const safeHref = (u: string) => (/^https?:\/\//i.test(u) ? esc(u) : "#");
 
 export function buildAlertEmail(items: AlertItem[], appUrl?: string) {
+  const allRestock = items.every((i) => i.reason === "restock");
   const subject =
     items.length === 1
-      ? `Price alert: ${items[0].title.slice(0, 80)} is now ${money(items[0].price)}`
-      : `Price alerts: ${items.length} products hit your target`;
+      ? items[0].reason === "restock"
+        ? `Back in stock: ${items[0].title.slice(0, 80)} (${money(items[0].price)})`
+        : `Price alert: ${items[0].title.slice(0, 80)} is now ${money(items[0].price)}`
+      : allRestock
+        ? `${items.length} products are back in stock`
+        : `Price alerts: ${items.length} updates on your tracked products`;
+  const tag = (i: AlertItem) => (i.reason === "restock" ? "Back in stock" : i.reason === "drop" ? "Price dropped" : "Target reached");
 
   const text =
     items
       .map((i) => {
         const was = i.previousPrice != null && i.previousPrice !== i.price ? ` (was ${money(i.previousPrice)})` : "";
         const tgt = i.reason === "threshold" && i.threshold != null ? ` — your alert: ${money(i.threshold)}` : "";
-        return `• ${i.title}\n  ${money(i.price)}${was}${tgt}\n  ${i.url}`;
+        return `• [${tag(i)}] ${i.title}\n  ${money(i.price)}${was}${tgt}\n  ${i.url}`;
       })
       .join("\n\n") + (appUrl ? `\n\nOpen your tracker: ${appUrl}/products` : "") +
     "\n\nYou're getting this because email price alerts are on in BuildVerse (Settings → Price Alerts).";
@@ -235,6 +252,7 @@ export function buildAlertEmail(items: AlertItem[], appUrl?: string) {
       const tgt = i.reason === "threshold" && i.threshold != null
         ? `<div style="color:#888;font-size:12px">Your alert: ${money(i.threshold)}</div>` : "";
       return `<tr><td style="padding:12px 0;border-bottom:1px solid #eee">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#16a34a">${tag(i)}</div>
         <a href="${safeHref(i.url)}" style="font-weight:600;color:#111;text-decoration:none">${esc(i.title)}</a>
         ${i.vendor ? `<div style="color:#888;font-size:12px">${esc(i.vendor)}</div>` : ""}
         <div style="margin-top:4px;font-size:18px">${was}<strong style="color:#16a34a">${money(i.price)}</strong></div>${tgt}
@@ -243,7 +261,7 @@ export function buildAlertEmail(items: AlertItem[], appUrl?: string) {
     .join("");
   const html =
     `<div style="font-family:system-ui,sans-serif;max-width:520px">` +
-    `<h2 style="margin:0 0 8px">Price ${items.length === 1 ? "alert" : "alerts"} 🎯</h2>` +
+    `<h2 style="margin:0 0 8px">${allRestock ? "Back in stock 📦" : `Price ${items.length === 1 ? "alert" : "alerts"} 🎯`}</h2>` +
     `<table style="width:100%;border-collapse:collapse">${rows}</table>` +
     (appUrl ? `<p><a href="${safeHref(appUrl + "/products")}">Open your tracker</a></p>` : "") +
     `<p style="color:#888;font-size:12px">You're getting this because email price alerts are on in BuildVerse (Settings → Price Alerts).</p></div>`;
@@ -291,7 +309,7 @@ export async function runPriceCheck(opts: { force?: boolean; notify?: boolean } 
   try {
     const settings = await getPriceAlertSettings();
     const cutoff = Date.now() - settings.intervalHours * 60 * 60 * 1000;
-    const all = await prisma.trackedProduct.findMany({ select: { id: true, lastChecked: true, currentPrice: true } });
+    const all = await prisma.trackedProduct.findMany({ select: { id: true, lastChecked: true, currentPrice: true, availability: true, evalPrice: true, stockSeen: true } });
     const due = all.filter((p) => opts.force || !p.lastChecked || p.lastChecked.getTime() <= cutoff);
 
     const alerts: AlertItem[] = [];
@@ -302,12 +320,22 @@ export async function runPriceCheck(opts: { force?: boolean; notify?: boolean } 
       if (!after) { failed++; return; }
       checked++;
       if (after.lastError) {
-        // No fresh price this time — never alert (or re-arm) off a stale one
+        // No fresh data this time — never alert (or re-arm) off a stale price
         failed++;
         return;
       }
-      const { item, rearm } = evaluateAlert({ currentPrice: p.currentPrice }, after, settings);
-      if (rearm) await prisma.trackedProduct.update({ where: { id: p.id }, data: { lastNotifiedPrice: null } }).catch(() => {});
+      // First time we see a product there's nothing to compare with: baseline from what it was before this check
+      const before = {
+        price: p.evalPrice ?? p.currentPrice,
+        stock: (p.stockSeen as "in" | "out" | null) ?? stockState(p.availability),
+      };
+      const { item, rearm } = evaluateAlert(before, after, settings);
+      await prisma.trackedProduct
+        .update({
+          where: { id: p.id },
+          data: { evalPrice: after.currentPrice, stockSeen: stockState(after.availability) ?? undefined, ...(rearm ? { lastNotifiedPrice: null } : {}) },
+        })
+        .catch(() => {});
       if (item && opts.notify !== false) alerts.push(item);
     };
 
@@ -334,7 +362,11 @@ export async function runPriceCheck(opts: { force?: boolean; notify?: boolean } 
           emailed = true;
           const now = new Date();
           await Promise.all(alerts.map((a) =>
-            prisma.trackedProduct.update({ where: { id: a.id }, data: { lastNotifiedPrice: a.price, lastNotifiedAt: now } }).catch(() => {})
+            prisma.trackedProduct.update({
+              where: { id: a.id },
+              // Only a target-price email arms the "don't repeat" memory; restock/drop emails don't
+              data: { lastNotifiedAt: now, ...(a.reason === "threshold" || a.targetHit ? { lastNotifiedPrice: a.price } : {}) },
+            }).catch(() => {})
           ));
         } else {
           emailError = res.error;
@@ -347,4 +379,43 @@ export async function runPriceCheck(opts: { force?: boolean; notify?: boolean } 
   } finally {
     g.__bvPriceCheckRunning = false;
   }
+}
+
+// ── Creating a tracked product ───────────────────────────────────────────────
+
+/** Scrape a URL and start tracking it (or return the existing one, matched on the normalized URL). */
+export async function trackUrl(url: string): Promise<{ product: Tracked; created: boolean }> {
+  const norm = normalizeProductUrl(url);
+  const existing = (await prisma.trackedProduct.findMany({ select: { id: true, url: true } }))
+    .find((p) => normalizeProductUrl(p.url) === norm);
+  if (existing) {
+    const product = await prisma.trackedProduct.findUnique({ where: { id: existing.id }, include: PRODUCT_INCLUDE });
+    return { product: product!, created: false };
+  }
+
+  const scraped = await scrapeProduct(url); // throws on SSRF/validation problems
+  const product = await prisma.trackedProduct.create({
+    data: {
+      url,
+      title: scraped.title,
+      brand: scraped.brand,
+      imageUrl: scraped.imageUrl,
+      description: scraped.description,
+      currentPrice: scraped.price,
+      lowestPrice: scraped.price,
+      highestPrice: scraped.price,
+      vendor: scraped.vendor,
+      availability: scraped.availability,
+      sku: scraped.sku,
+      lastChecked: new Date(),
+      evalPrice: scraped.price,
+      stockSeen: stockState(scraped.availability),
+      lastError: scraped.failed
+        ? scraped.error ?? "Couldn't load the page"
+        : scraped.price == null ? "Couldn't read a price from this page" : null,
+      priceHistory: scraped.price ? { create: { price: scraped.price } } : undefined,
+    },
+    include: PRODUCT_INCLUDE,
+  });
+  return { product, created: true };
 }

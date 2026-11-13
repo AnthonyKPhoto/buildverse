@@ -2,6 +2,8 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { startPriceScheduler } = await import("@/lib/price-scheduler");
+    const { startBackupScheduler } = await import("@/lib/backup-scheduler");
     startPriceScheduler();
+    startBackupScheduler();
   }
 }

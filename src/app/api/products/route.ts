@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { scrapeProduct } from "@/lib/scraper";
+import { trackUrl } from "@/lib/price-tracker";
 import { z } from "zod";
 
 // See src/app/api/health/route.ts for why this matters.
@@ -37,36 +37,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { url } = addProductSchema.parse(body);
 
-    const existing = await prisma.trackedProduct.findUnique({ where: { url } });
-    if (existing) {
-      return NextResponse.json(
-        { error: "Product already tracked", product: existing },
-        { status: 409 }
-      );
+    // trackUrl() scrapes (with the SSRF guard) and matches an already-tracked page on its normalized URL
+    const { product, created } = await trackUrl(url);
+    if (!created) {
+      return NextResponse.json({ error: "Product already tracked", product }, { status: 409 });
     }
-
-    // scrapeProduct performs SSRF validation internally before fetching
-    const scraped = await scrapeProduct(url);
-
-    const product = await prisma.trackedProduct.create({
-      data: {
-        url,
-        title: scraped.title,
-        brand: scraped.brand,
-        imageUrl: scraped.imageUrl,
-        description: scraped.description,
-        currentPrice: scraped.price,
-        lowestPrice: scraped.price,
-        highestPrice: scraped.price,
-        vendor: scraped.vendor,
-        availability: scraped.availability,
-        sku: scraped.sku,
-        lastChecked: new Date(),
-        lastError: scraped.failed ? scraped.error ?? "Couldn't load the page" : scraped.price == null ? "Couldn't read a price from this page" : null,
-        priceHistory: scraped.price ? { create: { price: scraped.price } } : undefined,
-      },
-      include: { priceHistory: true },
-    });
 
     return NextResponse.json(product, { status: 201 });
   } catch (error) {

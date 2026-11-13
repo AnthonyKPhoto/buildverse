@@ -114,6 +114,10 @@ model TrackedProduct {
   lastNotifiedPrice Float?   // price we last emailed about; re-arms when the price rises above the alert
   lastNotifiedAt  DateTime?
   lastError       String?    // why the last check failed, if it did
+  notifyRestock   Boolean    @default(false) // email when it comes back in stock
+  compareGroup    String?    // same part at different shops share a group name -> cross-shop comparison
+  evalPrice       Float?     // price as of the last BACKGROUND check (drop-% alerts compare against this)
+  stockSeen       String?    // "in" | "out" as of the last background check (restock alerts compare against this)
   lastChecked     DateTime?
   vendor          String?
   availability    String?

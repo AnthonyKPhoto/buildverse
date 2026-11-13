@@ -16,8 +16,9 @@ import { cn, formatPrice } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { ProductCard } from "@/components/products/ProductCard";
 import { BulkAlertDialog } from "@/components/products/BulkAlertDialog";
+import { CompareGroups } from "@/components/products/CompareGroups";
 import {
-  AlertSettingsLite, TrackedProduct, isAlertHit, isDropped, isOutOfStock,
+  AlertSettingsLite, LinkedMod, TrackedProduct, buildGroups, groupInfoFor, isAlertHit, isDropped, isOutOfStock,
 } from "@/components/products/types";
 
 type Filter = "all" | "alerts" | "drops" | "stock" | "problems";
@@ -36,6 +37,7 @@ export default function ProductsPage() {
   const { toast } = useToast();
   const [products, setProducts] = useState<TrackedProduct[]>([]);
   const [settings, setSettings] = useState<AlertSettingsLite | null>(null);
+  const [links, setLinks] = useState<Record<string, LinkedMod[]>>({});
   const [loading, setLoading] = useState(true);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -74,6 +76,7 @@ export default function ProductsPage() {
         fetch("/api/products/settings").then((r) => r.json()).catch(() => null),
       ]);
       if (s && !s.error) setSettings(s);
+      fetch("/api/products/links").then((r) => r.json()).then((l) => { if (l && !l.error) setLinks(l); }).catch(() => {});
       const staleHours = Math.min(s?.intervalHours ?? 6, 6);
       const stale = list.filter((p) => !p.lastChecked || Date.now() - new Date(p.lastChecked).getTime() > staleHours * 3_600_000);
       let i = 0;
@@ -172,13 +175,14 @@ export default function ProductsPage() {
     if (res.ok) { setProducts((p) => p.filter((x) => x.id !== id)); toast({ title: "Product removed" }); }
   };
 
-  const saveAlert = async (id: string, patch: { alertThreshold?: number | null; notifyEmail?: boolean }) => {
+  const saveAlert = async (id: string, patch: { alertThreshold?: number | null; notifyEmail?: boolean; notifyRestock?: boolean; compareGroup?: string | null }) => {
     const res = await fetch(`/api/products/${id}`, {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch),
     });
     if (!res.ok) { toast({ title: "Couldn't save", variant: "destructive" }); return; }
     patchLocal(await res.json());
     if (patch.alertThreshold !== undefined) toast({ title: patch.alertThreshold == null ? "Alert removed" : "Alert saved" });
+    if (patch.compareGroup !== undefined) toast({ title: patch.compareGroup ? `Added to "${patch.compareGroup}"` : "Removed from comparison" });
   };
 
   const applyBulk = async (body: { mode: string; value?: number; notifyEmail?: boolean }) => {
@@ -209,6 +213,12 @@ export default function ProductsPage() {
 
   const savings = useMemo(
     () => products.reduce((s, p) => s + (p.highestPrice != null && p.currentPrice != null && p.currentPrice < p.highestPrice ? p.highestPrice - p.currentPrice : 0), 0),
+    [products]
+  );
+
+  const groups = useMemo(() => buildGroups(products), [products]);
+  const groupNames = useMemo(
+    () => Array.from(new Set(products.map((p) => p.compareGroup?.trim()).filter((g): g is string => !!g))).sort(),
     [products]
   );
 
@@ -376,6 +386,8 @@ export default function ProductsPage() {
               </div>
             </div>
 
+            {!search.trim() && filter === "all" && <CompareGroups groups={groups} />}
+
             {visible.length === 0 ? (
               <div className="py-16 text-center text-sm text-muted-foreground rounded-2xl border border-dashed border-border/60">
                 Nothing matches.{" "}
@@ -390,6 +402,9 @@ export default function ProductsPage() {
                     onRefresh={() => handleRefresh(p.id)}
                     onDelete={() => handleDelete(p.id)}
                     onSaveAlert={(patch) => saveAlert(p.id, patch)}
+                    linkedMods={links[p.id] ?? []}
+                    groupInfo={groupInfoFor(p, groups)}
+                    groupNames={groupNames}
                   />
                 ))}
               </div>

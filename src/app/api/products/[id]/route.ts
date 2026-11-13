@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 const updateSchema = z.object({
   alertThreshold: z.number().min(0).max(10_000_000).nullable().optional(),
   notifyEmail: z.boolean().optional(),
+  notifyRestock: z.boolean().optional(),
+  // Same part at different shops share a group name; null/empty removes it
+  compareGroup: z.string().trim().max(80).nullable().optional(),
 });
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
@@ -19,6 +22,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
           lastNotifiedPrice: null,
         }),
         ...(body.notifyEmail !== undefined && { notifyEmail: body.notifyEmail }),
+        ...(body.notifyRestock !== undefined && { notifyRestock: body.notifyRestock }),
+        ...(body.compareGroup !== undefined && { compareGroup: body.compareGroup ? body.compareGroup : null }),
       },
       include: { priceHistory: { orderBy: { createdAt: "desc" }, take: 60 } },
     });

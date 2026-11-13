@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { scrapeProduct } from "@/lib/scraper";
+import { trackUrl } from "@/lib/price-tracker";
 
 /**
  * POST /api/products/sync
@@ -29,45 +29,21 @@ export async function POST() {
       return NextResponse.json({ added: 0, skipped: 0, failed: 0 });
     }
 
-    // Which are already tracked?
-    const existing = await prisma.trackedProduct.findMany({
-      where: { url: { in: urls } },
-      select: { url: true },
-    });
-    const existingUrls = new Set(existing.map((p) => p.url));
-
-    const toAdd = urls.filter((u) => !existingUrls.has(u));
     let added = 0;
     let failed = 0;
+    let skipped = 0;
 
-    for (const url of toAdd) {
+    for (const url of urls) {
       try {
-        const scraped = await scrapeProduct(url);
-        await prisma.trackedProduct.create({
-          data: {
-            url,
-            title: scraped.title,
-            brand: scraped.brand,
-            imageUrl: scraped.imageUrl,
-            description: scraped.description,
-            currentPrice: scraped.price,
-            lowestPrice: scraped.price,
-            highestPrice: scraped.price,
-            vendor: scraped.vendor,
-            availability: scraped.availability,
-            sku: scraped.sku,
-            lastChecked: new Date(),
-            lastError: scraped.failed ? scraped.error ?? "Couldn't load the page" : scraped.price == null ? "Couldn't read a price from this page" : null,
-            priceHistory: scraped.price ? { create: { price: scraped.price } } : undefined,
-          },
-        });
-        added++;
+        // trackUrl() skips anything already tracked (normalized-URL match)
+        const { created } = await trackUrl(url);
+        if (created) added++; else skipped++;
       } catch {
         failed++;
       }
     }
 
-    return NextResponse.json({ added, skipped: existingUrls.size, failed });
+    return NextResponse.json({ added, skipped, failed });
   } catch {
     return NextResponse.json({ error: "Sync failed" }, { status: 500 });
   }

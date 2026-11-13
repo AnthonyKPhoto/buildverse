@@ -205,6 +205,10 @@ export async function applySelfMigrations(client: PrismaClient): Promise<void> {
   await addColumn(client, trackedProductCols, "lastNotifiedPrice", "REAL",     "TrackedProduct");
   await addColumn(client, trackedProductCols, "lastNotifiedAt",    "DATETIME", "TrackedProduct");
   await addColumn(client, trackedProductCols, "lastError",         "TEXT",     "TrackedProduct");
+  await addColumn(client, trackedProductCols, "notifyRestock",     "BOOLEAN NOT NULL DEFAULT 0", "TrackedProduct");
+  await addColumn(client, trackedProductCols, "compareGroup",      "TEXT",     "TrackedProduct");
+  await addColumn(client, trackedProductCols, "evalPrice",         "REAL",     "TrackedProduct");
+  await addColumn(client, trackedProductCols, "stockSeen",         "TEXT",     "TrackedProduct");
 
   const maintenanceCols = await existingColumns(client, "MaintenanceLog");
   await addColumn(client, maintenanceCols, "externalId", "TEXT", "MaintenanceLog");

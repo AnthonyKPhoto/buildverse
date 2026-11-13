@@ -7,13 +7,13 @@ import {
 } from "recharts";
 import {
   AlertTriangle, ArrowDownRight, ArrowUpRight, Bell, BellOff, CheckCircle2, ChevronDown, Clock,
-  ExternalLink, Mail, MailCheck, Package, RefreshCw, Trash2, TrendingDown,
+  ExternalLink, Mail, MailCheck, Package, PackageCheck, RefreshCw, Trash2, TrendingDown, Trophy, Wrench, Scale,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, formatPrice } from "@/lib/utils";
-import { AlertSettingsLite, TrackedProduct, isAlertHit, isDropped, isOutOfStock, timeAgo } from "./types";
+import { AlertSettingsLite, GroupInfo, LinkedMod, TrackedProduct, isAlertHit, isDropped, isOutOfStock, timeAgo } from "./types";
 
 interface Props {
   product: TrackedProduct;
@@ -21,18 +21,22 @@ interface Props {
   refreshing: boolean;
   onRefresh: () => void;
   onDelete: () => void;
-  onSaveAlert: (patch: { alertThreshold?: number | null; notifyEmail?: boolean }) => Promise<void>;
+  onSaveAlert: (patch: { alertThreshold?: number | null; notifyEmail?: boolean; notifyRestock?: boolean; compareGroup?: string | null }) => Promise<void>;
+  linkedMods?: LinkedMod[];
+  groupInfo?: GroupInfo | null;
+  groupNames?: string[];
 }
 
 const tooltipStyle = {
   backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "10px", fontSize: 12,
 };
 
-export function ProductCard({ product: p, settings, refreshing, onRefresh, onDelete, onSaveAlert }: Props) {
+export function ProductCard({ product: p, settings, refreshing, onRefresh, onDelete, onSaveAlert, linkedMods = [], groupInfo = null, groupNames = [] }: Props) {
   const [open, setOpen] = useState(false);          // details (full chart)
   const [alertOpen, setAlertOpen] = useState(false); // alert editor
   const [target, setTarget] = useState(p.alertThreshold != null ? String(p.alertThreshold) : "");
   const [saving, setSaving] = useState(false);
+  const [group, setGroup] = useState(p.compareGroup ?? "");
 
   const hit = isAlertHit(p);
   const dropped = isDropped(p);
@@ -91,6 +95,16 @@ export function ProductCard({ product: p, settings, refreshing, onRefresh, onDel
             <div className="flex flex-wrap items-center gap-1.5 mt-2">
               {hit && <Badge className="text-[11px] bg-green-500/15 text-green-400 border-green-500/30 gap-1"><Bell className="w-3 h-3" />Target hit</Badge>}
               {atLow && !hit && <Badge className="text-[11px] bg-green-500/15 text-green-400 border-green-500/30 gap-1"><CheckCircle2 className="w-3 h-3" />Lowest yet</Badge>}
+              {groupInfo?.isBest && (
+                <Badge className="text-[11px] bg-amber-500/15 text-amber-400 border-amber-500/30 gap-1" title={`Cheapest of ${groupInfo.size} shops for "${groupInfo.group}"`}>
+                  <Trophy className="w-3 h-3" />Best price
+                </Badge>
+              )}
+              {groupInfo && groupInfo.size > 1 && !groupInfo.isBest && groupInfo.extra > 0 && (
+                <Badge className="text-[11px] bg-secondary text-muted-foreground border-border" title={`Cheapest: ${groupInfo.bestVendor ?? "another shop"} at ${formatPrice(groupInfo.bestPrice)}`}>
+                  +{formatPrice(groupInfo.extra)} vs {groupInfo.bestVendor ?? "best"}
+                </Badge>
+              )}
               {offPeak >= 5 && <Badge className="text-[11px] bg-blue-500/15 text-blue-400 border-blue-500/30 gap-1"><TrendingDown className="w-3 h-3" />{offPeak}% off peak</Badge>}
               {p.availability && (
                 <Badge className={cn("text-[11px]", outOfStock
@@ -102,7 +116,7 @@ export function ProductCard({ product: p, settings, refreshing, onRefresh, onDel
             </div>
           </div>
 
-          <div className="text-right shrink-0">
+          <div className="text-right shrink-0 order-last">
             <p className="text-xl font-bold tabular-nums leading-none">{formatPrice(p.currentPrice)}</p>
             {delta != null && (
               <p className={cn("mt-1.5 inline-flex items-center gap-0.5 text-xs font-medium tabular-nums",
@@ -116,6 +130,25 @@ export function ProductCard({ product: p, settings, refreshing, onRefresh, onDel
             )}
           </div>
         </div>
+
+        {linkedMods.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <Wrench className="w-3 h-3 text-muted-foreground shrink-0" />
+            {linkedMods.slice(0, 3).map((m) => (
+              <Link key={m.modId} href={`/garage/${m.vehicleId}`}
+                className="inline-flex items-center gap-1 max-w-full px-2 py-0.5 rounded-full text-[11px] bg-secondary border border-border hover:border-theme/40 hover:text-theme transition-colors truncate"
+                title={`${m.modName} — ${m.vehicleName}${m.price != null ? ` (budgeted ${formatPrice(m.price)})` : ""}`}>
+                <span className="truncate">{m.vehicleName} · {m.modName}</span>
+                {m.price != null && p.currentPrice != null && Math.abs(m.price - p.currentPrice) >= 0.5 && (
+                  <span className={cn("shrink-0 tabular-nums", p.currentPrice < m.price ? "text-green-400" : "text-red-400")}>
+                    {p.currentPrice < m.price ? "−" : "+"}{formatPrice(Math.abs(p.currentPrice - m.price))}
+                  </span>
+                )}
+              </Link>
+            ))}
+            {linkedMods.length > 3 && <span className="text-[11px] text-muted-foreground">+{linkedMods.length - 3} more</span>}
+          </div>
+        )}
 
         {/* Sparkline */}
         {history.length > 1 ? (
@@ -217,6 +250,40 @@ export function ProductCard({ product: p, settings, refreshing, onRefresh, onDel
                 {p.alertThreshold != null && (
                   <button className="text-xs text-muted-foreground hover:text-destructive" onClick={() => saveTarget(null)}>Remove</button>
                 )}
+              </div>
+            </div>
+
+            <div className="flex items-start justify-between gap-3 pt-3 border-t border-border/60">
+              <div className="min-w-0">
+                <p className="text-sm font-medium flex items-center gap-1.5"><PackageCheck className="w-3.5 h-3.5 text-theme" />Tell me when it&apos;s back in stock</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {isOutOfStock(p) ? "It's out of stock right now — you'll get an email the moment it's available again." : "Emails you if it goes out of stock and later returns."}
+                  {!settings?.emailEnabled && <> Needs email alerts turned on in <Link href="/settings" className="text-theme hover:underline">Settings</Link>.</>}
+                </p>
+              </div>
+              <button
+                role="switch" aria-checked={!!p.notifyRestock} aria-label="Back in stock alert"
+                onClick={() => onSaveAlert({ notifyRestock: !p.notifyRestock })}
+                className={cn("relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 mt-0.5",
+                  p.notifyRestock ? "bg-theme" : "bg-secondary border border-border")}
+              >
+                <span className={cn("inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200", p.notifyRestock ? "translate-x-4" : "translate-x-0.5")} />
+              </button>
+            </div>
+
+            <div className="pt-3 border-t border-border/60">
+              <p className="text-sm font-medium flex items-center gap-1.5"><Scale className="w-3.5 h-3.5 text-theme" />Compare with other shops</p>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-2">Give the same part at different shops the same name and we&apos;ll show which is cheapest.</p>
+              <div className="flex items-center gap-2">
+                <input
+                  list={`groups-${p.id}`} value={group} maxLength={80} placeholder="e.g. BC Racing BR coilovers"
+                  onChange={(e) => setGroup(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") onSaveAlert({ compareGroup: group.trim() || null }); }}
+                  className="flex-1 min-w-0 px-3 py-1.5 text-sm rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+                <datalist id={`groups-${p.id}`}>{groupNames.map((g) => <option key={g} value={g} />)}</datalist>
+                <Button size="sm" className="h-8 bg-theme hover:brightness-90" disabled={(group.trim() || "") === (p.compareGroup ?? "")}
+                  onClick={() => onSaveAlert({ compareGroup: group.trim() || null })}>Save</Button>
               </div>
             </div>
 
