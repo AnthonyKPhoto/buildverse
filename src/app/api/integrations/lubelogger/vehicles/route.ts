@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadConfig, llFetch, LubeLoggerConfig } from "@/lib/lubelogger";
+import { loadConfig, llFetch, normaliseUrl, LubeLoggerConfig } from "@/lib/lubelogger";
+import { requireAdmin } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 
 // See src/app/api/health/route.ts for why this matters.
@@ -23,7 +24,9 @@ async function fetchLLAndBVVehicles(cfg: LubeLoggerConfig) {
 }
 
 // GET — reads auth config from DB
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await requireAdmin(req, true);
+  if (denied) return denied;
   const cfg = await loadConfig();
   if (!cfg.url) return NextResponse.json({ error: "Not configured" }, { status: 400 });
 
@@ -43,13 +46,18 @@ export async function GET() {
 // POST — accepts live credentials in body so vehicle mapping shows even before DB save succeeds.
 // vehicleMap is always read from DB (preserves any previously saved mapping).
 export async function POST(req: NextRequest) {
+  const denied = await requireAdmin(req, true);
+  if (denied) return denied;
   let liveCreds: { url?: string; authType?: string; apiKey?: string; username?: string; password?: string } = {};
   try { liveCreds = await req.json(); } catch {}
 
   const dbCfg = await loadConfig();
 
+  // Don't forward stored credentials to a caller-supplied different URL.
+  const urlChanged = !!liveCreds.url && normaliseUrl(liveCreds.url) !== normaliseUrl(dbCfg.url);
   const cfg: LubeLoggerConfig = {
     ...dbCfg,
+    ...(urlChanged ? { apiKey: "", password: "" } : {}),
     ...(liveCreds.url ? { url: liveCreds.url } : {}),
     ...(liveCreds.authType ? { authType: liveCreds.authType as LubeLoggerConfig["authType"] } : {}),
     // Use live key only if it's not the masked placeholder

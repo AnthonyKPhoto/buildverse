@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAdmin } from "@/lib/auth/current-user";
 import { getSmtpConfigMasked, saveSmtpConfig } from "@/lib/mailer";
 
 // See src/app/api/health/route.ts for why this matters — without it, GET
 // routes with no dynamic-API usage can get statically cached at build time.
 export const dynamic = "force-dynamic";
 
-function requireAdmin(req: NextRequest): NextResponse | null {
-  if (req.headers.get("x-user-role") !== "admin") {
-    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-  }
-  return null;
-}
 
 export async function GET(req: NextRequest) {
-  const denied = requireAdmin(req);
+  const denied = await requireAdmin(req);
   if (denied) return denied;
 
   const config = await getSmtpConfigMasked();
@@ -32,7 +27,7 @@ const smtpSchema = z.object({
 });
 
 export async function PUT(req: NextRequest) {
-  const denied = requireAdmin(req);
+  const denied = await requireAdmin(req);
   if (denied) return denied;
 
   try {

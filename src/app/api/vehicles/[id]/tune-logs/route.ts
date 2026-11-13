@@ -19,6 +19,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!(await canEditVehicle(req, params.id))) {
     return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
   }
+  if (Number(req.headers.get("content-length") ?? 0) > 51 * 1024 * 1024) {
+    return NextResponse.json({ error: "File too large (max 50 MB)" }, { status: 413 });
+  }
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
@@ -28,7 +31,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (file.size > 50 * 1024 * 1024) return NextResponse.json({ error: "File too large (max 50 MB)" }, { status: 413 });
 
     const id = uuid();
-    const ext = path.extname(file.name) || ".csv";
+    const rawExt = path.extname(file.name).toLowerCase();
+    const ext = /^\.[a-z0-9]{1,8}$/.test(rawExt) ? rawExt : ".csv";
     const filename = `${id}${ext}`;
     const dir = path.join(DATA_DIR, "tune-logs", params.id);
     fs.mkdirSync(dir, { recursive: true });

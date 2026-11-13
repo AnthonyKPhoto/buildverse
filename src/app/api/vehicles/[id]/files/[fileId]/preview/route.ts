@@ -100,6 +100,10 @@ export async function GET(
   return new NextResponse(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
+      // The HTML is generated from an uploaded document and isn't sanitized:
+      // lock it down so nothing in it (script, javascript: links, forms) runs.
+      "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+      "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=3600",
     },
   });

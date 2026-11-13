@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isAuthEnabled } from "@/lib/auth/password";
 import { generateResetToken, RESET_TOKEN_LIFETIME_MS } from "@/lib/auth/reset-token";
-import { getClientKey, createRateLimiter } from "@/lib/auth/rate-limit";
+import { getClientKey, createRateLimiter, getAppOrigin } from "@/lib/auth/rate-limit";
 import { sendPasswordResetEmail } from "@/lib/mailer";
 
 // See src/app/api/health/route.ts for why this matters.
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     await prisma.passwordResetToken.create({
       data: { userId: user.id, tokenHash: hash, expiresAt: new Date(Date.now() + RESET_TOKEN_LIFETIME_MS) },
     });
-    const resetUrl = `${req.nextUrl.origin}/reset-password?token=${raw}`;
+    const resetUrl = `${getAppOrigin(req)}/reset-password?token=${raw}`;
     const result = await sendPasswordResetEmail(user.email, user.username, resetUrl);
     if (!result.ok) {
       console.error("[POST /api/auth/forgot-password] failed to send email:", result.error);

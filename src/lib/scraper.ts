@@ -70,7 +70,13 @@ function parsePrice(text: string): number | null {
  *   fc00::/7         IPv6 unique local
  *   fe80::/10        IPv6 link-local
  */
-function isPrivateIP(ip: string): boolean {
+function isPrivateIP(rawIp: string): boolean {
+  // URL hostnames wrap IPv6 literals in brackets
+  let ip = rawIp.replace(/^\[|\]$/g, "").toLowerCase();
+  // IPv4-mapped IPv6 (::ffff:127.0.0.1 or ::ffff:7f00:1) — check the embedded v4
+  const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) ip = mapped[1];
+  if (/^::ffff:[0-9a-f]{1,4}:[0-9a-f]{1,4}$/.test(ip)) return true; // hex-form mapped: refuse outright
   return [
     /^127\./,
     /^10\./,
@@ -79,8 +85,11 @@ function isPrivateIP(ip: string): boolean {
     /^169\.254\./,
     /^0\./,
     /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,
+    /^192\.0\.0\./,
+    /^(22[4-9]|2[3-5]\d)\./, // multicast / reserved / broadcast
+    /^::$/,
     /^::1$/,
-    /^fc[0-9a-f]{2}:/i,
+    /^f[cd][0-9a-f]{2}:/i,
     /^fe[89ab][0-9a-f]:/i,
   ].some((r) => r.test(ip));
 }
@@ -113,11 +122,15 @@ export async function validateScrapingUrl(rawUrl: string): Promise<{ hostname: s
     throw new Error("Only http and https URLs are permitted for product scraping");
   }
 
-  const { hostname } = parsed;
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
 
   // Block raw IP literals that fall in private ranges
   if (isPrivateIP(hostname)) {
     throw new Error("Requests to private or loopback addresses are not allowed");
+  }
+  // A public IP literal needs no DNS (and the pinned lookup is never consulted for literals)
+  if (net.isIP(hostname)) {
+    return { hostname, addresses: [hostname] };
   }
 
   // DNS pre-resolution — catches hostnames that map to private IPs
@@ -179,30 +192,70 @@ function sanitizeImageUrl(url: string | null | undefined): string | null {
 
 // ── Scraper ───────────────────────────────────────────────────────────────────
 
+const MAX_REDIRECTS = 4;
+const MAX_BODY_BYTES = 2 * 1024 * 1024; // 2 MB
+
+/**
+ * Fetches a page, re-running the SSRF validation (and re-pinning DNS) on EVERY
+ * hop. undici follows redirects by default, which let a public URL bounce the
+ * request to http://127.0.0.1/... or the cloud metadata IP. Redirects are
+ * followed manually here and the body is size-capped.
+ */
+async function fetchHtmlSafely(startUrl: string): Promise<string> {
+  let current = startUrl;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const { addresses } = await validateScrapingUrl(current);
+    const agent = new Agent({ connect: { lookup: pinnedLookup(addresses) } });
+    try {
+      const res = await undiciFetch(current, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml",
+        },
+        redirect: "manual",
+        signal: AbortSignal.timeout(10000),
+        dispatcher: agent,
+      });
+
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get("location");
+        await res.body?.cancel().catch(() => {});
+        if (!loc) throw new Error(`HTTP ${res.status}`);
+        current = new URL(loc, current).toString();
+        continue;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const reader = res.body?.getReader();
+      if (!reader) return "";
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.length;
+        if (total > MAX_BODY_BYTES) { await reader.cancel().catch(() => {}); break; }
+        chunks.push(value);
+      }
+      return Buffer.concat(chunks).toString("utf-8");
+    } finally {
+      await agent.close();
+    }
+  }
+  throw new Error("Too many redirects");
+}
+
 export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
-  // SSRF guard — must be called before any fetch; throws on disallowed targets
-  const { addresses } = await validateScrapingUrl(url);
+  // SSRF guard — throws on disallowed targets (each redirect hop is re-checked
+  // inside fetchHtmlSafely too)
+  await validateScrapingUrl(url);
 
   const domain = extractDomain(url);
   const vendor = vendorFromDomain(domain);
 
-  // Pin the actual connection to the addresses we just validated, so a DNS
-  // rebind between the check above and this fetch can't redirect us.
-  const agent = new Agent({ connect: { lookup: pinnedLookup(addresses) } });
-
   try {
-    const res = await undiciFetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml",
-      },
-      signal: AbortSignal.timeout(10000),
-      dispatcher: agent,
-    });
-
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const html = await res.text();
+    const html = await fetchHtmlSafely(url);
 
     const { load } = await import("cheerio");
     const $ = load(html);
@@ -297,7 +350,5 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
       vendor,
       sku: null,
     };
-  } finally {
-    await agent.close();
   }
 }

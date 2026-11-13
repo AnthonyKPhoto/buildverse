@@ -4,6 +4,7 @@ import path from "path";
 import AdmZip from "adm-zip";
 import { verifyPassword, isAuthEnabled } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth/current-user";
 import { SQLITE_MAGIC, normalizeEntryName, findZipRoot, attachmentsRoot } from "@/lib/transfer-pack";
 
 // One-time migration path: seed the server with an existing local (Electron)
@@ -29,6 +30,9 @@ function getDbPath(): string {
   return path.isAbsolute(stripped) ? stripped : path.join(process.cwd(), "prisma", stripped);
 }
 
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+const MAX_ENTRY_BYTES = 2 * 1024 * 1024 * 1024;
+
 export async function POST(req: NextRequest) {
   if (!isAuthEnabled()) {
     return NextResponse.json(
@@ -38,11 +42,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Admin-only — this replaces every user's data, not just the requester's own.
-  if (req.headers.get("x-user-role") !== "admin") {
-    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-  }
+  const denied = await requireAdmin(req);
+  if (denied) return denied;
   const userId = req.headers.get("x-user-id");
 
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_UPLOAD_BYTES) {
+    return NextResponse.json({ error: "Upload too large" }, { status: 413 });
+  }
   const formData = await req.formData().catch(() => null);
   if (!formData) {
     return NextResponse.json({ error: "Expected multipart/form-data" }, { status: 400 });
@@ -93,6 +99,9 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+      if (dbEntry.header.size > MAX_ENTRY_BYTES) {
+        return NextResponse.json({ error: "Database inside the zip is too large" }, { status: 413 });
+      }
       dbBuffer = dbEntry.getData();
     } catch {
       return NextResponse.json({ error: "Couldn't read that zip file" }, { status: 400 });
@@ -136,6 +145,7 @@ export async function POST(req: NextRequest) {
             // Guard against a corrupted/malicious entry (e.g. "../../etc/x")
             // writing outside destRoot — admin-only route, but cheap to check.
             if (!destPath.startsWith(destRoot + path.sep) && destPath !== destRoot) continue;
+            if (entry.header.size > MAX_ENTRY_BYTES) continue;
             await mkdir(path.dirname(destPath), { recursive: true });
             await writeFile(destPath, entry.getData());
           }
@@ -165,6 +175,10 @@ export async function POST(req: NextRequest) {
     // to be atomic rather than a cross-device copy that could be interrupted
     // partway through.
     await rename(tempPath, dbPath);
+    // WAL mode: a leftover -wal/-shm from the OLD database would be replayed
+    // onto the newly-restored file and corrupt it. Remove them.
+    await rm(`${dbPath}-wal`, { force: true }).catch(() => {});
+    await rm(`${dbPath}-shm`, { force: true }).catch(() => {});
   } catch (err) {
     // The rename can fail (e.g. a transient file-lock) before the temp file
     // is consumed — clean it up rather than leaving it to accumulate next

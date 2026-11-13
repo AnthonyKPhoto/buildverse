@@ -2,18 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth/password";
 import { z } from "zod";
+import { requireAdmin } from "@/lib/auth/current-user";
 
 const updateUserSchema = z.object({
   role: z.enum(["admin", "member"]).optional(),
   password: z.string().min(8).max(200).optional(),
 });
 
-function requireAdmin(req: NextRequest): NextResponse | null {
-  if (req.headers.get("x-user-role") !== "admin") {
-    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-  }
-  return null;
-}
 
 async function isLastAdmin(userId: string): Promise<boolean> {
   const admins = await prisma.user.findMany({ where: { role: "admin" }, select: { id: true } });
@@ -21,7 +16,7 @@ async function isLastAdmin(userId: string): Promise<boolean> {
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
-  const denied = requireAdmin(req);
+  const denied = await requireAdmin(req);
   if (denied) return denied;
 
   try {
@@ -55,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const denied = requireAdmin(req);
+  const denied = await requireAdmin(req);
   if (denied) return denied;
 
   const requesterId = req.headers.get("x-user-id");

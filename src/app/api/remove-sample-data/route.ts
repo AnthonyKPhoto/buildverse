@@ -1,7 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const denied = await requireAdmin(req, true);
+  if (denied) return denied;
   try {
     // Find sample vehicles by name pattern
     const sampleVehicles = await prisma.vehicle.findMany({

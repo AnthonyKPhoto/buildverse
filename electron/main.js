@@ -56,6 +56,17 @@ function waitForServer(url, maxMs = 120000) {
   });
 }
 
+// Only hand web/mail links to the OS. An unrestricted shell.openExternal lets
+// anything that can run script in the page launch file:// paths or any
+// registered protocol handler.
+function openExternalSafe(url) {
+  try {
+    const u = new URL(String(url));
+    if (["https:", "http:", "mailto:"].includes(u.protocol)) return shell.openExternal(u.toString());
+  } catch {}
+  return Promise.resolve();
+}
+
 function iconPath(preferIco = false) {
   if (IS_DEV) {
     const base = path.join(__dirname, "..", "build");
@@ -691,18 +702,20 @@ function createWindow(targetUrl) {
     });
   }
 
+  const sameOrigin = (u) => { try { return new URL(u).origin === targetOrigin; } catch { return false; } };
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(targetOrigin)) {
-      shell.openExternal(url);
+    if (!sameOrigin(url)) {
+      openExternalSafe(url);
       return { action: "deny" };
     }
     return { action: "allow" };
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(targetOrigin)) {
+    if (!sameOrigin(url)) {
       event.preventDefault();
-      shell.openExternal(url);
+      openExternalSafe(url);
     }
   });
 
@@ -806,7 +819,7 @@ function getCloseMode() {
 ipcMain.handle("prefs:get", () => loadPrefs());
 ipcMain.handle("prefs:set", (_, obj) => { savePrefs(obj); return { success: true }; });
 ipcMain.handle("app:restart",      () => { app.relaunch(); app.isQuitting = true; app.quit(); });
-ipcMain.handle("shell:openExternal", (_, url) => shell.openExternal(url));
+ipcMain.handle("shell:openExternal", (_, url) => openExternalSafe(url));
 
 // ── Single-instance lock — prevents a second copy from launching ──────────────
 const gotLock = app.requestSingleInstanceLock();

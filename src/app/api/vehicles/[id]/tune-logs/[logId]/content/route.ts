@@ -18,6 +18,6 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string;
 
   const content = fs.readFileSync(filePath, "utf-8");
   return new NextResponse(content, {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    headers: { "Content-Type": "text/plain; charset=utf-8", "X-Content-Type-Options": "nosniff" },
   });
 }

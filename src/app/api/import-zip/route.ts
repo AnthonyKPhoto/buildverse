@@ -8,6 +8,7 @@ import AdmZip from "adm-zip";
 import { isAuthEnabled } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { SQLITE_MAGIC, normalizeEntryName, findZipRoot, findEntry, attachmentsRoot } from "@/lib/transfer-pack";
+import { cleanHttpUrl, cleanImageUrl } from "@/lib/auth/safe-url";
 import { applySelfMigrations } from "@/lib/schema-migrations";
 
 // Additive counterpart to /api/admin/restore-db — that route does a full
@@ -27,6 +28,12 @@ import { applySelfMigrations } from "@/lib/schema-migrations";
 // server's own tracked products for little benefit) and VehicleAccess grants
 // (reference user IDs from the source install that don't exist here).
 
+const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024; // 1 GB
+const MAX_ENTRY_BYTES = 200 * 1024 * 1024;
+// Same whitelist as the normal upload route — mimeType comes from the
+// uploaded database, so never trust it.
+const SAFE_MIME = new Set(["image/jpeg","image/png","image/gif","image/webp","image/avif","application/pdf","application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document","text/plain"]);
+
 export async function POST(req: NextRequest) {
   if (!isAuthEnabled()) {
     return NextResponse.json({ error: "Not available outside a server deployment" }, { status: 400 });
@@ -45,6 +52,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
   }
 
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return NextResponse.json({ error: "Upload too large" }, { status: 413 });
+  }
   const buffer = Buffer.from(await file.arrayBuffer());
   if (buffer.length < 2 || buffer.toString("ascii", 0, 2) !== "PK") {
     return NextResponse.json({ error: "Expected a .zip transfer pack (Settings → Data & Backup → Export Transfer Pack)" }, { status: 400 });
@@ -65,6 +75,9 @@ export async function POST(req: NextRequest) {
       { error: "That zip doesn't contain a buildverse.db — is this a BuildVerse transfer pack?" },
       { status: 400 }
     );
+  }
+  if (dbEntry.header.size > MAX_ENTRY_BYTES * 5) {
+    return NextResponse.json({ error: "Database inside the zip is too large" }, { status: 413 });
   }
   const dbBuffer = dbEntry.getData();
   if (dbBuffer.length < 16 || dbBuffer.toString("ascii", 0, 16) !== SQLITE_MAGIC) {
@@ -107,7 +120,13 @@ export async function POST(req: NextRequest) {
       } = sv;
 
       const newVehicle = await prisma.vehicle.create({
-        data: { ...vehicleScalars, createdByUserId: userId },
+        data: {
+          ...vehicleScalars,
+          photoUrl: cleanImageUrl(vehicleScalars.photoUrl),
+          instagramUrl: cleanHttpUrl(vehicleScalars.instagramUrl),
+          facebookUrl: cleanHttpUrl(vehicleScalars.facebookUrl),
+          createdByUserId: userId,
+        },
       });
       vehiclesImported++;
 
@@ -115,7 +134,12 @@ export async function POST(req: NextRequest) {
       for (const mod of modifications) {
         const { id: oldModId, vehicleId: _mvid, dependencies: _deps, createdAt: _mc, updatedAt: _mu, ...modScalars } = mod;
         const newMod = await prisma.modification.create({
-          data: { ...modScalars, vehicleId: newVehicle.id },
+          data: {
+            ...modScalars,
+            link: cleanHttpUrl(modScalars.link),
+            imageUrl: cleanImageUrl(modScalars.imageUrl),
+            vehicleId: newVehicle.id,
+          },
         });
         modIdMap.set(oldModId, newMod.id);
         modsImported++;
@@ -144,7 +168,9 @@ export async function POST(req: NextRequest) {
       }
       for (const l of links) {
         const { id: _id, vehicleId: _vid, createdAt: _c, ...rest } = l;
-        await prisma.vehicleLink.create({ data: { ...rest, vehicleId: newVehicle.id } });
+        const safeLink = cleanHttpUrl(rest.url);
+        if (!safeLink) continue;
+        await prisma.vehicleLink.create({ data: { ...rest, url: safeLink, vehicleId: newVehicle.id } });
       }
       for (const n of vehicleNotes) {
         const { id: _id, vehicleId: _vid, createdAt: _c, updatedAt: _u, ...rest } = n;
@@ -156,8 +182,9 @@ export async function POST(req: NextRequest) {
       // anything already on the live server.
       for (const f of files) {
         const entry = findEntry(zip, `${zipRoot}vehicle-files/${oldVehicleId}/${f.filename}`);
-        if (!entry) continue;
-        const newFilename = `${randomUUID()}${path.extname(f.filename)}`;
+        if (!entry || entry.header.size > MAX_ENTRY_BYTES || !SAFE_MIME.has(f.mimeType)) continue;
+        const fExt = path.extname(f.filename).toLowerCase();
+        const newFilename = `${randomUUID()}${/^\.[a-z0-9]{1,8}$/.test(fExt) ? fExt : ""}`;
         const destDir = path.join(attachmentsRoot(), "vehicle-files", newVehicle.id);
         await mkdir(destDir, { recursive: true });
         await writeFile(path.join(destDir, newFilename), entry.getData());
@@ -175,8 +202,9 @@ export async function POST(req: NextRequest) {
       }
       for (const t of tuneLogs) {
         const entry = findEntry(zip, `${zipRoot}tune-logs/${oldVehicleId}/${t.filename}`);
-        if (!entry) continue;
-        const newFilename = `${randomUUID()}${path.extname(t.filename) || ".csv"}`;
+        if (!entry || entry.header.size > MAX_ENTRY_BYTES) continue;
+        const tExt = path.extname(t.filename).toLowerCase();
+        const newFilename = `${randomUUID()}${/^\.[a-z0-9]{1,8}$/.test(tExt) ? tExt : ".csv"}`;
         const destDir = path.join(attachmentsRoot(), "tune-logs", newVehicle.id);
         await mkdir(destDir, { recursive: true });
         await writeFile(path.join(destDir, newFilename), entry.getData());

@@ -1,20 +1,22 @@
 /** @type {import('next').NextConfig} */
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" },
+];
+
 const nextConfig = {
-  env: {
-    GDRIVE_CLIENT_SECRET: process.env.GDRIVE_CLIENT_SECRET,
-  },
   output: "standalone",
   images: {
-    // Restrict to https only — http would allow the image-optimization endpoint
-    // (/_next/image?url=...) to proxy insecure or internal-network resources.
-    // Wildcard hostname is required because product images are scraped from
-    // arbitrary auto-parts vendors; a hard allowlist would break image display
-    // for new vendors.  The SSRF guard in src/lib/scraper.ts ensures that no
-    // private-network URL can ever be stored as an imageUrl in the first place.
-    remotePatterns: [
-      { protocol: "https", hostname: "**" },
-      { protocol: "http", hostname: "**" },
-    ],
+    // The /_next/image optimizer is disabled. With a wildcard remotePattern it
+    // was an unauthenticated (middleware skips it) proxy that could fetch
+    // arbitrary hosts, including internal ones. Product/vehicle images are
+    // user-supplied URLs or data: URIs and render fine unoptimized.
+    unoptimized: true,
+  },
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
   },
   experimental: {
     serverComponentsExternalPackages: ["@prisma/client", "prisma"],

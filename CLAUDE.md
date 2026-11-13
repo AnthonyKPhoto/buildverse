@@ -145,10 +145,11 @@ OAuth) has been removed entirely in favor of the server itself being the single 
 Auth is entirely **inert** unless `AUTH_SESSION_SECRET` is set (i.e. local dev and Electron's local
 mode are never affected). When it is set (Docker/server deployments):
 
-- Loopback (`127.0.0.1`, `::1`) always bypasses — this is Electron's own spawned local server talking
-  to itself, not a real remote client. It is **not** a subnet/LAN check: a phone on the same Wi-Fi is
-  not loopback and still has to sign in as a real user.
-- Everyone else needs a valid session cookie (`bv_session`, signed via `AUTH_SESSION_SECRET` — see
+- There is **no loopback/LAN bypass** in server mode. An earlier version trusted `X-Forwarded-For` /
+  an empty `request.ip` to detect "local" callers, which any remote client could forge — a full auth
+  bypass. Electron's local mode never sets `AUTH_SESSION_SECRET` (auth is simply off there), and its
+  "Connect to Server" mode signs in like any other client.
+- Every request needs a valid session cookie (`bv_session`, signed via `AUTH_SESSION_SECRET` — see
   `src/lib/auth/session.ts`), or gets redirected to `/login` (pages) / 401 (API routes).
 - `src/middleware.ts` verifies the JWT and, on success, attaches `x-user-id` / `x-user-username` /
   `x-user-role` headers to the request for downstream routes to trust — it strips any client-supplied
@@ -177,6 +178,12 @@ issues a fresh session token — no re-login needed.
 **Login:** POST `/api/auth/login` with `{ username, password }`.
 **Current user:** GET `/api/auth/me` (reads the headers middleware already attached, plus the user's
 saved theme fields straight from the DB — see "Per-user theme" below).
+
+**Privileged checks hit the database.** Session JWTs (7-day lifetime) are stateless and can carry a stale
+role, so admin-only routes use `requireAdmin()` and vehicle edits use `canEditVehicle()` — both in
+`src/lib/auth/` — which re-read the live `User` row. Don't gate anything privileged on the
+`x-user-role` header alone. Admin-only for shared/global actions: wipe, remove-sample-data, custom
+categories, LubeLogger config/sync/test, restore-db, user/SMTP/access management.
 
 **Per-vehicle edit access:** viewing the garage is always shared. Editing a given vehicle (and its
 mods/maintenance/budget/etc.) requires being an admin, that vehicle's creator (`Vehicle.createdByUserId`,
@@ -269,6 +276,7 @@ corrects on any interaction or reload — not worth a shared theme context for t
 |----------|---------|---------|
 | `DATABASE_URL` | Docker only | `file:/data/buildverse.db` — dev uses `.env`/`.env.local` |
 | `AUTH_SESSION_SECRET` | Optional (server mode) | Long random string signing session cookies. **Setting this is what turns server-mode auth on at all** — `isAuthEnabled()` in `src/lib/auth/password.ts`. |
+| `APP_URL` | Recommended (server mode) | Public URL of the deployment. Used for links in reset/welcome emails; if unset the request Host header is used, which can be forged (host-header poisoning). |
 | `ADMIN_USERNAME` | Optional | Pre-provisioned bootstrap admin's username, default `admin`. Leave unset to use self-service setup instead (see Authentication). |
 | `ADMIN_PASSWORD_HASH` | Optional | Generate with `node scripts/hash-password.js "password"`. Only needed if pre-provisioning the first admin instead of using self-service setup. |
 

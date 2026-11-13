@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -6,7 +7,9 @@ import { prisma } from "@/lib/prisma";
  * Deletes ALL user data in the correct dependency order.
  * Using deleteMany directly avoids FK/cascade issues with SQLite.
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const denied = await requireAdmin(req, true);
+  if (denied) return denied;
   try {
     // Delete in FK-safe order: children first, parents last
     await prisma.modDependency.deleteMany({});

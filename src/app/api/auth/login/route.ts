@@ -1,33 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyPassword, isAuthEnabled } from "@/lib/auth/password";
+import { verifyPassword, hashPassword, isAuthEnabled } from "@/lib/auth/password";
+import { getClientKey, createRateLimiter } from "@/lib/auth/rate-limit";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 
-// Basic in-memory lockout — this is reachable from the open internet.
-// Per-process is fine here: the server always runs as one Node process
-// (SQLite, not horizontally scaled), same as the rest of the app.
-const MAX_ATTEMPTS = 10;
-const WINDOW_MS = 15 * 60 * 1000;
-const attempts = new Map<string, { count: number; resetAt: number }>();
+// In-memory lockout — this is reachable from the open internet. Per-process
+// is fine: the server always runs as one Node process (SQLite).
+// Two limiters: per client address, and per username (so rotating addresses
+// can't be used to brute-force one account).
+const ipLimiter = createRateLimiter(10, 15 * 60 * 1000);
+const userLimiter = createRateLimiter(20, 15 * 60 * 1000);
 
-function getClientKey(req: NextRequest): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-}
-
-function isRateLimited(key: string): boolean {
-  const entry = attempts.get(key);
-  return !!entry && Date.now() < entry.resetAt && entry.count >= MAX_ATTEMPTS;
-}
-
-function recordFailedAttempt(key: string) {
-  const now = Date.now();
-  const entry = attempts.get(key);
-  if (!entry || now > entry.resetAt) {
-    attempts.set(key, { count: 1, resetAt: now + WINDOW_MS });
-  } else {
-    entry.count += 1;
-  }
-}
+// Verified against when the username doesn't exist, so "unknown user" costs the
+// same scrypt work as "wrong password" and response time doesn't leak which
+// usernames are real.
+const DUMMY_HASH = hashPassword("dummy-password-for-timing");
 
 export async function POST(req: NextRequest) {
   if (!isAuthEnabled()) {
@@ -35,7 +22,7 @@ export async function POST(req: NextRequest) {
   }
 
   const key = getClientKey(req);
-  if (isRateLimited(key)) {
+  if (ipLimiter.isLimited(key)) {
     return NextResponse.json({ error: "Too many attempts — try again later" }, { status: 429 });
   }
 
@@ -52,9 +39,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Username and password are required" }, { status: 400 });
   }
 
+  if (userLimiter.isLimited(username.toLowerCase())) {
+    return NextResponse.json({ error: "Too many attempts — try again later" }, { status: 429 });
+  }
+
   const user = await prisma.user.findUnique({ where: { username } });
-  if (!user || !verifyPassword(password, user.passwordHash)) {
-    recordFailedAttempt(key);
+  const passwordOk = verifyPassword(password, user ? user.passwordHash : DUMMY_HASH);
+  if (!user || !passwordOk) {
+    ipLimiter.record(key);
+    userLimiter.record(username.toLowerCase());
     return NextResponse.json({ error: "Incorrect username or password" }, { status: 401 });
   }
 
@@ -76,7 +69,7 @@ export async function POST(req: NextRequest) {
     secure: true,
     sameSite: "strict",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: 60 * 60 * 24 * 7,
   });
   return res;
 }

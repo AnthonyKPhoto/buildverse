@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canEditVehicle, VEHICLE_ACCESS_DENIED } from "@/lib/auth/vehicle-access";
 import { randomUUID } from "crypto";
+import { isHttpUrl } from "@/lib/auth/safe-url";
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
   const links = await prisma.vehicleLink.findMany({
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { title, url, description, category } = await req.json();
   if (!title?.trim() || !url?.trim()) {
     return NextResponse.json({ error: "title and url are required" }, { status: 400 });
+  }
+  if (!isHttpUrl(url) || url.length > 2000) {
+    return NextResponse.json({ error: "Link must be an http(s) URL" }, { status: 400 });
   }
   const link = await prisma.vehicleLink.create({
     data: { id: randomUUID(), vehicleId: params.id, title: title.trim(), url: url.trim(), description: description?.trim() || null, category: category?.trim() || null },

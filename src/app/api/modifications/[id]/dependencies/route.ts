@@ -27,7 +27,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 
   // Prevent self-dependency
-  const filtered = dependsOn.filter((id) => id !== params.id);
+  const filtered = dependsOn.filter((id) => typeof id === "string" && id !== params.id);
+
+  // Dependencies must be on the same vehicle (stops linking to — and leaking
+  // names of — mods on vehicles the caller can't edit).
+  const valid = await prisma.modification.count({ where: { id: { in: filtered }, vehicleId: existing.vehicleId } });
+  if (valid !== new Set(filtered).size) {
+    return NextResponse.json({ error: "Dependencies must be modifications on the same vehicle" }, { status: 400 });
+  }
 
   await prisma.modDependency.deleteMany({ where: { modId: params.id } });
 

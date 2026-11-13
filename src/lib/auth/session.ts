@@ -5,7 +5,7 @@ import { SignJWT, jwtVerify } from "jose";
 // any Node-only API in the Edge runtime.
 
 export const SESSION_COOKIE_NAME = "bv_session";
-const SESSION_LIFETIME = "30d";
+const SESSION_LIFETIME = "7d";
 
 export interface SessionClaims {
   userId: string;

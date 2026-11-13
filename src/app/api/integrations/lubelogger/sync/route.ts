@@ -1,8 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth/current-user";
 import { loadConfig, saveConfig, llFetch, mapRecord, LL_RECORD_TYPES, LLRecord, LLRecordType } from "@/lib/lubelogger";
 import { prisma } from "@/lib/prisma";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const denied = await requireAdmin(req, true);
+  if (denied) return denied;
   const cfg = await loadConfig();
 
   if (!cfg.url) return NextResponse.json({ error: "LubeLogger not configured" }, { status: 400 });

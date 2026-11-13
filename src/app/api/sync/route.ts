@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canEditVehicle } from "@/lib/auth/vehicle-access";
 
 // See src/app/api/health/route.ts for why this matters.
 export const dynamic = "force-dynamic";
@@ -29,10 +30,24 @@ export async function POST(req: NextRequest) {
 
     let merged = 0;
 
+    // Writes through this endpoint must obey the same per-vehicle edit rules
+    // as the normal routes (otherwise any signed-in member could write to any
+    // vehicle). Cache lookups per vehicle for the batch.
+    const allowed = new Map<string, boolean>();
+    const mayEdit = async (vehicleId: string) => {
+      if (!allowed.has(vehicleId)) allowed.set(vehicleId, await canEditVehicle(req, vehicleId));
+      return allowed.get(vehicleId)!;
+    };
+    if (queue.length > 1000) {
+      return NextResponse.json({ error: "Too many queued items" }, { status: 413 });
+    }
+
     for (const item of queue) {
       try {
         if (item.table === "vehicleNote") {
           const d = item.data;
+          const existingNote = await prisma.vehicleNote.findUnique({ where: { id: String(d.id) }, select: { vehicleId: true } });
+          if (!(await mayEdit(existingNote?.vehicleId ?? String(d.vehicleId)))) continue;
           await prisma.vehicleNote.upsert({
             where: { id: String(d.id) },
             create: {
@@ -54,6 +69,8 @@ export async function POST(req: NextRequest) {
           merged++;
         } else if (item.table === "maintenanceLog") {
           const d = item.data;
+          const existingLog = await prisma.maintenanceLog.findUnique({ where: { id: String(d.id) }, select: { vehicleId: true } });
+          if (!(await mayEdit(existingLog?.vehicleId ?? String(d.vehicleId)))) continue;
           await prisma.maintenanceLog.upsert({
             where: { id: String(d.id) },
             create: {
@@ -83,6 +100,8 @@ export async function POST(req: NextRequest) {
           merged++;
         } else if (item.table === "modification" && item.op === "update") {
           const d = item.data;
+          const existingMod = await prisma.modification.findUnique({ where: { id: String(d.id) }, select: { vehicleId: true } });
+          if (!existingMod || !(await mayEdit(existingMod.vehicleId))) continue;
           await prisma.modification.updateMany({
             where: { id: String(d.id) },
             data: {

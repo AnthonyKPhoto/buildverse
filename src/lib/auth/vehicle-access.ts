@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isAuthEnabled } from "@/lib/auth/password";
+import { getVerifiedUser } from "@/lib/auth/current-user";
 
 /**
  * Whether the requester may edit (create/update/delete sub-resources of) a
@@ -13,11 +14,12 @@ import { isAuthEnabled } from "@/lib/auth/password";
 export async function canEditVehicle(req: NextRequest, vehicleId: string): Promise<boolean> {
   if (!isAuthEnabled()) return true;
 
-  const role = req.headers.get("x-user-role");
-  if (role === "admin") return true;
-
-  const userId = req.headers.get("x-user-id");
-  if (!userId) return false;
+  // Re-check the live account instead of trusting the (up to 7-day-old) role
+  // baked into the session token: a deleted or demoted user loses access now.
+  const user = await getVerifiedUser(req);
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  const userId = user.id;
 
   const vehicle = await prisma.vehicle.findUnique({
     where: { id: vehicleId },

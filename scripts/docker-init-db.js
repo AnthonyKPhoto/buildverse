@@ -61,6 +61,20 @@ console.log(
     ? `[docker-init-db] Existing database found at ${dbPath} — reconciling schema…`
     : `[docker-init-db] No database found at ${dbPath} — creating…`
 );
+// `db push --accept-data-loss` can drop columns/tables on a schema change.
+// Keep a copy of the database from just before it runs so an upgrade can
+// always be rolled back (one rolling backup, next to the live file).
+if (isDatabaseInitialized(dbPath)) {
+  try {
+    fs.copyFileSync(dbPath, `${dbPath}.pre-update.bak`);
+    for (const ext of ["-wal", "-shm"]) {
+      if (fs.existsSync(dbPath + ext)) fs.copyFileSync(dbPath + ext, `${dbPath}.pre-update.bak${ext}`);
+    }
+    console.log(`[docker-init-db] Backed up database to ${dbPath}.pre-update.bak`);
+  } catch (err) {
+    console.warn("[docker-init-db] Could not back up database before schema update:", err.message);
+  }
+}
 execSync("node node_modules/prisma/build/index.js db push --skip-generate --accept-data-loss", {
   cwd: path.join(__dirname, ".."),
   env: process.env,

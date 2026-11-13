@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { loadConfig, llFetch, normaliseUrl, LubeLoggerConfig } from "@/lib/lubelogger";
+import { requireAdmin } from "@/lib/auth/current-user";
 
 // See src/app/api/health/route.ts for why this matters.
 export const dynamic = "force-dynamic";
@@ -86,22 +87,30 @@ async function runTest(cfg: LubeLoggerConfig) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await requireAdmin(req, true);
+  if (denied) return denied;
   const cfg = await loadConfig();
   return runTest(cfg);
 }
 
 export async function POST(req: NextRequest) {
+  const denied = await requireAdmin(req, true);
+  if (denied) return denied;
   const body = await req.json().catch(() => ({}));
   const stored = await loadConfig();
 
+  // Never send STORED credentials to a URL the caller just supplied — that
+  // would let whoever can hit this route point it at their own server and read
+  // the saved API key/password off the incoming request.
+  const urlChanged = !!body.url && normaliseUrl(body.url) !== normaliseUrl(stored.url);
   const cfg: LubeLoggerConfig = {
     ...stored,
     url:      body.url      ?? stored.url,
     authType: body.authType ?? stored.authType,
     username: body.username ?? stored.username,
-    apiKey:   (body.apiKey   && body.apiKey   !== "••••••••") ? body.apiKey   : stored.apiKey,
-    password: (body.password && body.password !== "••••••••") ? body.password : stored.password,
+    apiKey:   (body.apiKey   && body.apiKey   !== "••••••••") ? body.apiKey   : (urlChanged ? "" : stored.apiKey),
+    password: (body.password && body.password !== "••••••••") ? body.password : (urlChanged ? "" : stored.password),
   };
 
   return runTest(cfg);

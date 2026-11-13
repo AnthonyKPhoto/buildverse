@@ -37,6 +37,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!(await canEditVehicle(req, params.id))) {
     return NextResponse.json(VEHICLE_ACCESS_DENIED, { status: 403 });
   }
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BYTES + 1024 * 1024) {
+    return NextResponse.json({ error: "File too large (max 50 MB)" }, { status: 413 });
+  }
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
 

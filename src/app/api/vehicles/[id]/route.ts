@@ -26,8 +26,8 @@ const vehicleUpdateSchema = z.object({
   color:        z.string().max(100).nullable().optional(),
   photoUrl:     safeUrl.nullable().optional(),
   notes:        z.string().max(50000).nullable().optional(),
-  instagramUrl: z.string().url().max(500).nullable().optional().or(z.literal("")),
-  facebookUrl:  z.string().url().max(500).nullable().optional().or(z.literal("")),
+  instagramUrl: z.string().url().max(500).refine((u) => /^https?:\/\//i.test(u), "Must be an http(s) URL").nullable().optional().or(z.literal("")),
+  facebookUrl:  z.string().url().max(500).refine((u) => /^https?:\/\//i.test(u), "Must be an http(s) URL").nullable().optional().or(z.literal("")),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {

@@ -3,7 +3,9 @@ services:
     image: ghcr.io/anthonykphoto/buildverse:latest
     # build: .   # uncomment to build locally instead of pulling from GHCR
     ports:
-      - "3456:3000"
+      # Bind to loopback and put a TLS reverse proxy (Caddy/nginx/Cloudflare
+      # Tunnel) in front. To expose directly on the LAN, change to "3456:3000".
+      - "127.0.0.1:3456:3000"
     volumes:
       - buildverse-data:/data
     # Values come from a .env file in this same directory — copy .env.example
@@ -27,6 +29,11 @@ services:
       #   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
       - AUTH_SESSION_SECRET=${AUTH_SESSION_SECRET:-}
 
+      # Public URL of this deployment (e.g. https://buildverse.example.com).
+      # Used for links in password-reset / new-account emails. If unset, the
+      # request's Host header is used, which a malicious client can forge.
+      - APP_URL=${APP_URL:-}
+
       # ── Bootstrap admin account (optional) ───────────────────────────────────────
       # Leave both unset in .env and the first person to visit the site gets a
       # "create the admin account" form instead — simplest for a fresh deploy.
@@ -40,6 +47,9 @@ services:
     restart: unless-stopped
 
   # ── Watchtower: auto-update BuildVerse when a new image is published ──────────
+  # SECURITY NOTE: mounting docker.sock gives this container root-equivalent
+  # control of the host. Delete this service and update manually
+  # (`docker compose pull && docker compose up -d`) if that's not acceptable.
   # Checks GHCR once per hour and recreates the container if a new image exists.
   # Remove this service if you prefer to update manually.
   watchtower:

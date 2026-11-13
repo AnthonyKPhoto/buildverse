@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { requireAdmin } from "@/lib/auth/current-user";
 
 // See src/app/api/health/route.ts for why this matters.
 export const dynamic = "force-dynamic";
@@ -9,15 +10,9 @@ export const dynamic = "force-dynamic";
 // everyone — this only controls who besides a vehicle's creator (and admins,
 // who always bypass) may edit it. See src/lib/auth/vehicle-access.ts.
 
-function requireAdmin(req: NextRequest): NextResponse | null {
-  if (req.headers.get("x-user-role") !== "admin") {
-    return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-  }
-  return null;
-}
 
 export async function GET(req: NextRequest) {
-  const denied = requireAdmin(req);
+  const denied = await requireAdmin(req);
   if (denied) return denied;
 
   const [vehicles, users, grants] = await Promise.all([
@@ -34,7 +29,7 @@ export async function GET(req: NextRequest) {
 const grantSchema = z.object({ vehicleId: z.string().min(1), userId: z.string().min(1) });
 
 export async function POST(req: NextRequest) {
-  const denied = requireAdmin(req);
+  const denied = await requireAdmin(req);
   if (denied) return denied;
 
   try {
@@ -54,7 +49,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const denied = requireAdmin(req);
+  const denied = await requireAdmin(req);
   if (denied) return denied;
 
   try {

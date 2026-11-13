@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { MOD_CATEGORIES } from "@/lib/utils";
+import { requireAdmin } from "@/lib/auth/current-user";
 
 // See src/app/api/health/route.ts for why this matters.
 export const dynamic = "force-dynamic";
@@ -19,6 +20,8 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const denied = await requireAdmin(req, true);
+  if (denied) return denied;
   const { categories } = await req.json();
   if (!Array.isArray(categories)) {
     return NextResponse.json({ error: "categories must be an array" }, { status: 400 });
@@ -32,7 +35,9 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json({ categories: clean });
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
+  const denied = await requireAdmin(req, true);
+  if (denied) return denied;
   await prisma.setting.delete({ where: { key: KEY } }).catch(() => {});
   return NextResponse.json({ categories: [...MOD_CATEGORIES], isCustom: false });
 }

@@ -24,12 +24,6 @@ const PUBLIC_PATHS = new Set([
 // account instead of being stuck).
 const PASSWORD_CHANGE_PATHS = new Set(["/change-password", "/api/auth/change-password", "/api/auth/logout"]);
 
-function isLocalRequest(request: NextRequest): boolean {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded ? forwarded.split(",")[0].trim() : (request.ip ?? "");
-  return ip === "" || ip === "127.0.0.1" || ip === "::1" || ip === "localhost" || ip === "::ffff:127.0.0.1";
-}
-
 // A client could otherwise set these directly on the incoming request and
 // have a downstream route trust them as if middleware had verified them.
 function stripIdentityHeaders(req: NextRequest): Headers {
@@ -43,7 +37,9 @@ function stripIdentityHeaders(req: NextRequest): Headers {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (PUBLIC_FILE.test(pathname) || PUBLIC_PATHS.has(pathname)) {
+  // Static-asset exemption must never cover API routes — a dynamic segment like
+// /api/foo/x.png would otherwise skip authentication.
+if ((!pathname.startsWith("/api/") && PUBLIC_FILE.test(pathname)) || PUBLIC_PATHS.has(pathname)) {
     return NextResponse.next({ request: { headers: stripIdentityHeaders(req) } });
   }
 
@@ -57,12 +53,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next({ request: { headers: stripIdentityHeaders(req) } });
   }
 
-  // Loopback bypass — the Electron window talking to its own spawned local
-  // server. Deliberately NOT a subnet/LAN check: other devices (a phone on
-  // the same Wi-Fi) still need to sign in as a real user.
-  if (isLocalRequest(req)) {
-    return NextResponse.next({ request: { headers: stripIdentityHeaders(req) } });
-  }
+  // NOTE: there is deliberately no "loopback bypass" here. It used to trust
+  // X-Forwarded-For / an empty request.ip, both of which a remote client
+  // controls, so it was a full authentication bypass. Electron's local mode
+  // never sets AUTH_SESSION_SECRET (so auth is off there anyway), and its
+  // "Connect to Server" mode signs in like any other client.
 
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   const claims = token ? await verifySessionToken(token) : null;
